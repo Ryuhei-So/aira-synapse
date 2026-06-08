@@ -8,13 +8,6 @@ const SRC = resolve(PKG_ROOT, 'src');
 
 const LAYERS = ['domain', 'application', 'infrastructure', 'interface'] as const;
 
-const LAYER_ORDER: Record<string, number> = {
-  domain: 0,
-  application: 1,
-  infrastructure: 1,
-  interface: 2,
-};
-
 describe('TASK-MG-003: 4-layer directory and barrel exports', () => {
   describe('layer directories exist', () => {
     it.each(LAYERS)('should have src/%s/ directory', (layer) => {

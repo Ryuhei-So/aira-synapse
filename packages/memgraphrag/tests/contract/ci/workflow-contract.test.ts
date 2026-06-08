@@ -24,7 +24,7 @@ describe('TASK-MG-004: CI workflow contract', () => {
   });
 
   it('should run on ubuntu-latest for all jobs', () => {
-    for (const [name, job] of Object.entries(jobs)) {
+    for (const [_name, job] of Object.entries(jobs)) {
       expect(job['runs-on']).toBe('ubuntu-latest');
     }
   });
