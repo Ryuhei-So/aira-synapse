@@ -1,0 +1,11 @@
+{
+  "name": "aira-synapse",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

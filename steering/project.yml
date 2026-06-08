@@ -1,0 +1,23 @@
+project:
+  name: aira-synapse
+  description: AIRA エコシステム向けナレッジグラフ構築・検索基盤
+  version: 0.1.0
+  language: typescript
+  runtime: node20
+  module: esm
+
+packages:
+  - name: memgraphrag
+    description: MemGraphRAG MCP サーバー + コアライブラリ
+
+sdd:
+  phase: 3  # Task Breakdown
+  requirements: spec/REQ-MEMGRAPHRAG-001.md
+  design: spec/DES-MEMGRAPHRAG-001.md
+  plan: spec/PLAN-MEMGRAPHRAG-001.md
+
+steering:
+  product: steering/product.ja.md
+  structure: steering/structure.ja.md
+  tech: steering/tech.ja.md
+  constitution: steering/rules/constitution.md

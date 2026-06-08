@@ -1,0 +1,63 @@
+version: 1
+local_only: false
+data_dir: ./data/memgraphrag
+
+algorithms:
+  schema:
+    stabilization_threshold: 2
+    canonicalization_threshold: 0.9
+  conflict:
+    similarity_threshold: 0.8
+    scan_candidate_limit: 100
+  bridging:
+    similarity_threshold: 0.7
+    candidate_limit: 50
+  retrieval:
+    top_k: 10
+    top_m: 5
+    threshold: 0.5
+    ppr:
+      teleport_probability: 0.5
+      passage_damping: 0.05
+      convergence_epsilon: 1.0e-6
+      max_iterations: 50
+
+chunking:
+  chunk_size_tokens: 600
+  chunk_overlap_tokens: 100
+  context_token_limit: 8000
+
+providers:
+  llm:
+    backend: openai
+    model: gpt-4o-mini
+    temperature: 0.1
+    max_tokens: 2048
+  embedding:
+    backend: openai
+    model: text-embedding-3-large
+    cache_dir: ./data/memgraphrag/cache/embeddings
+  nlp:
+    backend: python-sidecar
+    python_command: python3
+    request_timeout_ms: 30000
+    healthcheck_timeout_ms: 5000
+
+storage:
+  sqlite_path: ./data/memgraphrag/memgraphrag.sqlite
+  vector_index_dir: ./data/memgraphrag/vectors
+  wal_mode: true
+  auto_migrate: true
+
+security:
+  redact_stack_traces: true
+  corpus_isolation: strict
+
+limits:
+  document_max_bytes: 10485760
+  batch_max_documents: 100
+
+logging:
+  level: info
+  audit_log_path: ./data/memgraphrag/audit.jsonl
+  structured_log_path: ./data/memgraphrag/runtime.jsonl
