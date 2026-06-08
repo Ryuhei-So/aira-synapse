@@ -1,0 +1,4 @@
+spacy>=3.7
+scispacy>=0.5
+ginza>=5.2
+ja-ginza-electra

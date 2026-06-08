@@ -12,3 +12,9 @@ export {
   type LimitsConfig,
   type LoggingConfig,
 } from './memGraphRagConfigSchema.js';
+export {
+  resolveConfigFromEnv,
+  checkApiKeyAvailability,
+  redactConfigForLogging,
+  type EnvOverrides,
+} from './resolveConfigFromEnv.js';
