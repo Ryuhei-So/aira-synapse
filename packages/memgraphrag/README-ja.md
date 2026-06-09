@@ -27,6 +27,8 @@
 
 ## 📐 アーキテクチャ
 
+### レイヤー図
+
 ```
 ┌─────────────────────────────────────────────────┐
 │  Interface Layer                                │
@@ -51,13 +53,48 @@
 
 4 層アーキテクチャ（Domain / Application / Infrastructure / Interface）で依存性逆転を徹底。Domain 層は一切の具象実装に依存しない。
 
+### データフロー
+
+```
+AIRA ──(ToolUniverse)──▶ PDF
+                          │
+                     markitdown
+                          │
+                          ▼
+                      Markdown
+                          │
+                    MCP (stdio)
+                          │
+                          ▼
+               ┌─MemGraphRAG──────────────────────┐
+               │  Stage I   : エンティティ抽出      │
+               │  Stage II  : スキーマ正規化        │
+               │  Stage III : 衝突検出・解決        │
+               │  Stage IV  : グラフ射影            │
+               │                                   │
+               │  Query: PPR → Context → LLM → 回答 │
+               └───────────────────────────────────┘
+```
+
+### 論文アルゴリズムとの対応
+
+| 論文の概念 | 実装 |
+|-----------|------|
+| Algorithm 1 Stage I（複合抽出） | `StageIExtractor` + `DictionaryBoostPipeline` |
+| Algorithm 1 Stage II（スキーマフィルタ） | `StageIICanonicalizer` + `ThesaurusNormalizationPipeline` |
+| Algorithm 1 Stage III（衝突検出・解決） | `StageIIIConflictPipeline` + `ThesaurusConflictSignals` |
+| Algorithm 1 Stage IV（グラフ射影） | `StageIVGraphProjector` + `ThesaurusGraphExpansion` |
+| 式 6-8（ノード初期化） | `INodeInitializer` |
+| 式 9-12（Φ/Ψ マッピング） | `IMemoryStore` + SQLite 外部キー |
+| PPR v^(k+1) = (1-λ)·W·v^(k) + λ·v^(0) | `IPPR` |
+| Hub Suppression log(deg+2) | `IGraphProjection` |
+
 ## 🚀 クイックスタート
 
 ### 前提条件
 
 - **Node.js** ≥ 20
-- **Python 3**（オプション、NLP サイドカー用）
-- **OpenAI API キー**（オプション、LLM/Embedding 用）
+- **Python 3**（オプション — scispaCy/GiNZA による NLP サイドカー用）
 
 ### インストール
 
@@ -74,25 +111,22 @@ npm run build --workspace=packages/memgraphrag
 pip install -r packages/memgraphrag/python/sidecar/requirements.txt
 ```
 
-### 設定ファイルの生成
+### はじめて使う
 
 ```bash
+# 1. デフォルト設定ファイルを生成
 npx memgraphrag init --output ./memgraphrag.yml
-```
 
-### ドキュメントのインデクシング
+# 2. (オプション) LLM/Embedding 用の API キーを設定 — 詳細は「設定リファレンス」参照
+export OPENAI_API_KEY="sk-..."
 
-```bash
-# Markdown ファイルをコーパスにインデクシング
+# 3. Markdown ファイルをコーパスにインデクシング
 npx memgraphrag index \
   --corpus-id my-research \
   --input ./papers/ \
   --config ./memgraphrag.yml
-```
 
-### クエリ
-
-```bash
+# 4. ナレッジグラフにクエリ
 npx memgraphrag query \
   --corpus-id my-research \
   --query "Transformer と Attention の関係は？" \
@@ -100,20 +134,82 @@ npx memgraphrag query \
   --json
 ```
 
-## 🤖 LLM API の設定
+> **Note:** API キーなしでも動作します。ローカルオンリーモードでは BM25 語彙検索、正規表現 NLP、テンプレート応答を使用します。
 
-MemGraphRAG は OpenAI 互換 API をテキスト生成とエンベディングに使用する。API キー未設定の場合、**ローカルオンリーモード**（BM25 検索、正規表現 NLP、テンプレート応答）に自動フォールバックする。
+## 🔌 インターフェース
 
-### OpenAI
+MemGraphRAG は用途に応じて 2 つのインターフェースを提供する。
+
+### MCP サーバー（AIRA 連携用）
+
+[AIRA](https://github.com/nahisaho/aira) の MCP stdio サーバーとして動作。AIRA の ToolUniverse で取得した論文を markitdown で Markdown に変換し、MCP 経由で MemGraphRAG に渡してナレッジグラフを構築する。
+
+**セットアップ** — AIRA の MCP 設定に追加：
+
+```json
+{
+  "mcpServers": {
+    "memgraphrag": {
+      "command": "node",
+      "args": ["packages/memgraphrag/dist/interface/mcp/server.js"],
+      "env": {
+        "MEMGRAPHRAG_CONFIG": "packages/memgraphrag/config/default.memgraphrag.yml",
+        "OPENAI_API_KEY": "${OPENAI_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+**ツール一覧（14 ツール）**
+
+| カテゴリ | ツール | 説明 |
+|---------|--------|------|
+| コーパス | `create_corpus` | 新規コーパスを作成 |
+| | `delete_corpus` | コーパスをカスケード削除 |
+| | `list_corpora` | 全コーパスを一覧表示 |
+| インデクシング | `index_documents` | Markdown ドキュメントをインデクシング（非同期ジョブ） |
+| | `get_job_status` | インデクシングジョブの状態を確認 |
+| | `cancel_job` | 実行中のジョブをキャンセル |
+| | `delete_document` | ドキュメントを削除して再計算 |
+| クエリ | `query` | PPR + 引用付きクエリ |
+| | `get_stats` | コーパス統計情報を取得 |
+| 辞書 | `manage_dictionary` | 専門用語辞書の CRUD |
+| | `manage_thesaurus` | シソーラス関係の CRUD |
+| | `build_dictionary_from_api` | Semantic Scholar から辞書を自動構築 |
+| 分析 | `analyze_conflicts` | ファクト衝突を分析 |
+| | `export_graph` | グラフをエクスポート（JSON/GraphML） |
+
+### CLI（ローカル運用用）
+
+| コマンド | 説明 |
+|---------|------|
+| `memgraphrag init` | デフォルト設定ファイルを生成 |
+| `memgraphrag index` | Markdown ドキュメントをインデクシング |
+| `memgraphrag query` | ナレッジグラフにクエリ |
+| `memgraphrag stats` | コーパス統計情報を表示 |
+| `memgraphrag dictionary` | 専門用語辞書を管理（build/import/export/stats） |
+| `memgraphrag thesaurus` | シソーラスを管理（import/export/lookup/stats） |
+| `memgraphrag visualize` | グラフを GraphML/JSON でエクスポート |
+| `memgraphrag conflicts` | 衝突を分析・表示 |
+
+全コマンドで `--json` オプションにより機械可読な JSON 出力に対応。
+
+## ⚙️ 設定リファレンス
+
+すべての設定は単一の YAML ファイル（`memgraphrag.yml`）と環境変数オーバーライドで管理する。デフォルト値は [`config/default.memgraphrag.yml`](config/default.memgraphrag.yml) を参照。
+
+### LLM / Embedding プロバイダー
+
+MemGraphRAG は OpenAI 互換 API をテキスト生成とエンベディングに使用する。
+
+#### OpenAI（デフォルト）
 
 ```bash
 export OPENAI_API_KEY="sk-..."
 ```
 
-デフォルト設定では LLM に `gpt-4o-mini`、エンベディングに `text-embedding-3-large` を使用：
-
 ```yaml
-# memgraphrag.yml
 providers:
   llm:
     backend: openai
@@ -123,11 +219,10 @@ providers:
   embedding:
     backend: openai
     model: text-embedding-3-large
+    cache_dir: ./data/memgraphrag/cache/embeddings
 ```
 
-### Azure OpenAI
-
-`base_url` に Azure エンドポイントを指定：
+#### Azure OpenAI
 
 ```bash
 export OPENAI_API_KEY="your-azure-api-key"
@@ -145,7 +240,7 @@ providers:
     base_url: https://YOUR_RESOURCE.openai.azure.com/openai/deployments/YOUR_EMBEDDING/v1
 ```
 
-### ローカル / セルフホスト（Ollama, vLLM 等）
+#### ローカル / セルフホスト（Ollama, vLLM 等）
 
 OpenAI 互換エンドポイントであれば何でも利用可能：
 
@@ -165,21 +260,17 @@ providers:
     base_url: http://localhost:11434/v1
 ```
 
-### ローカルオンリーモード（API 呼び出しなし）
-
-LLM/Embedding API なしで動作。BM25 語彙検索、正規表現ベース NLP、テンプレート応答を使用：
-
-```bash
-export MEMGRAPHRAG_LOCAL_ONLY=true
-```
-
-または設定ファイルで：
+#### ローカルオンリーモード（API 呼び出しなし）
 
 ```yaml
 local_only: true
 ```
 
-### モデル選択ガイド
+環境変数でも可：`export MEMGRAPHRAG_LOCAL_ONLY=true`
+
+BM25 語彙検索、正規表現ベース NLP、テンプレート応答にフォールバックする。
+
+#### モデル選択ガイド
 
 | ユースケース | 推奨 LLM | 推奨エンベディング |
 |-------------|----------|-------------------|
@@ -188,70 +279,26 @@ local_only: true
 | プライバシー / オフライン | Ollama `llama3.1` | Ollama `nomic-embed-text` |
 | 日本語特化 | `gpt-4o` | `text-embedding-3-large` |
 
-## 🔌 AIRA 連携（MCP）
+### NLP プロバイダー
 
-MemGraphRAG は [AIRA](https://github.com/nahisaho/aira) の MCP stdio サーバーとして動作する。AIRA の ToolUniverse で取得した論文を markitdown で Markdown に変換し、MCP 経由で MemGraphRAG に渡してナレッジグラフを構築する。
+NLP プロバイダーはエンティティ抽出と言語検出を Python サブプロセス経由で処理する。
 
-### セットアップ
-
-1. MCP テンプレートを AIRA 設定にコピー：
-
-```json
-{
-  "mcpServers": {
-    "memgraphrag": {
-      "command": "node",
-      "args": ["packages/memgraphrag/dist/interface/mcp/server.js"],
-      "env": {
-        "MEMGRAPHRAG_CONFIG": "packages/memgraphrag/config/default.memgraphrag.yml",
-        "OPENAI_API_KEY": "${OPENAI_API_KEY}"
-      }
-    }
-  }
-}
+```yaml
+providers:
+  nlp:
+    backend: python-sidecar           # python-sidecar | regex | llm
+    python_command: python3
+    request_timeout_ms: 30000
+    healthcheck_timeout_ms: 5000
 ```
 
-2. 環境変数 `OPENAI_API_KEY` を設定する。
+| バックエンド | 必要環境 | 精度 | レイテンシ |
+|-------------|---------|------|----------|
+| `python-sidecar` | Python 3 + scispaCy / GiNZA | 高 | 中 |
+| `regex` | なし | 低 | 高速 |
+| `llm` | LLM API キー | 高 | 低速 |
 
-### MCP ツール一覧（14 ツール）
-
-| ツール | 説明 |
-|--------|------|
-| `create_corpus` | 新規コーパスを作成 |
-| `delete_corpus` | コーパスをカスケード削除 |
-| `list_corpora` | 全コーパスを一覧表示 |
-| `index_documents` | Markdown ドキュメントをインデクシング（非同期ジョブ） |
-| `get_job_status` | インデクシングジョブの状態を確認 |
-| `cancel_job` | 実行中のジョブをキャンセル |
-| `delete_document` | ドキュメントを削除して再計算 |
-| `query` | PPR + 引用付きクエリ |
-| `get_stats` | コーパス統計情報を取得 |
-| `manage_dictionary` | 専門用語辞書の CRUD |
-| `manage_thesaurus` | シソーラス関係の CRUD |
-| `analyze_conflicts` | ファクト衝突を分析 |
-| `export_graph` | グラフをエクスポート（JSON/GraphML） |
-| `build_dictionary_from_api` | Semantic Scholar から辞書を自動構築 |
-
-## 🖥️ CLI コマンド
-
-| コマンド | 説明 |
-|---------|------|
-| `memgraphrag init` | デフォルト設定ファイルを生成 |
-| `memgraphrag index` | Markdown ドキュメントをインデクシング |
-| `memgraphrag query` | ナレッジグラフにクエリ |
-| `memgraphrag stats` | コーパス統計情報を表示 |
-| `memgraphrag dictionary` | 専門用語辞書を管理（build/import/export/stats） |
-| `memgraphrag thesaurus` | シソーラスを管理（import/export/lookup/stats） |
-| `memgraphrag visualize` | グラフを GraphML/JSON でエクスポート |
-| `memgraphrag conflicts` | 衝突を分析・表示 |
-
-全コマンドで `--json` オプションにより機械可読な JSON 出力に対応。
-
-## ⚙️ 設定
-
-[`config/default.memgraphrag.yml`](config/default.memgraphrag.yml) を参照。
-
-### 主要アルゴリズムパラメータ
+### アルゴリズムパラメータ
 
 | パラメータ | デフォルト | 説明 |
 |-----------|---------|------|
@@ -264,16 +311,41 @@ MemGraphRAG は [AIRA](https://github.com/nahisaho/aira) の MCP stdio サーバ
 | `M` (top_m) | 5 | 返却するパッセージ数 |
 | `ε` (convergence_epsilon) | 1e-6 | PPR 収束しきい値 |
 
-### 環境変数
+### ストレージ
 
-| 変数 | 説明 |
-|------|------|
-| `OPENAI_API_KEY` | OpenAI API キー（LLM/Embedding 用） |
+```yaml
+storage:
+  sqlite_path: ./data/memgraphrag/memgraphrag.sqlite
+  vector_index_dir: ./data/memgraphrag/vectors
+  wal_mode: true                      # WAL で並行読み取りを高速化
+  auto_migrate: true                  # 起動時にスキーママイグレーションを自動実行
+```
+
+### セキュリティ & ロギング
+
+```yaml
+security:
+  redact_stack_traces: true           # エラーメッセージからファイルパスを除去
+  corpus_isolation: strict            # コーパス間のデータ漏洩を防止
+
+logging:
+  level: info                         # debug | info | warn | error
+  audit_log_path: ./data/memgraphrag/audit.jsonl
+  structured_log_path: ./data/memgraphrag/runtime.jsonl
+```
+
+### 環境変数オーバーライド
+
+環境変数は YAML 設定値を上書きする。
+
+| 変数 | 上書き対象 |
+|------|-----------|
+| `OPENAI_API_KEY` | LLM / Embedding プロバイダーの API キー |
 | `MEMGRAPHRAG_CONFIG` | YAML 設定ファイルのパス |
-| `MEMGRAPHRAG_DATA_DIR` | データディレクトリのオーバーライド |
-| `MEMGRAPHRAG_LOCAL_ONLY` | ローカルオンリーモード（API 呼び出しなし） |
-| `MEMGRAPHRAG_NLP_BACKEND` | NLP バックエンド: `python-sidecar` \| `regex` \| `llm` |
-| `MEMGRAPHRAG_LOG_LEVEL` | ログレベル: `debug` \| `info` \| `warn` \| `error` |
+| `MEMGRAPHRAG_DATA_DIR` | 設定ファイルの `data_dir` |
+| `MEMGRAPHRAG_LOCAL_ONLY` | 設定ファイルの `local_only` |
+| `MEMGRAPHRAG_NLP_BACKEND` | 設定ファイルの `providers.nlp.backend` |
+| `MEMGRAPHRAG_LOG_LEVEL` | 設定ファイルの `logging.level` |
 
 ## 🏗️ プロジェクト構成
 
@@ -337,19 +409,6 @@ npm run lint --workspace=packages/memgraphrag
 # ベンチマーク
 npx vitest bench --workspace=packages/memgraphrag
 ```
-
-## 📖 論文アルゴリズムとの対応
-
-| 論文の概念 | 実装 |
-|-----------|------|
-| Algorithm 1 Stage I（複合抽出） | `StageIExtractor` + `DictionaryBoostPipeline` |
-| Algorithm 1 Stage II（スキーマフィルタ） | `StageIICanonicalizer` + `ThesaurusNormalizationPipeline` |
-| Algorithm 1 Stage III（衝突検出・解決） | `StageIIIConflictPipeline` + `ThesaurusConflictSignals` |
-| Algorithm 1 Stage IV（グラフ射影） | `StageIVGraphProjector` + `ThesaurusGraphExpansion` |
-| 式 6-8（ノード初期化） | `INodeInitializer` |
-| 式 9-12（Φ/Ψ マッピング） | `IMemoryStore` + SQLite 外部キー |
-| PPR v^(k+1) = (1-λ)·W·v^(k) + λ·v^(0) | `IPPR` |
-| Hub Suppression log(deg+2) | `IGraphProjection` |
 
 ## 📚 参考文献
 

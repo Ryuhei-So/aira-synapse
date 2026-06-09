@@ -27,6 +27,8 @@
 
 ## 📐 Architecture
 
+### Layer Diagram
+
 ```
 ┌─────────────────────────────────────────────────┐
 │  Interface Layer                                │
@@ -49,13 +51,50 @@
 └─────────────────────────────────────────────────┘
 ```
 
+Four-layer architecture (Domain / Application / Infrastructure / Interface) with strict dependency inversion. The Domain layer has zero dependencies on concrete implementations.
+
+### Data Flow
+
+```
+AIRA ──(ToolUniverse)──▶ PDF
+                          │
+                     markitdown
+                          │
+                          ▼
+                      Markdown
+                          │
+                    MCP (stdio)
+                          │
+                          ▼
+               ┌─MemGraphRAG──────────────────────┐
+               │  Stage I   : Extract entities     │
+               │  Stage II  : Canonicalize schemas  │
+               │  Stage III : Detect conflicts     │
+               │  Stage IV  : Project graph        │
+               │                                   │
+               │  Query: PPR → Context → LLM → Answer│
+               └───────────────────────────────────┘
+```
+
+### Paper Algorithm Mapping
+
+| Paper Concept | Implementation |
+|---------------|----------------|
+| Algorithm 1 Stage I (Composite Extraction) | `StageIExtractor` + `DictionaryBoostPipeline` |
+| Algorithm 1 Stage II (Schema Filter) | `StageIICanonicalizer` + `ThesaurusNormalizationPipeline` |
+| Algorithm 1 Stage III (Conflict Detection/Resolution) | `StageIIIConflictPipeline` + `ThesaurusConflictSignals` |
+| Algorithm 1 Stage IV (Graph Projection) | `StageIVGraphProjector` + `ThesaurusGraphExpansion` |
+| Equations 6-8 (Node Initialization) | `INodeInitializer` |
+| Equations 9-12 (Φ/Ψ Mappings) | `IMemoryStore` + SQLite foreign keys |
+| PPR v^(k+1) = (1-λ)·W·v^(k) + λ·v^(0) | `IPPR` |
+| Hub Suppression log(deg+2) | `IGraphProjection` |
+
 ## 🚀 Quick Start
 
 ### Prerequisites
 
 - **Node.js** ≥ 20
-- **Python 3** (optional, for NLP sidecar)
-- **OpenAI API key** (optional, for LLM/embedding)
+- **Python 3** (optional — for NLP sidecar with scispaCy/GiNZA)
 
 ### Installation
 
@@ -72,25 +111,22 @@ npm run build --workspace=packages/memgraphrag
 pip install -r packages/memgraphrag/python/sidecar/requirements.txt
 ```
 
-### Initialize Configuration
+### First Use
 
 ```bash
+# 1. Generate default config
 npx memgraphrag init --output ./memgraphrag.yml
-```
 
-### Index Documents
+# 2. (Optional) Set API key for LLM/embedding — see "Configuration" for details
+export OPENAI_API_KEY="sk-..."
 
-```bash
-# Index markdown files into a corpus
+# 3. Index markdown files into a corpus
 npx memgraphrag index \
   --corpus-id my-research \
   --input ./papers/ \
   --config ./memgraphrag.yml
-```
 
-### Query
-
-```bash
+# 4. Query the knowledge graph
 npx memgraphrag query \
   --corpus-id my-research \
   --query "What is the relationship between transformers and attention?" \
@@ -98,20 +134,82 @@ npx memgraphrag query \
   --json
 ```
 
-## 🤖 LLM API Configuration
+> **Note:** MemGraphRAG works without an API key. In local-only mode it uses BM25 lexical search, regex NLP, and template responses.
 
-MemGraphRAG uses OpenAI-compatible APIs for text generation and embedding. Without API keys, it automatically falls back to **local-only mode** (BM25 retrieval, regex NLP, template responses).
+## 🔌 Interfaces
 
-### OpenAI
+MemGraphRAG provides two mutually exclusive interfaces for different use cases.
+
+### MCP Server (for AIRA Integration)
+
+Runs as an MCP stdio server for [AIRA](https://github.com/nahisaho/aira). AIRA's ToolUniverse retrieves papers, markitdown converts them to Markdown, and MCP passes them to MemGraphRAG for knowledge graph construction.
+
+**Setup** — add to your AIRA MCP config:
+
+```json
+{
+  "mcpServers": {
+    "memgraphrag": {
+      "command": "node",
+      "args": ["packages/memgraphrag/dist/interface/mcp/server.js"],
+      "env": {
+        "MEMGRAPHRAG_CONFIG": "packages/memgraphrag/config/default.memgraphrag.yml",
+        "OPENAI_API_KEY": "${OPENAI_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+**Available Tools (14)**
+
+| Category | Tool | Description |
+|----------|------|-------------|
+| Corpus | `create_corpus` | Create a new corpus |
+| | `delete_corpus` | Delete corpus with cascade |
+| | `list_corpora` | List all corpora |
+| Indexing | `index_documents` | Index markdown documents (async job) |
+| | `get_job_status` | Check indexing job status |
+| | `cancel_job` | Cancel a running job |
+| | `delete_document` | Delete a document and recompute |
+| Query | `query` | Query with PPR + citations |
+| | `get_stats` | Get corpus statistics |
+| Lexicon | `manage_dictionary` | CRUD for term dictionary |
+| | `manage_thesaurus` | CRUD for thesaurus relations |
+| | `build_dictionary_from_api` | Build dictionary from Semantic Scholar |
+| Analysis | `analyze_conflicts` | Analyze fact conflicts |
+| | `export_graph` | Export graph (JSON/GraphML) |
+
+### CLI (for Local Operation)
+
+| Command | Description |
+|---------|-------------|
+| `memgraphrag init` | Generate default config file |
+| `memgraphrag index` | Index markdown documents |
+| `memgraphrag query` | Query the knowledge graph |
+| `memgraphrag stats` | Show corpus statistics |
+| `memgraphrag dictionary` | Manage term dictionary (build/import/export/stats) |
+| `memgraphrag thesaurus` | Manage thesaurus (import/export/lookup/stats) |
+| `memgraphrag visualize` | Export graph as GraphML/JSON |
+| `memgraphrag conflicts` | Analyze and display conflicts |
+
+All commands support `--json` for machine-readable output.
+
+## ⚙️ Configuration Reference
+
+All configuration is managed through a single YAML file (`memgraphrag.yml`) and optional environment variable overrides. See [`config/default.memgraphrag.yml`](config/default.memgraphrag.yml) for defaults.
+
+### LLM / Embedding Providers
+
+MemGraphRAG uses OpenAI-compatible APIs for text generation and embedding.
+
+#### OpenAI (Default)
 
 ```bash
 export OPENAI_API_KEY="sk-..."
 ```
 
-The default config uses `gpt-4o-mini` for LLM and `text-embedding-3-large` for embeddings:
-
 ```yaml
-# memgraphrag.yml
 providers:
   llm:
     backend: openai
@@ -121,11 +219,10 @@ providers:
   embedding:
     backend: openai
     model: text-embedding-3-large
+    cache_dir: ./data/memgraphrag/cache/embeddings
 ```
 
-### Azure OpenAI
-
-Set `base_url` to your Azure endpoint:
+#### Azure OpenAI
 
 ```bash
 export OPENAI_API_KEY="your-azure-api-key"
@@ -143,7 +240,7 @@ providers:
     base_url: https://YOUR_RESOURCE.openai.azure.com/openai/deployments/YOUR_EMBEDDING/v1
 ```
 
-### Local / Self-hosted (Ollama, vLLM, etc.)
+#### Local / Self-hosted (Ollama, vLLM, etc.)
 
 Any OpenAI-compatible endpoint works:
 
@@ -163,21 +260,17 @@ providers:
     base_url: http://localhost:11434/v1
 ```
 
-### Local-Only Mode (No API Calls)
-
-Run without any LLM/embedding API. Uses BM25 lexical search, regex-based NLP, and template responses:
-
-```bash
-export MEMGRAPHRAG_LOCAL_ONLY=true
-```
-
-Or in config:
+#### Local-Only Mode (No API Calls)
 
 ```yaml
 local_only: true
 ```
 
-### Model Selection Guide
+Or via environment: `export MEMGRAPHRAG_LOCAL_ONLY=true`
+
+Falls back to BM25 lexical search, regex-based NLP, and template responses.
+
+#### Model Selection Guide
 
 | Use Case | Recommended LLM | Recommended Embedding |
 |----------|------------------|----------------------|
@@ -186,70 +279,26 @@ local_only: true
 | Privacy / offline | Ollama `llama3.1` | Ollama `nomic-embed-text` |
 | Japanese focus | `gpt-4o` | `text-embedding-3-large` |
 
-## 🔌 AIRA Integration (MCP)
+### NLP Providers
 
-MemGraphRAG runs as an MCP stdio server for [AIRA](https://github.com/nahisaho/aira).
+The NLP provider handles entity extraction and language detection via a Python subprocess.
 
-### Setup
-
-1. Copy the MCP template into your AIRA config:
-
-```json
-{
-  "mcpServers": {
-    "memgraphrag": {
-      "command": "node",
-      "args": ["packages/memgraphrag/dist/interface/mcp/server.js"],
-      "env": {
-        "MEMGRAPHRAG_CONFIG": "packages/memgraphrag/config/default.memgraphrag.yml",
-        "OPENAI_API_KEY": "${OPENAI_API_KEY}"
-      }
-    }
-  }
-}
+```yaml
+providers:
+  nlp:
+    backend: python-sidecar           # python-sidecar | regex | llm
+    python_command: python3
+    request_timeout_ms: 30000
+    healthcheck_timeout_ms: 5000
 ```
 
-2. Set `OPENAI_API_KEY` in your environment.
+| Backend | Requirements | Accuracy | Latency |
+|---------|-------------|----------|---------|
+| `python-sidecar` | Python 3 + scispaCy / GiNZA | High | Medium |
+| `regex` | None | Low | Fast |
+| `llm` | LLM API key | High | Slow |
 
-### Available MCP Tools (14)
-
-| Tool | Description |
-|------|-------------|
-| `create_corpus` | Create a new corpus |
-| `delete_corpus` | Delete corpus with cascade |
-| `list_corpora` | List all corpora |
-| `index_documents` | Index markdown documents (async job) |
-| `get_job_status` | Check indexing job status |
-| `cancel_job` | Cancel a running job |
-| `delete_document` | Delete a document and recompute |
-| `query` | Query with PPR + citations |
-| `get_stats` | Get corpus statistics |
-| `manage_dictionary` | CRUD for term dictionary |
-| `manage_thesaurus` | CRUD for thesaurus relations |
-| `analyze_conflicts` | Analyze fact conflicts |
-| `export_graph` | Export graph (JSON/GraphML) |
-| `build_dictionary_from_api` | Build dictionary from Semantic Scholar |
-
-## 🖥️ CLI Commands
-
-| Command | Description |
-|---------|-------------|
-| `memgraphrag init` | Generate default config file |
-| `memgraphrag index` | Index markdown documents |
-| `memgraphrag query` | Query the knowledge graph |
-| `memgraphrag stats` | Show corpus statistics |
-| `memgraphrag dictionary` | Manage term dictionary (build/import/export/stats) |
-| `memgraphrag thesaurus` | Manage thesaurus (import/export/lookup/stats) |
-| `memgraphrag visualize` | Export graph as GraphML/JSON |
-| `memgraphrag conflicts` | Analyze and display conflicts |
-
-All commands support `--json` for machine-readable output.
-
-## ⚙️ Configuration
-
-See [`config/default.memgraphrag.yml`](config/default.memgraphrag.yml) for all options.
-
-### Key Algorithm Parameters
+### Algorithm Parameters
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
@@ -262,16 +311,41 @@ See [`config/default.memgraphrag.yml`](config/default.memgraphrag.yml) for all o
 | `M` (top_m) | 5 | Top-M passages returned |
 | `ε` (convergence_epsilon) | 1e-6 | PPR convergence threshold |
 
-### Environment Variables
+### Storage
 
-| Variable | Description |
-|----------|-------------|
-| `OPENAI_API_KEY` | OpenAI API key for LLM/embedding |
+```yaml
+storage:
+  sqlite_path: ./data/memgraphrag/memgraphrag.sqlite
+  vector_index_dir: ./data/memgraphrag/vectors
+  wal_mode: true                      # WAL for concurrent reads
+  auto_migrate: true                  # auto-run schema migrations on startup
+```
+
+### Security & Logging
+
+```yaml
+security:
+  redact_stack_traces: true           # strip file paths from error messages
+  corpus_isolation: strict            # prevent cross-corpus data leakage
+
+logging:
+  level: info                         # debug | info | warn | error
+  audit_log_path: ./data/memgraphrag/audit.jsonl
+  structured_log_path: ./data/memgraphrag/runtime.jsonl
+```
+
+### Environment Variable Overrides
+
+Environment variables override YAML config values.
+
+| Variable | Overrides |
+|----------|-----------|
+| `OPENAI_API_KEY` | API key for LLM and embedding providers |
 | `MEMGRAPHRAG_CONFIG` | Path to YAML config file |
-| `MEMGRAPHRAG_DATA_DIR` | Override data directory |
-| `MEMGRAPHRAG_LOCAL_ONLY` | Enable local-only mode (no API calls) |
-| `MEMGRAPHRAG_NLP_BACKEND` | NLP backend: `python-sidecar` \| `regex` \| `llm` |
-| `MEMGRAPHRAG_LOG_LEVEL` | Log level: `debug` \| `info` \| `warn` \| `error` |
+| `MEMGRAPHRAG_DATA_DIR` | `data_dir` in config |
+| `MEMGRAPHRAG_LOCAL_ONLY` | `local_only` in config |
+| `MEMGRAPHRAG_NLP_BACKEND` | `providers.nlp.backend` in config |
+| `MEMGRAPHRAG_LOG_LEVEL` | `logging.level` in config |
 
 ## 🏗️ Project Structure
 
