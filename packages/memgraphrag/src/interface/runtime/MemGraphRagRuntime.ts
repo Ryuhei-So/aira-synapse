@@ -24,19 +24,17 @@ import {
   ThesaurusExpansionPolicy,
 } from '../../application/index.js';
 import { FullDocumentIndexingPipeline } from '../../application/indexing/FullDocumentIndexingPipeline.js';
+import { VectorMemoryFilter } from '../../application/query/VectorMemoryFilter.js';
+import { SimpleNodeInitializer } from '../../application/query/SimpleNodeInitializer.js';
+import { SimplePPR } from '../../application/query/SimplePPR.js';
+import { SQLiteGraphProjection } from '../../application/query/SQLiteGraphProjection.js';
+import { SimpleContextBuilder } from '../../application/query/SimpleContextBuilder.js';
 import type {
-  FilteredMemoryCandidates,
-  IContextBuilder,
   IEmbeddingProvider,
-  IGraphProjection,
   ILLMProvider,
-  IMemoryFilter,
   INLPExtractor,
-  INodeInitializer,
-  IPPR,
   ITermDictionary,
   IThesaurus,
-  NodeInitializationVector,
   QueryRequest,
 } from '../../domain/index.js';
 import {
@@ -117,57 +115,6 @@ class FeatureUnavailableEmbeddingProvider implements IEmbeddingProvider {
 
   public async healthCheck() {
     return { healthy: false, message: 'LOCAL_EMBEDDING_REQUIRED: embedding provider is not configured' };
-  }
-}
-
-class EmptyMemoryFilter implements IMemoryFilter {
-  public async filter(): Promise<FilteredMemoryCandidates> {
-    return {
-      ontology: [],
-      facts: [],
-      passages: [],
-      expandedTerms: [],
-      fallbackRequired: false,
-    };
-  }
-}
-
-class EmptyNodeInitializer implements INodeInitializer {
-  public async initialize(): Promise<NodeInitializationVector> {
-    return { scores: {}, fallbackTriggered: false };
-  }
-}
-
-class EmptyGraphProjection implements IGraphProjection {
-  public async *getTransitions(): AsyncIterable<{ sourceNodeId: string; targetNodeId: string; weight: number }> {}
-  public async getDanglingNodes(): Promise<readonly string[]> {
-    return [];
-  }
-  public async getNodeCount(): Promise<number> {
-    return 0;
-  }
-}
-
-class EmptyPpr implements IPPR {
-  public async run() {
-    return {
-      rankedPassages: [],
-      rankedEntities: [],
-      iterations: 0,
-      converged: true,
-      l1Delta: 0,
-    };
-  }
-}
-
-class EmptyContextBuilder implements IContextBuilder {
-  public async build(_query: QueryRequest, _ranking: Awaited<ReturnType<IPPR['run']>>) {
-    return {
-      promptContext: '',
-      citedPassages: [],
-      citedFacts: [],
-      confidence: 0,
-    };
   }
 }
 
@@ -294,6 +241,10 @@ class QueryServiceFacade implements QueryService {
   public constructor(
     private readonly db: Database.Database,
     private readonly llm: ILLMProvider,
+    private readonly embeddingProvider: IEmbeddingProvider,
+    private readonly vectorIndex: FileVectorIndex,
+    private readonly memoryStore: SQLiteMemoryStore,
+    private readonly graphStore: SQLiteGraphStore,
   ) {}
 
   public async query(request: QueryRequest): Promise<QueryResponse> {
@@ -302,11 +253,11 @@ class QueryServiceFacade implements QueryService {
     const service = new DefaultQueryService({
       dictionary,
       expansionPolicy: new ThesaurusExpansionPolicy(thesaurus),
-      memoryFilter: new EmptyMemoryFilter(),
-      nodeInitializer: new EmptyNodeInitializer(),
-      ppr: new EmptyPpr(),
-      projection: new EmptyGraphProjection(),
-      contextBuilder: new EmptyContextBuilder(),
+      memoryFilter: new VectorMemoryFilter(this.embeddingProvider, this.vectorIndex, this.memoryStore, this.graphStore),
+      nodeInitializer: new SimpleNodeInitializer(),
+      ppr: new SimplePPR(),
+      projection: new SQLiteGraphProjection(this.graphStore),
+      contextBuilder: new SimpleContextBuilder(this.memoryStore),
       llm: this.llm,
     });
     return service.query(request);
@@ -385,7 +336,7 @@ class RuntimeImpl implements MemGraphRagRuntime {
     const corpusManager = new CorpusManagerFacade(this.db, graphStore, vectorIndex);
     const dictionaryService = new DictionaryServiceFacade(this.db, this.config);
     const thesaurusService = new ThesaurusServiceFacade(this.db);
-    const queryService = new QueryServiceFacade(this.db, llmProvider);
+    const queryService = new QueryServiceFacade(this.db, llmProvider, embeddingProvider, vectorIndex, memoryStore, graphStore);
 
     this.services.set(SERVICE_TOKENS.GRAPH_STORE, graphStore);
     this.services.set(SERVICE_TOKENS.VECTOR_INDEX, vectorIndex);
