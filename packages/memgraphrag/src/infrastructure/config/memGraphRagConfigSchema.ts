@@ -72,6 +72,7 @@ export interface ProvidersConfig {
   readonly llm: LLMProviderConfig;
   readonly embedding: EmbeddingProviderConfig;
   readonly nlp: NLPProviderConfig;
+  readonly apiKeyFile?: string;
 }
 
 /** Storage */

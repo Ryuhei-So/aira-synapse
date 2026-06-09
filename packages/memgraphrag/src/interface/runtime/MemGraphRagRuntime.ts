@@ -53,6 +53,7 @@ import {
   runMigrations,
 } from '../../infrastructure/index.js';
 import type { MemGraphRagConfig } from '../../infrastructure/config/index.js';
+import { resolveApiKey } from '../../infrastructure/config/index.js';
 
 export interface MemGraphRagRuntime {
   start(): Promise<void>;
@@ -338,17 +339,19 @@ class RuntimeImpl implements MemGraphRagRuntime {
     const memoryStore = new SQLiteMemoryStore(this.db);
     const sharedLexiconStore = new SQLiteLexiconStore(this.db, RUNTIME_CORPUS_ID);
 
+    const apiKey = resolveApiKey(this.config.providers.apiKeyFile);
+
     const llmProvider: ILLMProvider = this.config.localOnly
       ? new FeatureUnavailableLLMProvider()
       : new OpenAILLMProvider({
-        apiKey: process.env['OPENAI_API_KEY'] ?? '',
+        apiKey,
         model: this.config.providers.llm.model,
       });
 
     const embeddingProvider: IEmbeddingProvider = this.config.localOnly
       ? new FeatureUnavailableEmbeddingProvider()
       : new OpenAIEmbeddingProvider({
-        apiKey: process.env['OPENAI_API_KEY'] ?? '',
+        apiKey,
         model: this.config.providers.embedding.model,
       });
 

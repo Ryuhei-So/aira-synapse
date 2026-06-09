@@ -97,22 +97,39 @@ describe('TASK-MG-027: Config env overlay', () => {
     });
 
     it('should return unavailable when OPENAI_API_KEY is not set', () => {
-      const result = checkApiKeyAvailability(baseConfig, {});
+      const noFileConfig = {
+        ...baseConfig,
+        providers: { ...baseConfig.providers, apiKeyFile: undefined },
+      };
+      const result = checkApiKeyAvailability(noFileConfig, {});
       expect(result.available).toBe(false);
-      expect(result.reason).toContain('OPENAI_API_KEY');
+      expect(result.reason).toContain('api_key_file');
     });
 
     it('should return unavailable when OPENAI_API_KEY is empty', () => {
-      const result = checkApiKeyAvailability(baseConfig, {
+      const noFileConfig = {
+        ...baseConfig,
+        providers: { ...baseConfig.providers, apiKeyFile: undefined },
+      };
+      const result = checkApiKeyAvailability(noFileConfig, {
         OPENAI_API_KEY: '  ',
       });
       expect(result.available).toBe(false);
     });
 
     it('should return available when API key is present', () => {
-      const result = checkApiKeyAvailability(baseConfig, {
+      const noFileConfig = {
+        ...baseConfig,
+        providers: { ...baseConfig.providers, apiKeyFile: undefined },
+      };
+      const result = checkApiKeyAvailability(noFileConfig, {
         OPENAI_API_KEY: 'sk-test-key',
       });
+      expect(result.available).toBe(true);
+    });
+
+    it('should return available when api_key_file exists', () => {
+      const result = checkApiKeyAvailability(baseConfig, {});
       expect(result.available).toBe(true);
     });
   });

@@ -3,6 +3,8 @@
  * DES-MG-050: Environment variable overrides for config values.
  */
 
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { MemGraphRagConfig } from './memGraphRagConfigSchema.js';
 
 export interface EnvOverrides {
@@ -82,6 +84,7 @@ export function resolveConfigFromEnv(
 
 /**
  * Checks whether an API key is available.
+ * Checks: api_key_file (config) → OPENAI_API_KEY (env).
  * Returns the reason if not available.
  */
 export function checkApiKeyAvailability(
@@ -92,9 +95,21 @@ export function checkApiKeyAvailability(
     return { available: false, reason: 'FEATURE_REQUIRES_API: local_only mode is enabled' };
   }
 
+  // Check api_key_file first
+  if (config.providers.apiKeyFile) {
+    const filePath = resolve(process.cwd(), config.providers.apiKeyFile);
+    if (existsSync(filePath)) {
+      const key = readFileSync(filePath, 'utf-8').trim();
+      if (key.length > 0) {
+        return { available: true };
+      }
+    }
+  }
+
+  // Then check environment variable
   const apiKey = env['OPENAI_API_KEY'];
   if (!apiKey || apiKey.trim().length === 0) {
-    return { available: false, reason: 'OPENAI_API_KEY environment variable is not set' };
+    return { available: false, reason: 'API key not found: neither api_key_file nor OPENAI_API_KEY is set' };
   }
 
   return { available: true };

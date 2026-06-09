@@ -42,6 +42,7 @@ providers:
     python_command: python3
     request_timeout_ms: 30000
     healthcheck_timeout_ms: 5000
+  api_key_file: ./config/openai_api_key
 
 storage:
   sqlite_path: ./data/memgraphrag/memgraphrag.sqlite

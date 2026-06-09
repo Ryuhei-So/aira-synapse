@@ -4,3 +4,8 @@ dist/
 .data/
 data/
 references/altanative-lazygraphrag/
+
+# API key files
+**/openai_api_key
+**/*_api_key
+**/*.key

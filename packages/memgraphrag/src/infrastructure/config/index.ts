@@ -18,3 +18,4 @@ export {
   redactConfigForLogging,
   type EnvOverrides,
 } from './resolveConfigFromEnv.js';
+export { resolveApiKey } from './resolveApiKey.js';
