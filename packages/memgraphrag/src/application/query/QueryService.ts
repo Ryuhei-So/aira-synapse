@@ -15,6 +15,7 @@ import type {
 import type { Fact } from '../../domain/memory/fact.js';
 import type { Passage } from '../../domain/memory/passage.js';
 import { ThesaurusExpansionPolicy } from './ThesaurusExpansionPolicy.js';
+import { TemplateResponseGenerator } from './TemplateResponseGenerator.js';
 
 export interface CitationDto {
   readonly passageId: string;
@@ -60,6 +61,7 @@ export interface QueryServiceDependencies {
   readonly projection: IGraphProjection;
   readonly contextBuilder: IContextBuilder;
   readonly llm: ILLMProvider;
+  readonly responseGenerator?: TemplateResponseGenerator;
 }
 
 function normalizeQueryText(text: string): string {
@@ -83,8 +85,21 @@ function toCitations(bundle: ContextBundle): readonly CitationDto[] {
   }));
 }
 
+function shouldUseTemplateFallback(error: unknown): boolean {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return message.includes('feature_requires_api')
+    || message.includes('provider')
+    || message.includes('openai')
+    || message.includes('timed out')
+    || message.includes('unavailable');
+}
+
 export class DefaultQueryService implements QueryService {
-  public constructor(public readonly dependencies: QueryServiceDependencies) {}
+  private readonly responseGenerator: TemplateResponseGenerator;
+
+  public constructor(public readonly dependencies: QueryServiceDependencies) {
+    this.responseGenerator = dependencies.responseGenerator ?? new TemplateResponseGenerator();
+  }
 
   public async query(request: QueryRequest): Promise<QueryResponse> {
     const normalizedText = normalizeQueryText(request.text);
@@ -109,24 +124,45 @@ export class DefaultQueryService implements QueryService {
       topM: request.topM,
     }, this.dependencies.projection);
     const context = await this.dependencies.contextBuilder.build(expandedRequest, ranking);
-    const llm = await this.dependencies.llm.generate({
-      prompt: `${expandedRequest.text}\n\n${context.promptContext}`,
-      temperature: 0.1,
-    });
+    const entities = toEntityHits(matches);
+
+    let responseText: string;
+    let llmInputTokens = 0;
+    let llmOutputTokens = 0;
+    let templateFallbackTriggered = false;
+
+    try {
+      const llm = await this.dependencies.llm.generate({
+        prompt: `${expandedRequest.text}\n\n${context.promptContext}`,
+        temperature: 0.1,
+      });
+      responseText = llm.text;
+      llmInputTokens = llm.usage.inputTokens;
+      llmOutputTokens = llm.usage.outputTokens;
+    } catch (error) {
+      if (!shouldUseTemplateFallback(error)) {
+        throw error;
+      }
+      responseText = this.responseGenerator.generate({
+        ...context,
+        entities: entities.map((entity) => entity.term),
+      });
+      templateFallbackTriggered = true;
+    }
 
     return {
-      response: llm.text,
+      response: responseText,
       citations: toCitations(context),
-      entities: toEntityHits(matches),
+      entities,
       metrics: {
         dictionaryMatchCount: matches.length,
         expandedTerms: candidates.expandedTerms,
-        fallbackTriggered: candidates.fallbackRequired || initialVector.fallbackTriggered,
+        fallbackTriggered: candidates.fallbackRequired || initialVector.fallbackTriggered || templateFallbackTriggered,
         pprIterations: ranking.iterations,
         pprConverged: ranking.converged,
         citedPassageCount: context.citedPassages.length,
-        llmInputTokens: llm.usage.inputTokens,
-        llmOutputTokens: llm.usage.outputTokens,
+        llmInputTokens,
+        llmOutputTokens,
       },
     };
   }

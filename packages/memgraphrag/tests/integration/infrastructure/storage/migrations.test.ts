@@ -30,15 +30,15 @@ describe('TASK-MG-018: SQLite migration runner', () => {
     it('should apply initial migration', () => {
       const result = runMigrations(db);
       expect(result.applied).toContain('0001_init.sql');
-      expect(result.currentVersion).toBe(1);
+      expect(result.currentVersion).toBe(2);
     });
 
     it('should be idempotent (re-running does not re-apply)', () => {
       runMigrations(db);
       const result2 = runMigrations(db);
       expect(result2.applied).toHaveLength(0);
-      expect(result2.alreadyApplied).toContain('0001_init.sql');
-      expect(result2.currentVersion).toBe(1);
+      expect(result2.alreadyApplied).toEqual(expect.arrayContaining(['0001_init.sql', '0002_add_version_tracking.sql']));
+      expect(result2.currentVersion).toBe(2);
     });
 
     it('should create all required tables', () => {
@@ -67,6 +67,7 @@ describe('TASK-MG-018: SQLite migration runner', () => {
         'schema_aliases',
         'schema_documents',
         'schema_versions',
+        'schema_version_tracking',
         'schemas',
         'term_dictionary',
         'thesaurus_relations',
@@ -151,9 +152,11 @@ describe('TASK-MG-018: SQLite migration runner', () => {
       const versions = db
         .prepare('SELECT version, filename FROM schema_versions')
         .all() as { version: number; filename: string }[];
-      expect(versions).toHaveLength(1);
+      expect(versions).toHaveLength(2);
       expect(versions[0]?.version).toBe(1);
       expect(versions[0]?.filename).toBe('0001_init.sql');
+      expect(versions[1]?.version).toBe(2);
+      expect(versions[1]?.filename).toBe('0002_add_version_tracking.sql');
     });
   });
 
@@ -161,7 +164,7 @@ describe('TASK-MG-018: SQLite migration runner', () => {
     it('should return database and migration result', () => {
       const memDb = openDatabase(':memory:');
       const result = runMigrations(memDb);
-      expect(result.currentVersion).toBe(1);
+      expect(result.currentVersion).toBe(2);
       memDb.close();
     });
   });

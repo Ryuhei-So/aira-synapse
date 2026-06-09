@@ -128,7 +128,7 @@ describe('TASK-MG-020: SQLiteMemoryStore integration', () => {
     const loaded = await store.load(CORPUS_ID);
 
     expect(loaded.corpusId).toBe(CORPUS_ID);
-    expect(loaded.schemaVersion).toBe(1);
+    expect(loaded.schemaVersion).toBe(2);
     expect(loaded.schemas).toEqual(snapshot.schemas);
     expect(loaded.facts).toEqual(snapshot.facts);
     expect(loaded.passages).toEqual(snapshot.passages);

@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { TermDictionaryEntry, ThesaurusRelation } from '../../domain/index.js';
 import type { ToolError } from './errors.js';
-import { serializeToolError, toToolError } from './errors.js';
+import { serializeToolError } from './errors.js';
+import { safeErrorSerializer } from './safeErrorSerializer.js';
 
 export type JsonObject = Record<string, unknown>;
 
@@ -14,7 +15,7 @@ export function jsonResult(payload: JsonObject): CallToolResult {
 }
 
 export function jsonErrorResult(error: unknown): CallToolResult {
-  const toolError = toToolError(error);
+  const toolError = safeErrorSerializer(error);
   return {
     isError: true,
     content: [{ type: 'text', text: serializeToolError(toolError) }],

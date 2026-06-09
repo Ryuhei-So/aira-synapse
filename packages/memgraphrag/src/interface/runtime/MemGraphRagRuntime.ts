@@ -14,6 +14,7 @@ import type {
 } from '../../application/index.js';
 import {
   AsyncJobRunner,
+  BuildDictionaryFromApi,
   CorpusManager as DefaultCorpusManager,
   DefaultDictionaryService,
   DefaultIndexingService,
@@ -46,6 +47,8 @@ import {
   SQLiteGraphStore,
   SQLiteLexiconStore,
   SQLiteMemoryStore,
+  SemanticScholarCache,
+  SemanticScholarClient,
   openDatabase,
   runMigrations,
 } from '../../infrastructure/index.js';
@@ -248,7 +251,10 @@ class CorpusManagerFacade implements CorpusManagerLike {
 }
 
 class DictionaryServiceFacade implements DictionaryServiceWithApi {
-  public constructor(private readonly db: Database.Database) {}
+  public constructor(
+    private readonly db: Database.Database,
+    private readonly config: MemGraphRagConfig,
+  ) {}
 
   public async handle(command: DictionaryCommand): Promise<DictionaryResult> {
     const service = new DefaultDictionaryService(new SQLiteLexiconStore(this.db, command.corpusId));
@@ -256,11 +262,20 @@ class DictionaryServiceFacade implements DictionaryServiceWithApi {
   }
 
   public async buildFromApi(
-    _corpusId: string,
-    _domains: readonly string[],
-    _maxPapers: number,
+    corpusId: string,
+    domains: readonly string[],
+    maxPapers: number,
   ): Promise<DictionaryBuildResult> {
-    throw new Error('FEATURE_REQUIRES_API: Semantic Scholar API integration is not configured');
+    if (this.config.localOnly) {
+      throw new Error('FEATURE_REQUIRES_API: Semantic Scholar API is unavailable in local-only mode');
+    }
+
+    const cache = new SemanticScholarCache(resolve(process.cwd(), this.config.dataDir, 'semantic-scholar-cache'));
+    const builder = new BuildDictionaryFromApi(
+      new SQLiteLexiconStore(this.db, corpusId),
+      new SemanticScholarClient({ cache }),
+    );
+    return builder.buildFromApi(corpusId, domains, maxPapers);
   }
 }
 
@@ -353,7 +368,7 @@ class RuntimeImpl implements MemGraphRagRuntime {
     );
     const indexingService = new DefaultIndexingService(this.db, jobRunner, deleteDocumentService);
     const corpusManager = new CorpusManagerFacade(this.db, graphStore, vectorIndex);
-    const dictionaryService = new DictionaryServiceFacade(this.db);
+    const dictionaryService = new DictionaryServiceFacade(this.db, this.config);
     const thesaurusService = new ThesaurusServiceFacade(this.db);
     const queryService = new QueryServiceFacade(this.db, llmProvider);
 

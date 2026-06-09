@@ -24,6 +24,7 @@ export {
   type DictionaryResult,
   type DictionaryService,
 } from './dictionary/DictionaryService.js';
+export { BuildDictionaryFromApi } from './dictionary/BuildDictionaryFromApi.js';
 
 export {
   DefaultThesaurusService,
@@ -54,6 +55,8 @@ export {
   type ChunkDocumentRequest,
 } from './indexing/MarkdownChunker.js';
 export { StageIICanonicalizer, mergeSchemas } from './indexing/StageIICanonicalizer.js';
+export { SymbolicCanonicalizer } from './indexing/SymbolicCanonicalizer.js';
+export { SymbolicConflictDetector } from './indexing/SymbolicConflictDetector.js';
 export {
   detectConflicts,
   resolveConflicts,
@@ -94,6 +97,7 @@ export {
   ThesaurusExpansionPolicy,
   type ThesaurusExpansionOptions,
 } from './query/ThesaurusExpansionPolicy.js';
+export { TemplateResponseGenerator, type TemplateContextBundle } from './query/TemplateResponseGenerator.js';
 export {
   DefaultQueryService,
   ContextBuilderService,
@@ -105,3 +109,5 @@ export {
   type QueryServiceDependencies,
   type ContextBuilderDependencies,
 } from './query/QueryService.js';
+export { DegradedModePolicy, type CapabilityHealthResults, type RuntimeCapabilities, type FeatureGates, type RuntimePolicyConfig } from './runtime/DegradedModePolicy.js';
+export { MetricsCollector, type MetricSnapshot } from './observability/MetricsCollector.js';
