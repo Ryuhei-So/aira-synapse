@@ -98,6 +98,94 @@ npx memgraphrag query \
   --json
 ```
 
+## 🤖 LLM API Configuration
+
+MemGraphRAG uses OpenAI-compatible APIs for text generation and embedding. Without API keys, it automatically falls back to **local-only mode** (BM25 retrieval, regex NLP, template responses).
+
+### OpenAI
+
+```bash
+export OPENAI_API_KEY="sk-..."
+```
+
+The default config uses `gpt-4o-mini` for LLM and `text-embedding-3-large` for embeddings:
+
+```yaml
+# memgraphrag.yml
+providers:
+  llm:
+    backend: openai
+    model: gpt-4o-mini
+    temperature: 0.1
+    max_tokens: 2048
+  embedding:
+    backend: openai
+    model: text-embedding-3-large
+```
+
+### Azure OpenAI
+
+Set `base_url` to your Azure endpoint:
+
+```bash
+export OPENAI_API_KEY="your-azure-api-key"
+```
+
+```yaml
+providers:
+  llm:
+    backend: openai
+    model: gpt-4o-mini                          # your deployment name
+    base_url: https://YOUR_RESOURCE.openai.azure.com/openai/deployments/YOUR_DEPLOYMENT/v1
+  embedding:
+    backend: openai
+    model: text-embedding-3-large               # your deployment name
+    base_url: https://YOUR_RESOURCE.openai.azure.com/openai/deployments/YOUR_EMBEDDING/v1
+```
+
+### Local / Self-hosted (Ollama, vLLM, etc.)
+
+Any OpenAI-compatible endpoint works:
+
+```bash
+export OPENAI_API_KEY="not-needed"              # some servers require a non-empty value
+```
+
+```yaml
+providers:
+  llm:
+    backend: openai
+    model: llama3.1
+    base_url: http://localhost:11434/v1          # Ollama
+  embedding:
+    backend: openai
+    model: nomic-embed-text
+    base_url: http://localhost:11434/v1
+```
+
+### Local-Only Mode (No API Calls)
+
+Run without any LLM/embedding API. Uses BM25 lexical search, regex-based NLP, and template responses:
+
+```bash
+export MEMGRAPHRAG_LOCAL_ONLY=true
+```
+
+Or in config:
+
+```yaml
+local_only: true
+```
+
+### Model Selection Guide
+
+| Use Case | Recommended LLM | Recommended Embedding |
+|----------|------------------|----------------------|
+| High accuracy | `gpt-4o` | `text-embedding-3-large` |
+| Cost-effective | `gpt-4o-mini` (default) | `text-embedding-3-small` |
+| Privacy / offline | Ollama `llama3.1` | Ollama `nomic-embed-text` |
+| Japanese focus | `gpt-4o` | `text-embedding-3-large` |
+
 ## 🔌 AIRA Integration (MCP)
 
 MemGraphRAG runs as an MCP stdio server for [AIRA](https://github.com/nahisaho/aira).

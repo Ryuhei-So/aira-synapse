@@ -100,6 +100,94 @@ npx memgraphrag query \
   --json
 ```
 
+## 🤖 LLM API の設定
+
+MemGraphRAG は OpenAI 互換 API をテキスト生成とエンベディングに使用する。API キー未設定の場合、**ローカルオンリーモード**（BM25 検索、正規表現 NLP、テンプレート応答）に自動フォールバックする。
+
+### OpenAI
+
+```bash
+export OPENAI_API_KEY="sk-..."
+```
+
+デフォルト設定では LLM に `gpt-4o-mini`、エンベディングに `text-embedding-3-large` を使用：
+
+```yaml
+# memgraphrag.yml
+providers:
+  llm:
+    backend: openai
+    model: gpt-4o-mini
+    temperature: 0.1
+    max_tokens: 2048
+  embedding:
+    backend: openai
+    model: text-embedding-3-large
+```
+
+### Azure OpenAI
+
+`base_url` に Azure エンドポイントを指定：
+
+```bash
+export OPENAI_API_KEY="your-azure-api-key"
+```
+
+```yaml
+providers:
+  llm:
+    backend: openai
+    model: gpt-4o-mini                          # デプロイメント名
+    base_url: https://YOUR_RESOURCE.openai.azure.com/openai/deployments/YOUR_DEPLOYMENT/v1
+  embedding:
+    backend: openai
+    model: text-embedding-3-large               # デプロイメント名
+    base_url: https://YOUR_RESOURCE.openai.azure.com/openai/deployments/YOUR_EMBEDDING/v1
+```
+
+### ローカル / セルフホスト（Ollama, vLLM 等）
+
+OpenAI 互換エンドポイントであれば何でも利用可能：
+
+```bash
+export OPENAI_API_KEY="not-needed"              # サーバーによっては非空値が必要
+```
+
+```yaml
+providers:
+  llm:
+    backend: openai
+    model: llama3.1
+    base_url: http://localhost:11434/v1          # Ollama
+  embedding:
+    backend: openai
+    model: nomic-embed-text
+    base_url: http://localhost:11434/v1
+```
+
+### ローカルオンリーモード（API 呼び出しなし）
+
+LLM/Embedding API なしで動作。BM25 語彙検索、正規表現ベース NLP、テンプレート応答を使用：
+
+```bash
+export MEMGRAPHRAG_LOCAL_ONLY=true
+```
+
+または設定ファイルで：
+
+```yaml
+local_only: true
+```
+
+### モデル選択ガイド
+
+| ユースケース | 推奨 LLM | 推奨エンベディング |
+|-------------|----------|-------------------|
+| 高精度 | `gpt-4o` | `text-embedding-3-large` |
+| コスト重視 | `gpt-4o-mini`（デフォルト） | `text-embedding-3-small` |
+| プライバシー / オフライン | Ollama `llama3.1` | Ollama `nomic-embed-text` |
+| 日本語特化 | `gpt-4o` | `text-embedding-3-large` |
+
 ## 🔌 AIRA 連携（MCP）
 
 MemGraphRAG は [AIRA](https://github.com/nahisaho/aira) の MCP stdio サーバーとして動作する。AIRA の ToolUniverse で取得した論文を markitdown で Markdown に変換し、MCP 経由で MemGraphRAG に渡してナレッジグラフを構築する。
