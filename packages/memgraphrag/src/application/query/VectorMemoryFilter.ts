@@ -50,7 +50,7 @@ export class VectorMemoryFilter implements IMemoryFilter {
         corpusId: request.corpusId,
         namespace: 'schema',
         queryVector,
-        topK: 5,
+        topK: 10,
         threshold: request.threshold,
       }),
     ]);

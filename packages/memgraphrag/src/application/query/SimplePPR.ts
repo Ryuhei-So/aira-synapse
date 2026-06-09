@@ -17,6 +17,7 @@ export class SimplePPR implements IPPR {
     // Build adjacency list from graph
     const adjacency = new Map<string, { target: string; weight: number }[]>();
     const allNodes = new Set<string>();
+    const inDegree = new Map<string, number>();
 
     for await (const entry of projection.getTransitions(corpusId)) {
       allNodes.add(entry.sourceNodeId);
@@ -28,6 +29,7 @@ export class SimplePPR implements IPPR {
         target: entry.targetNodeId,
         weight: entry.weight,
       });
+      inDegree.set(entry.targetNodeId, (inDegree.get(entry.targetNodeId) ?? 0) + 1);
     }
 
     // Initialize score vector from seeds
@@ -38,6 +40,23 @@ export class SimplePPR implements IPPR {
     }
 
     const nodeIndex = new Map(nodeList.map((id, i) => [id, i]));
+
+    // Selective hub suppression: only dampen schema (type) nodes with very high degree.
+    // Fact and passage nodes are preserved — they carry specific entity info needed
+    // for comparison tasks.
+    const hubDamping = new Float64Array(n);
+    const HUB_DEGREE_THRESHOLD = 50;
+    for (let i = 0; i < n; i++) {
+      const nodeId = nodeList[i]!;
+      const outDeg = adjacency.get(nodeId)?.length ?? 0;
+      const inDeg = inDegree.get(nodeId) ?? 0;
+      const totalDeg = outDeg + inDeg;
+      if (nodeId.startsWith('schema:') && totalDeg > HUB_DEGREE_THRESHOLD) {
+        hubDamping[i] = 1.0 / Math.log2(totalDeg + 2);
+      } else {
+        hubDamping[i] = 1.0;
+      }
+    }
 
     // Teleport vector (personalization)
     const teleport = new Float64Array(n);
@@ -67,7 +86,7 @@ export class SimplePPR implements IPPR {
       iterations = iter + 1;
       const newScores = new Float64Array(n);
 
-      // Transition contribution
+      // Transition contribution with hub suppression
       for (let i = 0; i < n; i++) {
         const nodeId = nodeList[i]!;
         const neighbors = adjacency.get(nodeId);
@@ -78,7 +97,9 @@ export class SimplePPR implements IPPR {
         for (const edge of neighbors) {
           const j = nodeIndex.get(edge.target);
           if (j !== undefined) {
-            newScores[j] = (newScores[j] ?? 0) + (1 - teleportProbability) * nodeScore * (edge.weight / totalWeight);
+            // Apply hub damping: high-degree target nodes receive less score
+            const dampedWeight = (edge.weight / totalWeight) * hubDamping[j]!;
+            newScores[j] = (newScores[j] ?? 0) + (1 - teleportProbability) * nodeScore * dampedWeight;
           }
         }
       }

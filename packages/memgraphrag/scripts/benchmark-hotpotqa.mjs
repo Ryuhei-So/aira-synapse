@@ -16,6 +16,26 @@ const RESULTS_FILE = resolve(BENCHMARK_DIR, 'results_500.json');
 const PHASE = process.argv[2] || 'all'; // 'index', 'query', 'all'
 const BATCH_SIZE = 20;
 
+/**
+ * HotpotQA-standard normalized string accuracy.
+ * Removes articles (a/an/the), punctuation, and extra whitespace before matching.
+ */
+function normalizeAnswer(s) {
+  return s.toLowerCase()
+    .replace(/\b(a|an|the)\b/g, ' ')
+    .replace(/[^a-z0-9 ]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizedContains(response, goldAnswer) {
+  if (!response || !goldAnswer) return false;
+  // Strip markdown bold markers
+  const normResp = normalizeAnswer(response.replace(/\*\*/g, ''));
+  const normGold = normalizeAnswer(goldAnswer);
+  return normResp.includes(normGold);
+}
+
 async function createBenchmarkRuntime() {
   const configPath = resolve(process.cwd(), 'packages/memgraphrag/config/default.memgraphrag.yml');
   const baseConfig = loadMemGraphRagConfig(configPath);
@@ -120,16 +140,14 @@ async function evaluateQueries(runtime, corpusId) {
       const result = await queryService.query({
         corpusId,
         text: q.question,
-        topK: 5,
+        topK: 10,
         topM: 10,
         threshold: 0.2,
-        contextTokenLimit: 2000,
+        contextTokenLimit: 3000,
       });
       
-      // Check if answer is contained in response (case-insensitive)
-      const responseLC = result.response.toLowerCase();
-      const answerLC = q.answer.toLowerCase();
-      const isCorrect = responseLC.includes(answerLC);
+      // HotpotQA-standard normalized string accuracy
+      const isCorrect = normalizedContains(result.response, q.answer);
       if (isCorrect) correct++;
       
       results.push({

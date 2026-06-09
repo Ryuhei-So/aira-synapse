@@ -43,12 +43,26 @@ export class SimpleContextBuilder implements IContextBuilder {
       }
     }
 
-    // Build prompt context
+    // Build prompt context — passages first (more important for factoid QA),
+    // then structured facts for relational reasoning
     let context = '';
     let tokenEstimate = 0;
     const tokenLimit = query.contextTokenLimit;
 
-    if (citedFacts.length > 0) {
+    // Passages first — they contain the raw text most likely to contain the answer
+    if (citedPassages.length > 0) {
+      context += '## Relevant Passages\n\n';
+      for (const passage of citedPassages) {
+        const block = `[${passage.metadata.documentId}] ${passage.text}\n\n`;
+        const blockTokens = Math.ceil(block.length / 4);
+        if (tokenEstimate + blockTokens > tokenLimit) break;
+        context += block;
+        tokenEstimate += blockTokens;
+      }
+    }
+
+    // Facts second — structured triples for entity relationships
+    if (citedFacts.length > 0 && tokenEstimate < tokenLimit * 0.9) {
       context += '## Key Facts\n\n';
       for (const fact of citedFacts) {
         const line = `- ${fact.headEntity} → ${fact.relation} → ${fact.tailEntity}\n`;
@@ -58,17 +72,6 @@ export class SimpleContextBuilder implements IContextBuilder {
         tokenEstimate += lineTokens;
       }
       context += '\n';
-    }
-
-    if (citedPassages.length > 0) {
-      context += '## Relevant Passages\n\n';
-      for (const passage of citedPassages) {
-        const block = `### [${passage.metadata.documentId}]\n${passage.text}\n\n`;
-        const blockTokens = Math.ceil(block.length / 4);
-        if (tokenEstimate + blockTokens > tokenLimit) break;
-        context += block;
-        tokenEstimate += blockTokens;
-      }
     }
 
     const confidence = citedPassages.length > 0 || citedFacts.length > 0

@@ -133,7 +133,7 @@ export class DefaultQueryService implements QueryService {
 
     try {
       const llm = await this.dependencies.llm.generate({
-        prompt: `${expandedRequest.text}\n\n${context.promptContext}`,
+        prompt: `Answer the following question based on the provided context. Give a concise, direct answer.\n\nQuestion: ${expandedRequest.text}\n\nContext:\n${context.promptContext}`,
         temperature: 0.1,
       });
       responseText = llm.text;
