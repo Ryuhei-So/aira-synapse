@@ -1,6 +1,7 @@
 /**
  * Simple Context Builder.
  * Retrieves passage/fact texts for PPR-ranked nodes and builds a prompt context.
+ * Adapts context ordering based on detected query type (comparison vs bridge).
  */
 import type {
   IContextBuilder,
@@ -11,6 +12,8 @@ import type { QueryRequest } from '../../domain/retrieval/memoryFilter.js';
 import type { IMemoryStore } from '../../domain/storage/index.js';
 import type { Passage } from '../../domain/memory/passage.js';
 import type { Fact } from '../../domain/memory/fact.js';
+
+const COMPARISON_PATTERNS = /\b(which|who is (more|less|taller|shorter|older|younger|bigger|smaller|larger|heavier|lighter)|(compare|comparison|differ|difference|between)\b.*\b(and|or|vs)\b|both\b)/i;
 
 export class SimpleContextBuilder implements IContextBuilder {
   constructor(private readonly memoryStore: IMemoryStore) {}
@@ -23,7 +26,6 @@ export class SimpleContextBuilder implements IContextBuilder {
     const citedPassages: Passage[] = [];
     const citedFacts: Fact[] = [];
 
-    // Collect top passages
     for (const ranked of ranking.rankedPassages) {
       const passageId = ranked.nodeId.startsWith('passage:')
         ? ranked.nodeId.slice('passage:'.length)
@@ -32,7 +34,6 @@ export class SimpleContextBuilder implements IContextBuilder {
       if (passage) citedPassages.push(passage);
     }
 
-    // Collect top facts
     for (const ranked of ranking.rankedEntities) {
       if (ranked.layer === 'fact') {
         const factId = ranked.nodeId.startsWith('fact:')
@@ -43,35 +44,27 @@ export class SimpleContextBuilder implements IContextBuilder {
       }
     }
 
-    // Build prompt context — passages first (more important for factoid QA),
-    // then structured facts for relational reasoning
+    // Detect comparison queries — fact-first ordering benefits entity relationship tasks
+    const isComparison = COMPARISON_PATTERNS.test(query.text);
+
     let context = '';
     let tokenEstimate = 0;
     const tokenLimit = query.contextTokenLimit;
 
-    // Passages first — they contain the raw text most likely to contain the answer
-    if (citedPassages.length > 0) {
-      context += '## Relevant Passages\n\n';
-      for (const passage of citedPassages) {
-        const block = `[${passage.metadata.documentId}] ${passage.text}\n\n`;
-        const blockTokens = Math.ceil(block.length / 4);
-        if (tokenEstimate + blockTokens > tokenLimit) break;
-        context += block;
-        tokenEstimate += blockTokens;
+    if (isComparison) {
+      // Comparison: facts first (structured entity relations), then passages
+      context += this.buildFactSection(citedFacts, tokenLimit, tokenEstimate);
+      tokenEstimate = Math.ceil(context.length / 4);
+      if (tokenEstimate < tokenLimit * 0.6) {
+        context += this.buildPassageSection(citedPassages, tokenLimit, tokenEstimate);
       }
-    }
-
-    // Facts second — structured triples for entity relationships
-    if (citedFacts.length > 0 && tokenEstimate < tokenLimit * 0.9) {
-      context += '## Key Facts\n\n';
-      for (const fact of citedFacts) {
-        const line = `- ${fact.headEntity} → ${fact.relation} → ${fact.tailEntity}\n`;
-        const lineTokens = Math.ceil(line.length / 4);
-        if (tokenEstimate + lineTokens > tokenLimit) break;
-        context += line;
-        tokenEstimate += lineTokens;
+    } else {
+      // Bridge/general: passages first (raw text for factoid answers), then facts
+      context += this.buildPassageSection(citedPassages, tokenLimit, tokenEstimate);
+      tokenEstimate = Math.ceil(context.length / 4);
+      if (tokenEstimate < tokenLimit * 0.9) {
+        context += this.buildFactSection(citedFacts, tokenLimit, tokenEstimate);
       }
-      context += '\n';
     }
 
     const confidence = citedPassages.length > 0 || citedFacts.length > 0
@@ -84,5 +77,34 @@ export class SimpleContextBuilder implements IContextBuilder {
       citedFacts,
       confidence,
     };
+  }
+
+  private buildPassageSection(passages: Passage[], tokenLimit: number, currentTokens: number): string {
+    if (passages.length === 0) return '';
+    let section = '## Relevant Passages\n\n';
+    let tokens = currentTokens;
+    for (const passage of passages) {
+      const block = `[${passage.metadata.documentId}] ${passage.text}\n\n`;
+      const blockTokens = Math.ceil(block.length / 4);
+      if (tokens + blockTokens > tokenLimit) break;
+      section += block;
+      tokens += blockTokens;
+    }
+    return section;
+  }
+
+  private buildFactSection(facts: Fact[], tokenLimit: number, currentTokens: number): string {
+    if (facts.length === 0) return '';
+    let section = '## Key Facts\n\n';
+    let tokens = currentTokens;
+    for (const fact of facts) {
+      const line = `- ${fact.headEntity} → ${fact.relation} → ${fact.tailEntity}\n`;
+      const lineTokens = Math.ceil(line.length / 4);
+      if (tokens + lineTokens > tokenLimit) break;
+      section += line;
+      tokens += lineTokens;
+    }
+    section += '\n';
+    return section;
   }
 }

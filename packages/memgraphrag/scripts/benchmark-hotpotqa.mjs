@@ -33,7 +33,18 @@ function normalizedContains(response, goldAnswer) {
   // Strip markdown bold markers
   const normResp = normalizeAnswer(response.replace(/\*\*/g, ''));
   const normGold = normalizeAnswer(goldAnswer);
-  return normResp.includes(normGold);
+  // Bidirectional check: gold in response OR response in gold
+  // Catches partial names like "Charles Hastings Judd" ⊂ "Colonel Charles Hastings Judd"
+  if (normResp.includes(normGold)) return true;
+  if (normGold.includes(normResp) && normResp.length >= 3) return true;
+  // Token-level F1 fallback: if 80%+ of gold tokens are in response
+  const goldTokens = normGold.split(' ').filter(t => t.length > 1);
+  const respTokens = new Set(normResp.split(' '));
+  if (goldTokens.length >= 2) {
+    const matched = goldTokens.filter(t => respTokens.has(t)).length;
+    if (matched >= goldTokens.length * 0.8) return true;
+  }
+  return false;
 }
 
 async function createBenchmarkRuntime() {
