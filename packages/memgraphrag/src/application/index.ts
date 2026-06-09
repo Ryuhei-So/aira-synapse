@@ -19,6 +19,7 @@ export type {
 export {
   DefaultDictionaryService,
   type DictionaryAction,
+  type DictionaryBuildResult,
   type DictionaryCommand,
   type DictionaryResult,
   type DictionaryService,

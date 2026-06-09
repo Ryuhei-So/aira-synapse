@@ -22,8 +22,18 @@ export interface DictionaryResult {
   readonly exportData?: Readonly<Record<string, unknown>>;
 }
 
+export interface DictionaryBuildResult {
+  readonly termCount: number;
+  readonly domainDistribution: Readonly<Record<string, number>>;
+}
+
 export interface DictionaryService {
   handle(command: DictionaryCommand): Promise<DictionaryResult>;
+  buildFromApi(
+    corpusId: string,
+    domains: readonly string[],
+    maxPapers: number,
+  ): Promise<DictionaryBuildResult>;
 }
 
 function assertCorpusId(corpusId: string): void {
@@ -37,6 +47,14 @@ export class DefaultDictionaryService implements DictionaryService {
     private readonly dictionary: ITermDictionary,
     private readonly language: LanguageCode = 'unknown',
   ) {}
+
+  public async buildFromApi(
+    _corpusId: string,
+    _domains: readonly string[],
+    _maxPapers: number,
+  ): Promise<DictionaryBuildResult> {
+    throw new Error('FEATURE_REQUIRES_API: external dictionary build is not configured');
+  }
 
   public async handle(command: DictionaryCommand): Promise<DictionaryResult> {
     assertCorpusId(command.corpusId);

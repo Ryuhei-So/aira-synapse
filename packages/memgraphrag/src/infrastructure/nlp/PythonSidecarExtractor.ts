@@ -109,6 +109,11 @@ export class PythonSidecarExtractor implements INLPExtractor {
     }
   }
 
+  public async shutdown(): Promise<void> {
+    this.failPending(new Error('Python sidecar shutdown requested'));
+    this.killChild();
+  }
+
   private ensureProcess(): ChildProcessWithoutNullStreams {
     if (this.child && !this.child.killed) {
       return this.child;

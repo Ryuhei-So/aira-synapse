@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "memgraphrag": {
+      "command": "node",
+      "args": [
+        "packages/memgraphrag/dist/interface/mcp/server.js"
+      ],
+      "env": {
+        "MEMGRAPHRAG_CONFIG": "packages/memgraphrag/config/default.memgraphrag.yml",
+        "OPENAI_API_KEY": "${OPENAI_API_KEY}"
+      }
+    }
+  }
+}
