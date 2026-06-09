@@ -7,7 +7,7 @@
 [![Tests](https://img.shields.io/badge/tests-353%20passing-brightgreen)]()
 [![License](https://img.shields.io/badge/license-MIT-blue)]()
 
-> KDD 2026 論文 *"MemGraphRAG: Memory-based Multi-Agent System for Graph Retrieval-Augmented Generation"* の実装。専門用語辞書・シソーラス正規化・GiNZA による日本語 NLP を統合し、高精度な学術文献 GraphRAG を実現する。
+> KDD 2026 論文 [*"MemGraphRAG: Memory-based Multi-Agent System for Graph Retrieval-Augmented Generation"*](https://arxiv.org/abs/2606.00610) の実装。専門用語辞書・シソーラス正規化・GiNZA による日本語 NLP を統合し、高精度な学術文献 GraphRAG を実現する。
 
 [English README](README.md)
 
@@ -265,7 +265,7 @@ npx vitest bench --workspace=packages/memgraphrag
 
 ## 📚 参考文献
 
-- **論文**: *MemGraphRAG: Memory-based Multi-Agent System for Graph Retrieval-Augmented Generation* (KDD 2026)
+- **論文**: [*MemGraphRAG: Memory-based Multi-Agent System for Graph Retrieval-Augmented Generation*](https://arxiv.org/abs/2606.00610) (KDD 2026)
 - **NLP**: [scispaCy](https://allenai.github.io/scispacy/)（英語）、[GiNZA](https://megagonlabs.github.io/ginza/)（日本語）
 - **関連知見**: [altanative-lazygraphrag の知見](https://qiita.com/hisaho/items/40b3042371067322ea81)、[専門用語辞書アプローチ](https://qiita.com/hisaho/items/d8a8ed7d2022b9e60dc5)
 

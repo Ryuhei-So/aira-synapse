@@ -7,7 +7,7 @@
 [![Tests](https://img.shields.io/badge/tests-353%20passing-brightgreen)]()
 [![License](https://img.shields.io/badge/license-MIT-blue)]()
 
-> An implementation of the KDD 2026 paper *"MemGraphRAG: Memory-based Multi-Agent System for Graph Retrieval-Augmented Generation"* — enhanced with domain-specific term dictionaries, thesaurus normalization, and Japanese NLP support via GiNZA.
+> An implementation of the KDD 2026 paper [*"MemGraphRAG: Memory-based Multi-Agent System for Graph Retrieval-Augmented Generation"*](https://arxiv.org/abs/2606.00610) — enhanced with domain-specific term dictionaries, thesaurus normalization, and Japanese NLP support via GiNZA.
 
 [日本語版 README はこちら](README-ja.md)
 
@@ -250,7 +250,7 @@ npx vitest bench --workspace=packages/memgraphrag
 
 ## 📚 References
 
-- **Paper**: *MemGraphRAG: Memory-based Multi-Agent System for Graph Retrieval-Augmented Generation* (KDD 2026)
+- **Paper**: [*MemGraphRAG: Memory-based Multi-Agent System for Graph Retrieval-Augmented Generation*](https://arxiv.org/abs/2606.00610) (KDD 2026)
 - **NLP**: [scispaCy](https://allenai.github.io/scispacy/) (English), [GiNZA](https://megagonlabs.github.io/ginza/) (Japanese)
 - **Related work**: [altanative-lazygraphrag](https://qiita.com/hisaho/items/40b3042371067322ea81), [Domain Dictionary approach](https://qiita.com/hisaho/items/d8a8ed7d2022b9e60dc5)
 
