@@ -254,7 +254,7 @@ class QueryServiceFacade implements QueryService {
       dictionary,
       expansionPolicy: new ThesaurusExpansionPolicy(thesaurus),
       memoryFilter: new VectorMemoryFilter(this.embeddingProvider, this.vectorIndex, this.memoryStore, this.graphStore),
-      nodeInitializer: new SimpleNodeInitializer(),
+      nodeInitializer: new SimpleNodeInitializer(this.memoryStore),
       ppr: new SimplePPR(),
       projection: new SQLiteGraphProjection(this.graphStore),
       contextBuilder: new SimpleContextBuilder(this.memoryStore),
