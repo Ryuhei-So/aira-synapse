@@ -153,13 +153,14 @@ MemGraphRAG は用途に応じて 2 つのインターフェースを提供す�
       "command": "node",
       "args": ["packages/memgraphrag/dist/interface/mcp/server.js"],
       "env": {
-        "MEMGRAPHRAG_CONFIG": "packages/memgraphrag/config/default.memgraphrag.yml",
-        "OPENAI_API_KEY": "${OPENAI_API_KEY}"
+        "MEMGRAPHRAG_CONFIG": "packages/memgraphrag/config/default.memgraphrag.yml"
       }
     }
   }
 }
 ```
+
+> API キーはデフォルトで `config/openai_api_key` から読み込まれる。代替として `OPENAI_API_KEY` 環境変数も使用可能。
 
 **ツール一覧（14 ツール）**
 
@@ -203,11 +204,26 @@ MemGraphRAG は用途に応じて 2 つのインターフェースを提供す�
 
 MemGraphRAG は OpenAI 互換 API をテキスト生成とエンベディングに使用する。
 
-#### OpenAI（デフォルト）
+#### API キーの設定
+
+API キーは以下の優先順位で解決される：
+
+1. **キーファイル**（設定の `providers.api_key_file`）— セキュリティ上推奨
+2. **環境変数**（`OPENAI_API_KEY`）
+3. **未設定** — ローカルオンリー / デグラデーションモードに自動切替
+
+```yaml
+# memgraphrag.yml — 推奨: キーをファイルに保存（git にコミットしないこと）
+providers:
+  api_key_file: ./config/openai_api_key
+```
 
 ```bash
+# 代替: 環境変数
 export OPENAI_API_KEY="sk-..."
 ```
+
+#### OpenAI（デフォルト）
 
 ```yaml
 providers:
@@ -224,9 +240,7 @@ providers:
 
 #### Azure OpenAI
 
-```bash
-export OPENAI_API_KEY="your-azure-api-key"
-```
+`api_key_file` または `OPENAI_API_KEY` に Azure API キーを設定し、エンドポイントを指定：
 
 ```yaml
 providers:
@@ -242,11 +256,7 @@ providers:
 
 #### ローカル / セルフホスト（Ollama, vLLM 等）
 
-OpenAI 互換エンドポイントであれば何でも利用可能：
-
-```bash
-export OPENAI_API_KEY="not-needed"              # サーバーによっては非空値が必要
-```
+OpenAI 互換エンドポイントであれば何でも利用可能。サーバーが要求する場合は `api_key_file` にダミー値を設定する。
 
 ```yaml
 providers:

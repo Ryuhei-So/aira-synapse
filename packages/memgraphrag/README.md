@@ -153,13 +153,14 @@ Runs as an MCP stdio server for [AIRA](https://github.com/nahisaho/aira). AIRA's
       "command": "node",
       "args": ["packages/memgraphrag/dist/interface/mcp/server.js"],
       "env": {
-        "MEMGRAPHRAG_CONFIG": "packages/memgraphrag/config/default.memgraphrag.yml",
-        "OPENAI_API_KEY": "${OPENAI_API_KEY}"
+        "MEMGRAPHRAG_CONFIG": "packages/memgraphrag/config/default.memgraphrag.yml"
       }
     }
   }
 }
 ```
+
+> API key is loaded from `config/openai_api_key` by default. Set `OPENAI_API_KEY` env var as an alternative.
 
 **Available Tools (14)**
 
@@ -203,11 +204,26 @@ All configuration is managed through a single YAML file (`memgraphrag.yml`) and 
 
 MemGraphRAG uses OpenAI-compatible APIs for text generation and embedding.
 
-#### OpenAI (Default)
+#### API Key Configuration
+
+The API key is resolved in the following priority:
+
+1. **Key file** (`providers.api_key_file` in config) — recommended for security
+2. **Environment variable** (`OPENAI_API_KEY`)
+3. **Empty** — triggers local-only / degraded mode automatically
+
+```yaml
+# memgraphrag.yml — recommended: store key in a file (never commit to git)
+providers:
+  api_key_file: ./config/openai_api_key
+```
 
 ```bash
+# Alternative: environment variable
 export OPENAI_API_KEY="sk-..."
 ```
+
+#### OpenAI (Default)
 
 ```yaml
 providers:
@@ -224,9 +240,7 @@ providers:
 
 #### Azure OpenAI
 
-```bash
-export OPENAI_API_KEY="your-azure-api-key"
-```
+Set `api_key_file` or `OPENAI_API_KEY` to your Azure API key, then configure endpoints:
 
 ```yaml
 providers:
@@ -242,11 +256,7 @@ providers:
 
 #### Local / Self-hosted (Ollama, vLLM, etc.)
 
-Any OpenAI-compatible endpoint works:
-
-```bash
-export OPENAI_API_KEY="not-needed"              # some servers require a non-empty value
-```
+Any OpenAI-compatible endpoint works. Set `api_key_file` content to a dummy value if the server requires it.
 
 ```yaml
 providers:
