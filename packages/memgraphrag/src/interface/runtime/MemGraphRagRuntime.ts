@@ -23,6 +23,7 @@ import {
   DeleteDocumentService,
   ThesaurusExpansionPolicy,
 } from '../../application/index.js';
+import { FullDocumentIndexingPipeline } from '../../application/indexing/FullDocumentIndexingPipeline.js';
 import type {
   FilteredMemoryCandidates,
   IContextBuilder,
@@ -364,10 +365,21 @@ class RuntimeImpl implements MemGraphRagRuntime {
       : new RegexExtractor();
 
     const deleteDocumentService = new DeleteDocumentService(this.db, graphStore, vectorIndex);
+    const pipeline = this.config.localOnly
+      ? new MinimalDocumentIndexingPipeline(this.db)
+      : new FullDocumentIndexingPipeline({
+        db: this.db,
+        graphStore,
+        vectorIndex,
+        memoryStore,
+        llmProvider,
+        embeddingProvider,
+        nlpExtractor,
+      });
     const jobRunner = new AsyncJobRunner(
       this.db,
       memoryStore,
-      new MinimalDocumentIndexingPipeline(this.db),
+      pipeline,
     );
     const indexingService = new DefaultIndexingService(this.db, jobRunner, deleteDocumentService);
     const corpusManager = new CorpusManagerFacade(this.db, graphStore, vectorIndex);

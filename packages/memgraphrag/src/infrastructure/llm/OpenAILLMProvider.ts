@@ -72,7 +72,7 @@ export class OpenAILLMProvider implements ILLMProvider {
         { role: 'user' as const, content: request.prompt },
       ],
       temperature: request.temperature,
-      max_tokens: request.maxTokens,
+      max_completion_tokens: request.maxTokens,
       response_format:
         request.responseFormat === 'json'
           ? { type: 'json_object' as const }
@@ -173,7 +173,10 @@ export class OpenAILLMProvider implements ILLMProvider {
 
   private sanitizeError(error: unknown): string {
     const raw = error instanceof Error ? error.message : String(error);
-    return raw.split(this.apiKey).join('***');
+    if (this.apiKey.length > 8) {
+      return raw.replaceAll(this.apiKey, '***API_KEY***');
+    }
+    return raw;
   }
 
   private async sleep(delayMs: number): Promise<void> {

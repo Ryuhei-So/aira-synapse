@@ -86,6 +86,8 @@ export {
   type ProcessDocumentResult,
   type DocumentIndexingPipeline,
 } from './indexing/AsyncJobRunner.js';
+export { LLMExtractionAgent } from './indexing/LLMExtractionAgent.js';
+export { FullDocumentIndexingPipeline, type FullPipelineOptions } from './indexing/FullDocumentIndexingPipeline.js';
 export {
   DefaultIndexingService,
   type IndexingService,

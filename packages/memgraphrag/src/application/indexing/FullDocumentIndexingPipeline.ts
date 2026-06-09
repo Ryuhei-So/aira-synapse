@@ -1,0 +1,129 @@
+/**
+ * Full Document Indexing Pipeline — Algorithm 1 (Stage I–IV).
+ * Replaces MinimalDocumentIndexingPipeline for real indexing.
+ */
+import type Database from 'better-sqlite3';
+import type { DocumentIndexingPipeline, ProcessDocumentResult } from './AsyncJobRunner.js';
+import type { IndexDocumentInput } from './StageIExtractor.js';
+import { StageIExtractor } from './StageIExtractor.js';
+import { StageIICanonicalizer } from './StageIICanonicalizer.js';
+import { projectGraph, upsertVectors } from './StageIVGraphProjector.js';
+import { SymbolicCanonicalizer } from './SymbolicCanonicalizer.js';
+import type { ILLMProvider, IEmbeddingProvider, INLPExtractor } from '../../domain/provider/index.js';
+import type { IGraphStore, IVectorIndex, IMemoryStore } from '../../domain/storage/index.js';
+import type { Fact } from '../../domain/memory/fact.js';
+import { LLMExtractionAgent } from './LLMExtractionAgent.js';
+
+export interface FullPipelineOptions {
+  readonly db: Database.Database;
+  readonly graphStore: IGraphStore;
+  readonly vectorIndex: IVectorIndex;
+  readonly memoryStore: IMemoryStore;
+  readonly llmProvider: ILLMProvider;
+  readonly embeddingProvider: IEmbeddingProvider;
+  readonly nlpExtractor: INLPExtractor;
+}
+
+export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
+  private readonly stageI: StageIExtractor;
+  private readonly canonicalizer: SymbolicCanonicalizer;
+  private readonly options: FullPipelineOptions;
+
+  public constructor(options: FullPipelineOptions) {
+    this.options = options;
+    const extractionAgent = new LLMExtractionAgent(options.llmProvider);
+    this.stageI = new StageIExtractor(options.nlpExtractor, extractionAgent);
+    this.canonicalizer = new SymbolicCanonicalizer();
+  }
+
+  public async processDocument(
+    corpusId: string,
+    document: IndexDocumentInput,
+  ): Promise<ProcessDocumentResult> {
+    const now = new Date().toISOString();
+
+    // Insert document metadata
+    this.options.db.prepare(
+      `INSERT OR REPLACE INTO documents (
+        document_id, corpus_id, title, source_url, doi, source_db, source_type, language, converted_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      document.documentId, corpusId, document.title, document.sourceUrl,
+      document.doi ?? null, document.sourceDb ?? null, document.sourceType ?? null,
+      document.language ?? 'unknown', now, now, now,
+    );
+
+    // Stage I: Extract chunks, entities, schemas, facts
+    const records = await this.stageI.extractChunks(corpusId, document);
+
+    if (records.length === 0) {
+      return { processedDocumentId: document.documentId, addedNodes: 0, addedEdges: 0, conflicts: 0 };
+    }
+
+    // Stage II: Canonicalize schemas and merge into memory
+    const stageII = new StageIICanonicalizer(corpusId, this.options.memoryStore);
+    const schemas = await stageII.canonicalizeSchemas(records, this.canonicalizer);
+    await stageII.incrementSchemaFrequency(schemas);
+    const stableIds = await stageII.promoteStableSchemas();
+    await stageII.cascadeActivateFacts(stableIds);
+
+    // Build facts from candidates (use normalized types for matching)
+    const allFacts: Fact[] = [];
+    for (const record of records) {
+      for (const candidate of record.candidateFacts) {
+        const normHead = candidate.headType.toLowerCase().trim();
+        const normRel = candidate.relation.toLowerCase().trim();
+        const normTail = candidate.tailType.toLowerCase().trim();
+        const matchedSchema = schemas.find(
+          (s) => s.headType === normHead && s.relation === normRel && s.tailType === normTail,
+        );
+        if (!matchedSchema) continue;
+
+        const factId = `fact:${document.documentId}:${candidate.headEntity}:${candidate.relation}:${candidate.tailEntity}`.replace(/\s+/g, '_');
+        allFacts.push({
+          factId,
+          corpusId,
+          schemaId: matchedSchema.schemaId,
+          headEntity: candidate.headEntity,
+          headType: candidate.headType,
+          relation: candidate.relation,
+          tailEntity: candidate.tailEntity,
+          tailType: candidate.tailType,
+          state: matchedSchema.state === 'stable' ? 'active' : 'inactive',
+          passageIds: [record.sourcePassage.passageId],
+          sourceDocumentIds: [document.documentId],
+          confidence: candidate.confidence,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+    }
+
+    // Save facts and passages to memory
+    const snapshot = await this.options.memoryStore.load(corpusId);
+    const passages = records.map((r) => r.sourcePassage);
+    await this.options.memoryStore.save({
+      ...snapshot,
+      facts: [...snapshot.facts, ...allFacts],
+      passages: [...snapshot.passages, ...passages],
+    });
+
+    // Stage IV: Project graph and upsert vectors
+    const { nodes, edges } = await projectGraph(
+      this.options.graphStore, allFacts, schemas, passages,
+    );
+
+    await upsertVectors(this.options.vectorIndex, this.options.embeddingProvider, nodes);
+
+    console.log(
+      `  [${document.title}] chunks=${records.length} schemas=${schemas.length} facts=${allFacts.length} nodes=${nodes.length} edges=${edges.length}`,
+    );
+
+    return {
+      processedDocumentId: document.documentId,
+      addedNodes: nodes.length,
+      addedEdges: edges.length,
+      conflicts: 0,
+    };
+  }
+}
