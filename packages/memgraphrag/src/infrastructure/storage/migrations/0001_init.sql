@@ -125,7 +125,7 @@ CREATE TABLE IF NOT EXISTS fact_documents (
 CREATE TABLE IF NOT EXISTS graph_nodes (
   node_id   TEXT NOT NULL,
   corpus_id TEXT NOT NULL REFERENCES corpora(corpus_id) ON DELETE CASCADE,
-  layer     TEXT NOT NULL CHECK (layer IN ('ontology', 'fact', 'passage')),
+  layer     TEXT NOT NULL CHECK (layer IN ('ontology', 'fact', 'passage', 'entity')),
   ref_id    TEXT NOT NULL,
   label     TEXT NOT NULL DEFAULT '',
   PRIMARY KEY (corpus_id, node_id)

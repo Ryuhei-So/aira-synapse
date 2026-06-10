@@ -16,7 +16,7 @@
     "config"
   ],
   "scripts": {
-    "build": "tsc -b tsconfig.build.json",
+    "build": "tsc -b tsconfig.build.json && cp -r src/infrastructure/storage/migrations dist/infrastructure/storage/",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

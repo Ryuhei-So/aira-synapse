@@ -19,17 +19,17 @@ describe('TASK-MG-054: SchemaVersionManager', () => {
     runMigrations(db);
     const manager = new SchemaVersionManager(db);
 
-    expect(manager.getCurrentVersion()).toBe(2);
+    expect(manager.getCurrentVersion()).toBe(3);
   });
 
   it('rolls back tracked versions and can migrate forward again', () => {
     const manager = new SchemaVersionManager(db);
     manager.migrateForward();
-    expect(manager.getCurrentVersion()).toBe(2);
+    expect(manager.getCurrentVersion()).toBe(3);
 
     expect(manager.rollback(1)).toBe(1);
     expect(manager.getCurrentVersion()).toBe(1);
-    expect(manager.migrateForward()).toBe(2);
+    expect(manager.migrateForward()).toBe(3);
   });
 
   it('persists tracking rows for applied versions', () => {
@@ -40,6 +40,7 @@ describe('TASK-MG-054: SchemaVersionManager', () => {
     expect(rows).toEqual([
       { version: 1, state: 'applied' },
       { version: 2, state: 'applied' },
+      { version: 3, state: 'applied' },
     ]);
   });
 });

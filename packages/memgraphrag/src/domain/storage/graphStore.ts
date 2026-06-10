@@ -12,7 +12,7 @@ import type { MemorySnapshot } from '../memory/globalMemory.js';
 // --- Graph Store ---
 
 export interface GraphNode<
-  TRef extends Schema | Fact | Passage = Schema | Fact | Passage,
+  TRef extends Schema | Fact | Passage | Record<string, unknown> = Schema | Fact | Passage | Record<string, unknown>,
 > {
   readonly nodeId: string;
   readonly corpusId: string;
@@ -31,6 +31,8 @@ export interface GraphEdge {
     | 'fact_evidence'
     | 'type_based_bridge'
     | 'similarity_bridge'
+    | 'entity_cooccurrence'
+    | 'entity_mention'
     | 'is_a'
     | 'part_of';
   readonly weight: number;

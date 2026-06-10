@@ -136,6 +136,8 @@ export class SimplePPR implements IPPR {
         entityNodes.push({ nodeId, score, layer: 'fact' });
       } else if (nodeId.startsWith('schema:')) {
         entityNodes.push({ nodeId, score, layer: 'ontology' });
+      } else if (nodeId.startsWith('entity:')) {
+        entityNodes.push({ nodeId, score, layer: 'entity' });
       }
     }
 

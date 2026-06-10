@@ -27,9 +27,9 @@ export function isFactState(value: unknown): value is FactState {
 }
 
 // --- Memory layer ---
-export type MemoryLayer = 'ontology' | 'fact' | 'passage';
+export type MemoryLayer = 'ontology' | 'fact' | 'passage' | 'entity';
 
-const MEMORY_LAYERS = new Set<string>(['ontology', 'fact', 'passage']);
+const MEMORY_LAYERS = new Set<string>(['ontology', 'fact', 'passage', 'entity']);
 
 export function isMemoryLayer(value: unknown): value is MemoryLayer {
   return typeof value === 'string' && MEMORY_LAYERS.has(value);

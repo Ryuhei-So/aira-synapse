@@ -9,6 +9,9 @@ import { StageIExtractor } from './StageIExtractor.js';
 import { StageIICanonicalizer } from './StageIICanonicalizer.js';
 import { projectGraph, upsertVectors } from './StageIVGraphProjector.js';
 import { SymbolicCanonicalizer } from './SymbolicCanonicalizer.js';
+import { SymbolicConflictDetector } from './SymbolicConflictDetector.js';
+import { LLMConflictResolver } from './LLMConflictResolver.js';
+import { detectConflicts, resolveConflicts, recordConflictAudit } from './StageIIIConflictPipeline.js';
 import type { ILLMProvider, IEmbeddingProvider, INLPExtractor } from '../../domain/provider/index.js';
 import type { IGraphStore, IVectorIndex, IMemoryStore } from '../../domain/storage/index.js';
 import type { Fact } from '../../domain/memory/fact.js';
@@ -22,6 +25,7 @@ export interface FullPipelineOptions {
   readonly llmProvider: ILLMProvider;
   readonly embeddingProvider: IEmbeddingProvider;
   readonly nlpExtractor: INLPExtractor;
+  readonly enableConflictResolution?: boolean;
 }
 
 export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
@@ -99,6 +103,39 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
       }
     }
 
+    // Stage III: Conflict detection and resolution
+    let conflictCount = 0;
+    if (this.options.enableConflictResolution !== false) {
+      const passages = records.map((r) => r.sourcePassage);
+      const detector = new SymbolicConflictDetector({
+        loadFacts: async (cid) => {
+          const snap = await this.options.memoryStore.load(cid);
+          return snap.facts;
+        },
+      });
+      const conflictSets = await detectConflicts(detector, allFacts);
+      conflictCount = conflictSets.length;
+
+      if (conflictSets.length > 0) {
+        const resolver = new LLMConflictResolver(this.options.llmProvider);
+        const resolutions = await resolveConflicts(resolver, conflictSets, passages);
+
+        // Apply resolutions: inactivate discarded facts
+        const inactivatedIds = new Set(
+          resolutions.flatMap((r) => r.resolution.inactivatedFactIds),
+        );
+        for (let i = 0; i < allFacts.length; i++) {
+          if (inactivatedIds.has(allFacts[i]!.factId)) {
+            allFacts[i] = { ...allFacts[i]!, state: 'inactive' };
+          }
+        }
+
+        // Record audit trail
+        await recordConflictAudit(this.options.db, resolutions);
+        console.log(`  [${document.title}] Stage III: ${conflictSets.length} conflicts detected, ${inactivatedIds.size} facts inactivated`);
+      }
+    }
+
     // Save facts and passages to memory
     const snapshot = await this.options.memoryStore.load(corpusId);
     const passages = records.map((r) => r.sourcePassage);
@@ -116,14 +153,14 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
     await upsertVectors(this.options.vectorIndex, this.options.embeddingProvider, nodes);
 
     console.log(
-      `  [${document.title}] chunks=${records.length} schemas=${schemas.length} facts=${allFacts.length} nodes=${nodes.length} edges=${edges.length}`,
+      `  [${document.title}] chunks=${records.length} schemas=${schemas.length} facts=${allFacts.length} nodes=${nodes.length} edges=${edges.length} conflicts=${conflictCount}`,
     );
 
     return {
       processedDocumentId: document.documentId,
       addedNodes: nodes.length,
       addedEdges: edges.length,
-      conflicts: 0,
+      conflicts: conflictCount,
     };
   }
 }

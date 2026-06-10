@@ -96,8 +96,8 @@ describe('TASK-MG-033: StageIVGraphProjector', () => {
     const nodes = await graphStore.getNodes('corpus-1');
     const edges = await graphStore.getEdges('corpus-1');
 
-    expect(result.nodes).toHaveLength(3);
-    expect(nodes).toHaveLength(3);
+    expect(result.nodes).toHaveLength(5);
+    expect(nodes).toHaveLength(5);
     expect(edges.map((edge) => edge.relation)).toEqual(expect.arrayContaining(['schema_instance', 'fact_evidence']));
   });
 

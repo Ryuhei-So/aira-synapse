@@ -40,6 +40,10 @@ function passageNodeId(passageId: string): string {
   return `passage:${passageId}`;
 }
 
+function entityNodeId(entityKey: string): string {
+  return `entity:${entityKey}`;
+}
+
 function namespaceForNode(layer: GraphNode['layer']): VectorRecord<Readonly<Record<string, unknown>>>['namespace'] {
   switch (layer) {
     case 'ontology':
@@ -48,6 +52,8 @@ function namespaceForNode(layer: GraphNode['layer']): VectorRecord<Readonly<Reco
       return 'fact';
     case 'passage':
       return 'passage';
+    case 'entity':
+      return 'entity';
   }
 }
 
@@ -81,6 +87,38 @@ export async function projectGraph(
     })),
   ];
 
+  // Extract unique entities from facts and create entity nodes
+  const entityMap = new Map<string, { name: string; corpusId: string; factCount: number; passageIds: Set<string> }>();
+  for (const fact of facts) {
+    for (const entityName of [fact.headEntity, fact.tailEntity]) {
+      const key = entityName.toLowerCase().replace(/\s+/g, '_');
+      const existing = entityMap.get(key);
+      if (existing) {
+        existing.factCount += 1;
+        for (const pid of fact.passageIds) existing.passageIds.add(pid);
+      } else {
+        entityMap.set(key, {
+          name: entityName,
+          corpusId: fact.corpusId,
+          factCount: 1,
+          passageIds: new Set(fact.passageIds),
+        });
+      }
+    }
+  }
+
+  const entityNodes: GraphNode[] = [];
+  for (const [key, info] of entityMap) {
+    entityNodes.push({
+      nodeId: entityNodeId(key),
+      corpusId: info.corpusId,
+      layer: 'entity' as const,
+      ref: { entityName: info.name, factCount: info.factCount },
+      label: info.name,
+    });
+  }
+  nodes.push(...entityNodes);
+
   const edges: GraphEdge[] = [
     ...facts.map((fact) => ({
       edgeId: `schema-instance:${fact.schemaId}:${fact.factId}`,
@@ -99,6 +137,36 @@ export async function projectGraph(
       weight: 1,
     }))),
   ];
+
+  // Entity co-occurrence edges: connect entities that appear in the same fact
+  for (const fact of facts) {
+    const headKey = fact.headEntity.toLowerCase().replace(/\s+/g, '_');
+    const tailKey = fact.tailEntity.toLowerCase().replace(/\s+/g, '_');
+    if (headKey !== tailKey) {
+      edges.push({
+        edgeId: `entity-cooccur:${headKey}:${tailKey}:${fact.factId}`,
+        corpusId: fact.corpusId,
+        sourceNodeId: entityNodeId(headKey),
+        targetNodeId: entityNodeId(tailKey),
+        relation: 'entity_cooccurrence',
+        weight: 1,
+      });
+    }
+  }
+
+  // Entity-passage mention edges: connect entities to passages where they appear
+  for (const [key, info] of entityMap) {
+    for (const passageId of info.passageIds) {
+      edges.push({
+        edgeId: `entity-mention:${key}:${passageId}`,
+        corpusId: info.corpusId,
+        sourceNodeId: entityNodeId(key),
+        targetNodeId: passageNodeId(passageId),
+        relation: 'entity_mention',
+        weight: 1,
+      });
+    }
+  }
 
   await graphStore.upsertNodes(nodes);
   await graphStore.upsertEdges(edges);
@@ -199,9 +267,9 @@ export async function upsertVectors(
     values: embeddings.vectors[index] ?? [],
     metadata: {
       nodeId: item.nodeId,
-      documentId: 'metadata' in item.ref && typeof item.ref.metadata === 'object'
-        ? item.ref.metadata.documentId
-        : Array.isArray((item.ref as Schema | Fact).sourceDocumentIds)
+      documentId: 'metadata' in item.ref && typeof item.ref.metadata === 'object' && item.ref.metadata !== null
+        ? (item.ref.metadata as Record<string, unknown>).documentId
+        : 'sourceDocumentIds' in item.ref && Array.isArray((item.ref as Schema | Fact).sourceDocumentIds)
           ? (item.ref as Schema | Fact).sourceDocumentIds[0]
           : undefined,
       layer: item.layer,
