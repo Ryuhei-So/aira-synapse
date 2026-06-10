@@ -66,27 +66,41 @@ export class OpenAIEmbeddingProvider implements IEmbeddingProvider {
     }
 
     if (missingTexts.length > 0) {
-      const response = await fetch(`${this.baseUrl}/embeddings`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.apiKey}`,
-        },
-        body: JSON.stringify({ model, input: missingTexts }),
-      });
+      const maxRetries = 3;
+      let lastError: Error | undefined;
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+          const response = await fetch(`${this.baseUrl}/embeddings`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${this.apiKey}`,
+            },
+            body: JSON.stringify({ model, input: missingTexts }),
+          });
 
-      if (!response.ok) {
-        throw new Error(`OpenAI embeddings request failed with status ${response.status}`);
-      }
+          if (!response.ok) {
+            throw new Error(`OpenAI embeddings request failed with status ${response.status}`);
+          }
 
-      const body = (await response.json()) as EmbeddingApiResponse;
-      const rows = [...(body.data ?? [])].sort((a, b) => a.index - b.index);
-      for (let j = 0; j < rows.length; j++) {
-        const embedding = rows[j]!.embedding;
-        const originalIdx = missingIndices[j]!;
-        resultVectors[originalIdx] = embedding;
-        this.putCache(this.cacheKey(model, missingTexts[j]!), embedding);
+          const body = (await response.json()) as EmbeddingApiResponse;
+          const rows = [...(body.data ?? [])].sort((a, b) => a.index - b.index);
+          for (let j = 0; j < rows.length; j++) {
+            const embedding = rows[j]!.embedding;
+            const originalIdx = missingIndices[j]!;
+            resultVectors[originalIdx] = embedding;
+            this.putCache(this.cacheKey(model, missingTexts[j]!), embedding);
+          }
+          lastError = undefined;
+          break;
+        } catch (err) {
+          lastError = err instanceof Error ? err : new Error(String(err));
+          if (attempt < maxRetries - 1) {
+            await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+          }
+        }
       }
+      if (lastError) throw lastError;
     }
 
     return {
