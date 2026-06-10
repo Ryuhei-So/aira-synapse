@@ -78,13 +78,9 @@ export class SimpleNodeInitializer implements INodeInitializer {
       scores[`schema:${c.item.schemaId}`] = c.similarity;
     }
 
-    // 5. Entity nodes: derive from seed facts' head/tail entities
-    for (const c of candidates.facts) {
-      const headKey = `entity:${c.item.headEntity.toLowerCase().replace(/\s+/g, '_')}`;
-      const tailKey = `entity:${c.item.tailEntity.toLowerCase().replace(/\s+/g, '_')}`;
-      scores[headKey] = Math.max(scores[headKey] ?? 0, c.similarity * 0.8);
-      scores[tailKey] = Math.max(scores[tailKey] ?? 0, c.similarity * 0.8);
-    }
+    // 5. Entity nodes excluded from PPR seeds — entity co-occurrence subgraph
+    //    is too dense and traps score. Entity mention edges still propagate
+    //    score from entity→passage during PPR walk.
 
     return {
       scores,

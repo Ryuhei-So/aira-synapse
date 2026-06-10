@@ -23,7 +23,7 @@ interface EmbeddingApiResponse {
   }>;
 }
 
-const CACHE_LIMIT = 128;
+const CACHE_LIMIT = 8192;
 const LOCAL_EMBEDDING_REQUIRED =
   'LOCAL_EMBEDDING_REQUIRED: local_only mode requires a local embedding provider';
 
@@ -49,22 +49,30 @@ export class OpenAIEmbeddingProvider implements IEmbeddingProvider {
     }
 
     const model = request.model ?? this.model;
-    const missing: string[] = [];
 
-    for (const text of request.texts) {
-      if (!this.cache.has(this.cacheKey(model, text))) {
-        missing.push(text);
+    // Partition texts into cached and uncached
+    const resultVectors: (readonly number[])[] = new Array(request.texts.length);
+    const missingIndices: number[] = [];
+    const missingTexts: string[] = [];
+
+    for (let i = 0; i < request.texts.length; i++) {
+      const cached = this.cache.get(this.cacheKey(model, request.texts[i]!));
+      if (cached) {
+        resultVectors[i] = cached;
+      } else {
+        missingIndices.push(i);
+        missingTexts.push(request.texts[i]!);
       }
     }
 
-    if (missing.length > 0) {
+    if (missingTexts.length > 0) {
       const response = await fetch(`${this.baseUrl}/embeddings`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${this.apiKey}`,
         },
-        body: JSON.stringify({ model, input: missing }),
+        body: JSON.stringify({ model, input: missingTexts }),
       });
 
       if (!response.ok) {
@@ -73,15 +81,18 @@ export class OpenAIEmbeddingProvider implements IEmbeddingProvider {
 
       const body = (await response.json()) as EmbeddingApiResponse;
       const rows = [...(body.data ?? [])].sort((a, b) => a.index - b.index);
-      rows.forEach((row, index) => {
-        this.putCache(this.cacheKey(model, missing[index] ?? ''), row.embedding);
-      });
+      for (let j = 0; j < rows.length; j++) {
+        const embedding = rows[j]!.embedding;
+        const originalIdx = missingIndices[j]!;
+        resultVectors[originalIdx] = embedding;
+        this.putCache(this.cacheKey(model, missingTexts[j]!), embedding);
+      }
     }
 
     return {
       model,
-      vectors: request.texts.map((text) => this.cache.get(this.cacheKey(model, text)) ?? []),
-      cached: missing.length === 0,
+      vectors: resultVectors.map(v => v ?? []),
+      cached: missingTexts.length === 0,
     };
   }
 

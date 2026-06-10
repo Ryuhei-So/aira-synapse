@@ -11,6 +11,12 @@ export class SQLiteGraphProjection implements IGraphProjection {
   public async *getTransitions(corpusId: string): AsyncIterable<TransitionEntry> {
     const edges = await this.graphStore.getEdges(corpusId);
     for (const edge of edges) {
+      // Exclude all edges touching entity nodes from PPR.
+      // Entity subgraph (39K nodes, 96K edges) is too dense and traps
+      // PageRank mass. Keep only fact↔passage↔schema topology.
+      if (edge.sourceNodeId.startsWith('entity:') || edge.targetNodeId.startsWith('entity:')) {
+        continue;
+      }
       yield {
         sourceNodeId: edge.sourceNodeId,
         targetNodeId: edge.targetNodeId,
