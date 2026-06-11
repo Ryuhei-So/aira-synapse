@@ -133,8 +133,8 @@ export class DefaultQueryService implements QueryService {
 
     try {
       const llm = await this.dependencies.llm.generate({
-        prompt: `Answer the following question using ONLY the provided context. Give a short, direct answer with the full name or complete term (do not abbreviate names). If the context lacks sufficient information, give your best answer based on what is available.\n\nQuestion: ${expandedRequest.text}\n\nContext:\n${context.promptContext}\n\nAnswer:`,
-        temperature: 0.1,
+        prompt: `You are answering a multi-hop question. The answer requires connecting information from multiple passages or facts.\n\nRules:\n- Use ONLY the provided context\n- Give a short, direct answer (a name, term, or phrase)\n- Use the full official name (do not abbreviate)\n- Follow reasoning chains: if A relates to B, and B relates to C, then answer about A→C\n\nQuestion: ${expandedRequest.text}\n\nContext:\n${context.promptContext}\n\nAnswer:`,
+        temperature: 0.0,
       });
       responseText = llm.text;
       llmInputTokens = llm.usage.inputTokens;
