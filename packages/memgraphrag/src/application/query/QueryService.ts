@@ -133,10 +133,36 @@ export class DefaultQueryService implements QueryService {
 
     try {
       const llm = await this.dependencies.llm.generate({
-        prompt: `You are answering a multi-hop question. The answer requires connecting information from multiple passages or facts.\n\nRules:\n- Use ONLY the provided context\n- Give a short, direct answer (a name, term, or phrase)\n- Use the full official name (do not abbreviate)\n- Follow reasoning chains: if A relates to B, and B relates to C, then answer about A→C\n\nQuestion: ${expandedRequest.text}\n\nContext:\n${context.promptContext}\n\nAnswer:`,
+        prompt: `You are answering a multi-hop question that requires connecting information across multiple passages.
+
+Step-by-step:
+1. Identify the first entity or fact mentioned in the question
+2. Find information about that entity in the context
+3. Follow the chain: use what you learned to find the next piece of information
+4. Continue until you reach the final answer
+
+Rules:
+- Use ONLY the provided context
+- Use the full official name (do not abbreviate)
+- Your last line MUST be: FINAL: <your answer>
+- The answer after FINAL: should be the shortest correct span from the context (a name, term, number, or phrase)
+
+Question: ${expandedRequest.text}
+
+Context:
+${context.promptContext}
+
+Reasoning and answer:`,
         temperature: 0.0,
       });
-      responseText = llm.text;
+      // Extract answer from FINAL: line, fall back to last line
+      const lines = llm.text.trim().split('\n').filter(l => l.trim());
+      const finalLine = lines.find(l => /^FINAL:/i.test(l.trim()));
+      responseText = finalLine
+        ? finalLine.replace(/^FINAL:\s*/i, '').trim()
+        : lines[lines.length - 1]?.trim() ?? llm.text.trim();
+      // Strip surrounding quotes if present
+      responseText = responseText.replace(/^["']|["']$/g, '').trim();
       llmInputTokens = llm.usage.inputTokens;
       llmOutputTokens = llm.usage.outputTokens;
     } catch (error) {

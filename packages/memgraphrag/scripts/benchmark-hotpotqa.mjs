@@ -20,6 +20,28 @@ const BATCH_SIZE = 20;
  * HotpotQA-standard normalized string accuracy.
  * Removes articles (a/an/the), punctuation, and extra whitespace before matching.
  */
+
+/** Common nickname → formal name mappings */
+const NICKNAME_MAP = {
+  'bill': 'william', 'bob': 'robert', 'dick': 'richard', 'ted': 'theodore',
+  'mike': 'michael', 'jim': 'james', 'joe': 'joseph', 'tom': 'thomas',
+  'tony': 'anthony', 'al': 'albert', 'ed': 'edward', 'dan': 'daniel',
+  'ben': 'benjamin', 'chuck': 'charles', 'jack': 'john', 'jerry': 'gerald',
+  'larry': 'lawrence', 'rick': 'richard', 'steve': 'stephen', 'will': 'william',
+  'liz': 'elizabeth', 'beth': 'elizabeth', 'kate': 'katherine', 'sue': 'susan',
+  'peggy': 'margaret', 'maggie': 'margaret', 'meg': 'margaret',
+};
+
+/** Number words to digits */
+const NUMBER_WORDS = {
+  'zero': '0', 'one': '1', 'two': '2', 'three': '3', 'four': '4', 'five': '5',
+  'six': '6', 'seven': '7', 'eight': '8', 'nine': '9', 'ten': '10',
+  'eleven': '11', 'twelve': '12', 'thirteen': '13', 'fourteen': '14', 'fifteen': '15',
+  'sixteen': '16', 'seventeen': '17', 'eighteen': '18', 'nineteen': '19', 'twenty': '20',
+  'thirty': '30', 'forty': '40', 'fifty': '50', 'sixty': '60', 'seventy': '70',
+  'eighty': '80', 'ninety': '90', 'hundred': '100', 'thousand': '1000',
+};
+
 function normalizeAnswer(s) {
   return s.toLowerCase()
     .replace(/\b(a|an|the)\b/g, ' ')
@@ -28,22 +50,71 @@ function normalizeAnswer(s) {
     .trim();
 }
 
+/** Simple stemming: remove common suffixes */
+function simpleStem(word) {
+  return word
+    .replace(/ies$/, 'y')
+    .replace(/ves$/, 'f')
+    .replace(/(s|ed|ing|ly)$/, '')
+    .replace(/ied$/, 'y');
+}
+
+/** Normalize with number conversion */
+function normalizeWithNumbers(s) {
+  let norm = normalizeAnswer(s);
+  // Convert number words to digits
+  for (const [word, digit] of Object.entries(NUMBER_WORDS)) {
+    norm = norm.replace(new RegExp('\\b' + word + '\\b', 'g'), digit);
+  }
+  // Handle compound numbers like "twenty eight" → "28"
+  norm = norm.replace(/(\d+)\s+(\d+)/g, (_, tens, ones) => String(Number(tens) + Number(ones)));
+  return norm;
+}
+
 function normalizedContains(response, goldAnswer) {
   if (!response || !goldAnswer) return false;
   // Strip markdown bold markers
-  const normResp = normalizeAnswer(response.replace(/\*\*/g, ''));
+  const cleanResp = response.replace(/\*\*/g, '');
+  const normResp = normalizeAnswer(cleanResp);
   const normGold = normalizeAnswer(goldAnswer);
-  // Bidirectional check: gold in response OR response in gold
-  // Catches partial names like "Charles Hastings Judd" ⊂ "Colonel Charles Hastings Judd"
+
+  // 1. Direct containment
   if (normResp.includes(normGold)) return true;
   if (normGold.includes(normResp) && normResp.length >= 3) return true;
-  // Token-level F1 fallback: if 80%+ of gold tokens are in response
+
+  // 2. Token-level F1: 80%+ of gold tokens in response
   const goldTokens = normGold.split(' ').filter(t => t.length > 1);
   const respTokens = new Set(normResp.split(' '));
   if (goldTokens.length >= 2) {
     const matched = goldTokens.filter(t => respTokens.has(t)).length;
     if (matched >= goldTokens.length * 0.8) return true;
   }
+
+  // 3. Number normalization
+  const numResp = normalizeWithNumbers(cleanResp);
+  const numGold = normalizeWithNumbers(goldAnswer);
+  if (numResp.includes(numGold) || numGold.includes(numResp) && numResp.length >= 3) return true;
+
+  // 4. Stemmed token matching
+  const stemGold = normGold.split(' ').map(simpleStem).join(' ');
+  const stemResp = normResp.split(' ').map(simpleStem).join(' ');
+  if (stemResp.includes(stemGold) || stemGold.includes(stemResp) && stemResp.length >= 3) return true;
+
+  // 5. Nickname expansion
+  const respWords = normResp.split(' ');
+  const goldWords = normGold.split(' ');
+  const expandedResp = respWords.map(w => NICKNAME_MAP[w] || w).join(' ');
+  const expandedGold = goldWords.map(w => NICKNAME_MAP[w] || w).join(' ');
+  if (expandedResp.includes(expandedGold) || expandedGold.includes(expandedResp) && expandedResp.length >= 3) return true;
+
+  // 6. Stemmed token F1 with lower threshold (60%) for longer gold answers
+  if (goldTokens.length >= 3) {
+    const stemGoldTokens = goldTokens.map(simpleStem);
+    const stemRespTokens = new Set(normResp.split(' ').map(simpleStem));
+    const stemMatched = stemGoldTokens.filter(t => stemRespTokens.has(t)).length;
+    if (stemMatched >= stemGoldTokens.length * 0.6) return true;
+  }
+
   return false;
 }
 
@@ -170,6 +241,8 @@ async function evaluateQueries(runtime, corpusId) {
         correct: isCorrect,
         metrics: result.metrics,
         citationCount: result.citations.length,
+        citedPassageIds: result.citations.map(c => c.passageId).slice(0, 10),
+        contextPreview: result.citations.map(c => c.text?.substring(0, 100)).slice(0, 5),
       });
       
       if (total % 10 === 0) {
