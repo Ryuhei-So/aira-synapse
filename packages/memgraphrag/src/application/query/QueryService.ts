@@ -16,6 +16,7 @@ import type { Fact } from '../../domain/memory/fact.js';
 import type { Passage } from '../../domain/memory/passage.js';
 import { ThesaurusExpansionPolicy } from './ThesaurusExpansionPolicy.js';
 import { TemplateResponseGenerator } from './TemplateResponseGenerator.js';
+import { isComparisonQuery } from './comparisonDetector.js';
 
 export interface CitationDto {
   readonly passageId: string;
@@ -132,27 +133,54 @@ export class DefaultQueryService implements QueryService {
     let templateFallbackTriggered = false;
 
     try {
-      const llm = await this.dependencies.llm.generate({
-        prompt: `You are answering a multi-hop question that requires connecting information across multiple passages.
+      const isComparison = isComparisonQuery(expandedRequest.text);
+      const prompt = isComparison
+        ? `You are answering a comparison or yes/no question about two or more entities.
 
 Step-by-step:
-1. Identify the first entity or fact mentioned in the question
-2. Find information about that entity in the context
-3. Follow the chain: use what you learned to find the next piece of information
-4. Continue until you reach the final answer
+1. Identify the entities or subjects being compared
+2. Find the relevant attribute or fact for each entity in the context
+3. Compare the attributes directly (dates, numbers, categories, or factual properties)
+4. Determine the answer
 
 Rules:
 - Use ONLY the provided context
-- Use the full official name (do not abbreviate)
+- For "which" questions: answer with the entity name only
+- For "are both X and Y..." / yes-no questions: answer "yes" or "no"
+- For "what do X and Y both..." questions: answer with the shared attribute
 - Your last line MUST be: FINAL: <your answer>
-- The answer after FINAL: should be the shortest correct span from the context (a name, term, number, or phrase)
 
 Question: ${expandedRequest.text}
 
 Context:
 ${context.promptContext}
 
-Reasoning and answer:`,
+Reasoning and answer:`
+        : `You are answering a multi-hop question that requires connecting information across multiple passages.
+
+Step-by-step:
+1. Identify the first entity or fact mentioned in the question
+2. Find information about that entity in the context
+3. Follow the chain: use what you learned to find the next piece of information
+4. Continue until you reach the final answer
+5. Before answering, re-read the question: confirm exactly WHAT is being asked (a person? a place? a title? an event?)
+
+Rules:
+- Use ONLY the provided context
+- Use the full official name (do not abbreviate)
+- Answer exactly what the question asks — not an intermediate entity in the chain
+- Your last line MUST be: FINAL: <your answer>
+- The answer after FINAL: should be the shortest correct span from the context
+
+Question: ${expandedRequest.text}
+
+Context:
+${context.promptContext}
+
+Reasoning and answer:`;
+
+      const llm = await this.dependencies.llm.generate({
+        prompt,
         temperature: 0.0,
       });
       // Extract answer from FINAL: line, fall back to last line

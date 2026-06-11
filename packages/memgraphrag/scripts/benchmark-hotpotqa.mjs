@@ -242,7 +242,7 @@ async function evaluateQueries(runtime, corpusId) {
         metrics: result.metrics,
         citationCount: result.citations.length,
         citedPassageIds: result.citations.map(c => c.passageId).slice(0, 10),
-        contextPreview: result.citations.map(c => c.text?.substring(0, 100)).slice(0, 5),
+        contextPreview: result.citations.map(c => c.snippet?.substring(0, 100)).slice(0, 5),
       });
       
       if (total % 10 === 0) {
