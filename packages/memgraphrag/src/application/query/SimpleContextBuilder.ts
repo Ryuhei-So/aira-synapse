@@ -62,7 +62,7 @@ export class SimpleContextBuilder implements IContextBuilder {
       // Bridge/general: passages first (raw text for factoid answers), then facts
       context += this.buildPassageSection(citedPassages, tokenLimit, tokenEstimate);
       tokenEstimate = Math.ceil(context.length / 4);
-      if (tokenEstimate < tokenLimit * 0.9) {
+      if (tokenEstimate < tokenLimit * 0.8) {
         context += this.buildFactSection(citedFacts, tokenLimit, tokenEstimate);
       }
     }

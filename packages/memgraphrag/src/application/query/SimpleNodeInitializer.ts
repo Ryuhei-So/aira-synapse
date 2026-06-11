@@ -79,8 +79,7 @@ export class SimpleNodeInitializer implements INodeInitializer {
     }
 
     // 5. Entity nodes excluded from PPR seeds — entity co-occurrence subgraph
-    //    is too dense and traps score. Entity mention edges still propagate
-    //    score from entity→passage during PPR walk.
+    //    is too dense and traps score.
 
     return {
       scores,
