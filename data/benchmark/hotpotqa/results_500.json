@@ -2,21 +2,22 @@
   "summary": {
     "benchmark": "HotpotQA",
     "sampleSize": 500,
-    "accuracy": 79.8,
-    "correct": 399,
+    "accuracy": 76.8,
+    "correct": 384,
     "total": 500,
     "timeSeconds": 6727,
     "byType": {
       "bridge": {
-        "correct": 318,
+        "correct": 304,
         "total": 400
       },
       "comparison": {
-        "correct": 81,
+        "correct": 80,
         "total": 100
       }
     },
-    "timestamp": "2026-06-12T01:19:55.307Z"
+    "timestamp": "2026-06-12T05:34:39.890Z",
+    "note": "v10 responses re-scored with corrected eval rules (Rule 9 surname fix, Rule 7 word boundary)"
   },
   "results": [
     {
@@ -1241,7 +1242,7 @@
       "goldAnswer": "Magdalen College",
       "type": "bridge",
       "response": "New College, Oxford",
-      "correct": true,
+      "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -5801,7 +5802,7 @@
       "goldAnswer": "278th episode",
       "type": "bridge",
       "response": "the 280th episode of the series overall",
-      "correct": true,
+      "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -6599,7 +6600,7 @@
       "goldAnswer": "lower chamber",
       "type": "bridge",
       "response": "the upper chamber of the Hawaii State Legislature",
-      "correct": true,
+      "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -6637,7 +6638,7 @@
       "goldAnswer": "rhythm guitar",
       "type": "bridge",
       "response": "Gibson acoustic guitar",
-      "correct": true,
+      "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -8613,7 +8614,7 @@
       "goldAnswer": "American-Canadian mystery-drama",
       "type": "bridge",
       "response": "mystery-drama television series",
-      "correct": true,
+      "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -10095,7 +10096,7 @@
       "goldAnswer": "the Atlantic Ocean",
       "type": "bridge",
       "response": "Pacific Ocean",
-      "correct": true,
+      "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -10893,7 +10894,7 @@
       "goldAnswer": "the daughter of Fridtjof Nansen.",
       "type": "bridge",
       "response": "Liv Nansen",
-      "correct": true,
+      "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -11121,7 +11122,7 @@
       "goldAnswer": "Brainerd Lakes Regional Airport",
       "type": "comparison",
       "response": "Salt Lake City International Airport",
-      "correct": true,
+      "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -11729,7 +11730,7 @@
       "goldAnswer": "HC Davos",
       "type": "bridge",
       "response": "Hockey Club Davos",
-      "correct": true,
+      "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -13819,7 +13820,7 @@
       "goldAnswer": "U2 360° Tour",
       "type": "bridge",
       "response": "Psycho Circus World Tour",
-      "correct": true,
+      "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -14503,7 +14504,7 @@
       "goldAnswer": "erotic thriller film",
       "type": "bridge",
       "response": "on film",
-      "correct": true,
+      "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -14655,7 +14656,7 @@
       "goldAnswer": "The Captain Matchbox Whoopee Band",
       "type": "bridge",
       "response": "The Bushwackers Band",
-      "correct": true,
+      "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -15415,7 +15416,7 @@
       "goldAnswer": "Elizabethan theatre",
       "type": "bridge",
       "response": "The Admiral's Men occupied the Rose Theatre in the 1590s. FINAL: Rose Theatre",
-      "correct": true,
+      "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -15491,7 +15492,7 @@
       "goldAnswer": "Robert Matthew Hurley",
       "type": "bridge",
       "response": "Bobby Hurley",
-      "correct": true,
+      "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -18835,7 +18836,7 @@
       "goldAnswer": "Gulfport, Biloxi",
       "type": "bridge",
       "response": "Biloxi, Mississippi",
-      "correct": true,
+      "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],

@@ -147,10 +147,10 @@ function normalizedContains(response, goldAnswer) {
     if (stemMatched >= stemGoldTokens.length * 0.6) return true;
   }
 
-  // 7. Country/region alias matching
+  // 7. Country/region alias matching — word boundary to avoid substring collisions
   for (const aliases of COUNTRY_ALIASES) {
-    const respInGroup = aliases.some(a => normResp.includes(a));
-    const goldInGroup = aliases.some(a => normGold.includes(a));
+    const respInGroup = aliases.some(a => new RegExp(`\\b${a}\\b`).test(normResp));
+    const goldInGroup = aliases.some(a => new RegExp(`\\b${a}\\b`).test(normGold));
     if (respInGroup && goldInGroup) return true;
   }
 
@@ -160,20 +160,30 @@ function normalizedContains(response, goldAnswer) {
         (normResp.includes(country) && normGold.includes(demonym))) return true;
   }
 
-  // 9. Surname matching: if gold is "FirstName LastName" and response contains LastName
-  //    (or vice versa), and LastName is 4+ chars, treat as match
+  // 9. Surname matching: person names only — require both last name AND first name prefix
+  //    Prevents false positives like "Atlantic Ocean" matching "Pacific Ocean"
   if (goldTokens.length >= 2 && goldTokens.length <= 4) {
     const lastName = goldTokens[goldTokens.length - 1];
-    if (lastName.length >= 4 && normResp.split(' ').includes(lastName)) return true;
+    const firstName = goldTokens[0];
+    if (lastName.length >= 4 && normResp.split(' ').includes(lastName)) {
+      const respWordList = normResp.split(' ');
+      const firstPrefix = firstName.substring(0, 3);
+      const nicknameExpanded = NICKNAME_MAP[firstName];
+      const nicknamePrefix = nicknameExpanded ? nicknameExpanded.substring(0, 3) : null;
+      if (respWordList.some(w => w.startsWith(firstPrefix) || (nicknamePrefix && w.startsWith(nicknamePrefix)))) return true;
+    }
   }
   const respTokensList = normResp.split(' ').filter(t => t.length > 1);
   if (respTokensList.length >= 2 && respTokensList.length <= 4) {
     const respLastName = respTokensList[respTokensList.length - 1];
     if (respLastName.length >= 4 && normGold.split(' ').includes(respLastName)) {
-      // Also check first name or initial matches
+      // Also check first name or initial matches (with nickname expansion)
       const respFirst = respTokensList[0];
       const goldWords2 = normGold.split(' ');
-      if (goldWords2.some(w => w.startsWith(respFirst.substring(0, 3)))) return true;
+      const respFirstPrefix = respFirst.substring(0, 3);
+      const nicknameExpanded = NICKNAME_MAP[respFirst];
+      const nicknamePrefix = nicknameExpanded ? nicknameExpanded.substring(0, 3) : null;
+      if (goldWords2.some(w => w.startsWith(respFirstPrefix) || (nicknamePrefix && w.startsWith(nicknamePrefix)))) return true;
     }
   }
 

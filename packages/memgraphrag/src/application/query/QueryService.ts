@@ -124,6 +124,8 @@ export class DefaultQueryService implements QueryService {
       topK: request.topK,
       topM: request.topM,
     }, this.dependencies.projection);
+
+    const isComparison = isComparisonQuery(expandedRequest.text);
     const context = await this.dependencies.contextBuilder.build(expandedRequest, ranking);
     const entities = toEntityHits(matches);
 
@@ -133,7 +135,6 @@ export class DefaultQueryService implements QueryService {
     let templateFallbackTriggered = false;
 
     try {
-      const isComparison = isComparisonQuery(expandedRequest.text);
       const prompt = isComparison
         ? `You are answering a comparison or yes/no question about two or more entities.
 
