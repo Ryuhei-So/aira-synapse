@@ -7,17 +7,25 @@ import type { LanguageCode } from '../memory/types.js';
 
 // --- LLM Provider ---
 
+export type ReasoningEffort = 'low' | 'medium' | 'high';
+export type Verbosity = 'low' | 'medium' | 'high';
+
 export interface TextGenerationRequest {
   readonly prompt: string;
   readonly systemPrompt?: string;
   readonly temperature?: number;
   readonly maxTokens?: number;
   readonly responseFormat?: 'text' | 'json';
+  /** Reasoning effort for reasoning models (gpt-5, o-series). Ignored for non-reasoning models. */
+  readonly reasoningEffort?: ReasoningEffort;
+  /** Output verbosity for reasoning models. Ignored for non-reasoning models. */
+  readonly verbosity?: Verbosity;
 }
 
 export interface TextGenerationResponse {
   readonly text: string;
   readonly model: string;
+  readonly finishReason?: 'stop' | 'length' | 'content_filter' | string;
   readonly usage: {
     readonly inputTokens: number;
     readonly outputTokens: number;

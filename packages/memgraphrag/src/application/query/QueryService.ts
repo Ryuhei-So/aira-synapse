@@ -57,9 +57,11 @@ export interface QueryService {
 /** Tunable hyperparameters for query pipeline optimization. */
 export interface QueryHyperParams {
   readonly teleportProbability: number;   // PPR teleport (default: 0.5)
-  readonly scTemperature: number;         // Self-consistency temperature (default: 0.3)
-  readonly scSamples: number;             // Number of SC samples (default: 3, 1=disabled)
+  readonly scTemperature: number;         // Self-consistency temperature (default: 0.0)
+  readonly scSamples: number;             // Number of SC samples (default: 1=disabled)
   readonly hubDegreeThreshold: number;    // PPR hub damping threshold (default: 50)
+  readonly reasoningEffort: 'low' | 'medium' | 'high';  // LLM reasoning depth for answer step
+  readonly verbosity: 'low' | 'medium' | 'high';        // LLM output verbosity for answer step
 }
 
 export const DEFAULT_HYPER_PARAMS: QueryHyperParams = {
@@ -67,6 +69,8 @@ export const DEFAULT_HYPER_PARAMS: QueryHyperParams = {
   scTemperature: 0.0,
   scSamples: 1,
   hubDegreeThreshold: 50,
+  reasoningEffort: 'high',
+  verbosity: 'low',
 };
 
 export interface QueryServiceDependencies {
@@ -207,11 +211,21 @@ Reasoning and answer:`;
       const scN = this.hp.scSamples;
 
       const samplePromises = [
-        this.dependencies.llm.generate({ prompt, temperature: 0.0 }),
+        this.dependencies.llm.generate({
+          prompt,
+          temperature: 0.0,
+          reasoningEffort: this.hp.reasoningEffort,
+          verbosity: this.hp.verbosity,
+        }),
       ];
       for (let i = 1; i < scN; i++) {
         samplePromises.push(
-          this.dependencies.llm.generate({ prompt, temperature: scTemp }),
+          this.dependencies.llm.generate({
+            prompt,
+            temperature: scTemp,
+            reasoningEffort: this.hp.reasoningEffort,
+            verbosity: this.hp.verbosity,
+          }),
         );
       }
       const results = await Promise.all(samplePromises);

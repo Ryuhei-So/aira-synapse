@@ -287,16 +287,20 @@ async function evaluateQueries(runtime, corpusId) {
   const HP_CTX = parseInt(process.env.HP_CTX || '3000');
   const HP_SC_N = parseInt(process.env.HP_SC_N || '1');
   const HP_SC_T = parseFloat(process.env.HP_SC_T || '0.0');
+  const HP_EFFORT = process.env.HP_EFFORT || 'high';
+  const HP_VERBOSITY = process.env.HP_VERBOSITY || 'low';
   
   const hyperParams = {
     teleportProbability: HP_TP,
     scTemperature: HP_SC_T,
     scSamples: HP_SC_N,
     hubDegreeThreshold: HP_HUB,
+    reasoningEffort: HP_EFFORT,
+    verbosity: HP_VERBOSITY,
   };
   
   console.log(`\n=== Evaluating ${questions.length} queries ===`);
-  console.log(`  HyperParams: tp=${HP_TP} hub=${HP_HUB} K=${HP_TOPK} M=${HP_TOPM} ctx=${HP_CTX} sc=${HP_SC_N}@${HP_SC_T}`);
+  console.log(`  HyperParams: tp=${HP_TP} hub=${HP_HUB} K=${HP_TOPK} M=${HP_TOPM} ctx=${HP_CTX} sc=${HP_SC_N}@${HP_SC_T} effort=${HP_EFFORT} verbosity=${HP_VERBOSITY}`);
   
   const results = new Array(questions.length);
   let correct = 0;

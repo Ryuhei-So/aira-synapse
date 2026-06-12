@@ -26,6 +26,7 @@ interface ChatCompletionResponse {
     readonly message?: {
       readonly content?: ChatMessageContent;
     };
+    readonly finish_reason?: string;
   }>;
   readonly usage?: {
     readonly prompt_tokens?: number;
@@ -36,6 +37,9 @@ interface ChatCompletionResponse {
 const TRANSIENT_STATUS_CODES = new Set([429, 500, 502, 503]);
 const MAX_RETRIES = 3;
 const BASE_DELAY_MS = 25;
+
+/** Models that support reasoning_effort / verbosity and ignore temperature. */
+const REASONING_MODEL_PREFIXES = ['gpt-5', 'o1', 'o3', 'o4'];
 
 function toContentText(content: ChatMessageContent | undefined): string {
   if (typeof content === 'string') {
@@ -63,7 +67,11 @@ export class OpenAILLMProvider implements ILLMProvider {
   public async generate(
     request: TextGenerationRequest,
   ): Promise<TextGenerationResponse> {
-    const payload = {
+    const isReasoning = REASONING_MODEL_PREFIXES.some(
+      (prefix) => this.model.startsWith(prefix),
+    );
+
+    const payload: Record<string, unknown> = {
       model: this.model,
       messages: [
         ...(request.systemPrompt
@@ -71,7 +79,6 @@ export class OpenAILLMProvider implements ILLMProvider {
           : []),
         { role: 'user' as const, content: request.prompt },
       ],
-      temperature: request.temperature,
       max_completion_tokens: request.maxTokens,
       response_format:
         request.responseFormat === 'json'
@@ -79,6 +86,41 @@ export class OpenAILLMProvider implements ILLMProvider {
           : undefined,
     };
 
+    if (isReasoning) {
+      // Reasoning models: use reasoning_effort/verbosity, skip temperature
+      if (request.reasoningEffort) {
+        payload.reasoning_effort = request.reasoningEffort;
+      }
+      if (request.verbosity) {
+        payload.verbosity = request.verbosity;
+      }
+    } else {
+      // Non-reasoning models: use temperature
+      payload.temperature = request.temperature;
+    }
+
+    const response = await this.callWithRetry(payload, request, isReasoning);
+
+    return {
+      text: toContentText(response.choices?.[0]?.message?.content),
+      model: this.model,
+      finishReason: response.choices?.[0]?.finish_reason ?? undefined,
+      usage: {
+        inputTokens: response.usage?.prompt_tokens ?? 0,
+        outputTokens: response.usage?.completion_tokens ?? 0,
+      },
+    };
+  }
+
+  /**
+   * Call API with retry. If finish_reason=length on a reasoning model,
+   * retry once with lower effort to avoid truncated reasoning traces.
+   */
+  private async callWithRetry(
+    payload: Record<string, unknown>,
+    request: TextGenerationRequest,
+    isReasoning: boolean,
+  ): Promise<ChatCompletionResponse> {
     const response = await this.retryWithBackoff(async () => {
       const apiResponse = await fetch(`${this.baseUrl}/chat/completions`, {
         method: 'POST',
@@ -94,14 +136,28 @@ export class OpenAILLMProvider implements ILLMProvider {
       return (await apiResponse.json()) as ChatCompletionResponse;
     });
 
-    return {
-      text: toContentText(response.choices?.[0]?.message?.content),
-      model: this.model,
-      usage: {
-        inputTokens: response.usage?.prompt_tokens ?? 0,
-        outputTokens: response.usage?.completion_tokens ?? 0,
-      },
-    };
+    // If reasoning model hit token limit, retry with lower effort
+    if (
+      isReasoning
+      && response.choices?.[0]?.finish_reason === 'length'
+      && request.reasoningEffort !== 'low'
+    ) {
+      const fallbackPayload = { ...payload, reasoning_effort: 'low' };
+      return this.retryWithBackoff(async () => {
+        const apiResponse = await fetch(`${this.baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: this.buildHeaders(),
+          body: JSON.stringify(fallbackPayload),
+        });
+        if (!apiResponse.ok) {
+          const body = await apiResponse.text();
+          throw this.createHttpError(apiResponse.status, body);
+        }
+        return (await apiResponse.json()) as ChatCompletionResponse;
+      });
+    }
+
+    return response;
   }
 
   public async healthCheck(): Promise<ProviderHealth> {

@@ -1,4 +1,6 @@
 export {
+  type ReasoningEffort,
+  type Verbosity,
   type TextGenerationRequest,
   type TextGenerationResponse,
   type ProviderHealth,
