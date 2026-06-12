@@ -148,6 +148,7 @@ Rules:
 - For "which" questions: answer with the entity name only
 - For "are both X and Y..." / yes-no questions: answer "yes" or "no"
 - For "what do X and Y both..." questions: answer with the shared attribute
+- If the context seems insufficient, give your best answer based on available information — NEVER refuse to answer
 - Your last line MUST be: FINAL: <your answer>
 
 Question: ${expandedRequest.text}
@@ -169,8 +170,9 @@ Rules:
 - Use ONLY the provided context
 - Use the full official name (do not abbreviate)
 - Answer exactly what the question asks — not an intermediate entity in the chain
+- If the context seems insufficient, give your best answer based on available information — NEVER refuse to answer
 - Your last line MUST be: FINAL: <your answer>
-- The answer after FINAL: should be the shortest correct span from the context
+- The answer should be a complete name, title, or phrase that precisely matches what is asked
 
 Question: ${expandedRequest.text}
 

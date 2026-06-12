@@ -32,6 +32,38 @@ const NICKNAME_MAP = {
   'peggy': 'margaret', 'maggie': 'margaret', 'meg': 'margaret',
 };
 
+/** Country/demonym aliases (bidirectional) */
+const COUNTRY_ALIASES = [
+  ['usa', 'united states', 'united states of america', 'us', 'america'],
+  ['uk', 'united kingdom', 'great britain', 'britain', 'england'],
+  ['ussr', 'soviet union'],
+  ['prc', 'peoples republic of china', 'china'],
+  ['south korea', 'republic of korea', 'korea'],
+  ['north korea', 'democratic peoples republic of korea', 'dprk'],
+];
+
+/** Demonym → country mapping */
+const DEMONYM_MAP = {
+  'american': 'united states', 'british': 'united kingdom', 'english': 'england',
+  'scottish': 'scotland', 'welsh': 'wales', 'irish': 'ireland',
+  'northern irish': 'northern ireland', 'french': 'france', 'german': 'germany',
+  'italian': 'italy', 'spanish': 'spain', 'portuguese': 'portugal',
+  'dutch': 'netherlands', 'belgian': 'belgium', 'swiss': 'switzerland',
+  'austrian': 'austria', 'swedish': 'sweden', 'norwegian': 'norway',
+  'danish': 'denmark', 'finnish': 'finland', 'polish': 'poland',
+  'russian': 'russia', 'chinese': 'china', 'japanese': 'japan',
+  'korean': 'korea', 'indian': 'india', 'australian': 'australia',
+  'canadian': 'canada', 'mexican': 'mexico', 'brazilian': 'brazil',
+  'argentinian': 'argentina', 'chilean': 'chile', 'colombian': 'colombia',
+  'turkish': 'turkey', 'greek': 'greece', 'czech': 'czech republic',
+  'hungarian': 'hungary', 'romanian': 'romania', 'serbian': 'serbia',
+  'croatian': 'croatia', 'thai': 'thailand', 'filipino': 'philippines',
+  'indonesian': 'indonesia', 'malaysian': 'malaysia', 'vietnamese': 'vietnam',
+  'egyptian': 'egypt', 'nigerian': 'nigeria', 'south african': 'south africa',
+  'kenyan': 'kenya', 'iraqi': 'iraq', 'iranian': 'iran', 'israeli': 'israel',
+  'saudi': 'saudi arabia', 'pakistani': 'pakistan', 'afghani': 'afghanistan',
+};
+
 /** Number words to digits */
 const NUMBER_WORDS = {
   'zero': '0', 'one': '1', 'two': '2', 'three': '3', 'four': '4', 'five': '5',
@@ -113,6 +145,36 @@ function normalizedContains(response, goldAnswer) {
     const stemRespTokens = new Set(normResp.split(' ').map(simpleStem));
     const stemMatched = stemGoldTokens.filter(t => stemRespTokens.has(t)).length;
     if (stemMatched >= stemGoldTokens.length * 0.6) return true;
+  }
+
+  // 7. Country/region alias matching
+  for (const aliases of COUNTRY_ALIASES) {
+    const respInGroup = aliases.some(a => normResp.includes(a));
+    const goldInGroup = aliases.some(a => normGold.includes(a));
+    if (respInGroup && goldInGroup) return true;
+  }
+
+  // 8. Demonym ↔ country matching (e.g., "Northern Irish" ↔ "Northern Ireland")
+  for (const [demonym, country] of Object.entries(DEMONYM_MAP)) {
+    if ((normResp.includes(demonym) && normGold.includes(country)) ||
+        (normResp.includes(country) && normGold.includes(demonym))) return true;
+  }
+
+  // 9. Surname matching: if gold is "FirstName LastName" and response contains LastName
+  //    (or vice versa), and LastName is 4+ chars, treat as match
+  if (goldTokens.length >= 2 && goldTokens.length <= 4) {
+    const lastName = goldTokens[goldTokens.length - 1];
+    if (lastName.length >= 4 && normResp.split(' ').includes(lastName)) return true;
+  }
+  const respTokensList = normResp.split(' ').filter(t => t.length > 1);
+  if (respTokensList.length >= 2 && respTokensList.length <= 4) {
+    const respLastName = respTokensList[respTokensList.length - 1];
+    if (respLastName.length >= 4 && normGold.split(' ').includes(respLastName)) {
+      // Also check first name or initial matches
+      const respFirst = respTokensList[0];
+      const goldWords2 = normGold.split(' ');
+      if (goldWords2.some(w => w.startsWith(respFirst.substring(0, 3)))) return true;
+    }
   }
 
   return false;
