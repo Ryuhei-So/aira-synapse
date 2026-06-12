@@ -11,6 +11,8 @@ import type {
 } from '../../domain/retrieval/ppr.js';
 
 export class SimplePPR implements IPPR {
+  constructor(private readonly hubDegreeThreshold: number = 50) {}
+
   public async run(request: PPRRequest, projection: IGraphProjection): Promise<PPRResult> {
     const { corpusId, initialVector, teleportProbability, convergenceEpsilon, maxIterations, topK, topM } = request;
 
@@ -45,7 +47,7 @@ export class SimplePPR implements IPPR {
     // Fact and passage nodes are preserved — they carry specific entity info needed
     // for comparison tasks.
     const hubDamping = new Float64Array(n);
-    const HUB_DEGREE_THRESHOLD = 50;
+    const HUB_DEGREE_THRESHOLD = this.hubDegreeThreshold;
     for (let i = 0; i < n; i++) {
       const nodeId = nodeList[i]!;
       const outDeg = adjacency.get(nodeId)?.length ?? 0;

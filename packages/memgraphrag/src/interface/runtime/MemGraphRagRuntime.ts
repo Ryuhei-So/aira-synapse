@@ -247,19 +247,20 @@ class QueryServiceFacade implements QueryService {
     private readonly graphStore: SQLiteGraphStore,
   ) {}
 
-  public async query(request: QueryRequest): Promise<QueryResponse> {
+  public async query(request: QueryRequest, hyperParams?: import('../../application/query/QueryService.js').QueryHyperParams): Promise<QueryResponse> {
     const dictionary = new SQLiteLexiconStore(this.db, request.corpusId);
     const thesaurus = new SQLiteLexiconStore(this.db, request.corpusId);
+    const hp = hyperParams;
     const service = new DefaultQueryService({
       dictionary,
       expansionPolicy: new ThesaurusExpansionPolicy(thesaurus),
       memoryFilter: new VectorMemoryFilter(this.embeddingProvider, this.vectorIndex, this.memoryStore, this.graphStore),
       nodeInitializer: new SimpleNodeInitializer(this.memoryStore),
-      ppr: new SimplePPR(),
+      ppr: new SimplePPR(hp?.hubDegreeThreshold),
       projection: new SQLiteGraphProjection(this.graphStore),
       contextBuilder: new SimpleContextBuilder(this.memoryStore),
       llm: this.llm,
-      memoryStore: this.memoryStore,
+      hyperParams: hp,
     });
     return service.query(request);
   }

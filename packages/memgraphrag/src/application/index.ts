@@ -103,12 +103,14 @@ export { TemplateResponseGenerator, type TemplateContextBundle } from './query/T
 export {
   DefaultQueryService,
   ContextBuilderService,
+  DEFAULT_HYPER_PARAMS,
   type CitationDto,
   type EntityHit,
   type QueryMetrics,
   type QueryResponse,
   type QueryService,
   type QueryServiceDependencies,
+  type QueryHyperParams,
   type ContextBuilderDependencies,
 } from './query/QueryService.js';
 export { DegradedModePolicy, type CapabilityHealthResults, type RuntimeCapabilities, type FeatureGates, type RuntimePolicyConfig } from './runtime/DegradedModePolicy.js';

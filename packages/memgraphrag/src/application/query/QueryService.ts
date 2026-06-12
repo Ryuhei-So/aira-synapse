@@ -14,7 +14,6 @@ import type {
 } from '../../domain/retrieval/ppr.js';
 import type { Fact } from '../../domain/memory/fact.js';
 import type { Passage } from '../../domain/memory/passage.js';
-import type { IMemoryStore } from '../../domain/storage/index.js';
 import { ThesaurusExpansionPolicy } from './ThesaurusExpansionPolicy.js';
 import { TemplateResponseGenerator } from './TemplateResponseGenerator.js';
 import { isComparisonQuery } from './comparisonDetector.js';
@@ -41,9 +40,7 @@ export interface QueryMetrics {
   readonly citedPassageCount: number;
   readonly llmInputTokens: number;
   readonly llmOutputTokens: number;
-  readonly hopTriggered?: boolean;
-  readonly hopEntity?: string;
-  readonly answerReplaced?: boolean;
+  readonly scVotes?: readonly string[];
 }
 
 export interface QueryResponse {
@@ -57,6 +54,21 @@ export interface QueryService {
   query(request: QueryRequest): Promise<QueryResponse>;
 }
 
+/** Tunable hyperparameters for query pipeline optimization. */
+export interface QueryHyperParams {
+  readonly teleportProbability: number;   // PPR teleport (default: 0.5)
+  readonly scTemperature: number;         // Self-consistency temperature (default: 0.3)
+  readonly scSamples: number;             // Number of SC samples (default: 3, 1=disabled)
+  readonly hubDegreeThreshold: number;    // PPR hub damping threshold (default: 50)
+}
+
+export const DEFAULT_HYPER_PARAMS: QueryHyperParams = {
+  teleportProbability: 0.5,
+  scTemperature: 0.0,
+  scSamples: 1,
+  hubDegreeThreshold: 50,
+};
+
 export interface QueryServiceDependencies {
   readonly dictionary: ITermDictionary;
   readonly expansionPolicy: ThesaurusExpansionPolicy | { expandQuery(query: string): Promise<{ expandedTerms: readonly string[]; rewrittenQuery: string; originalQuery: string }>; };
@@ -67,7 +79,7 @@ export interface QueryServiceDependencies {
   readonly contextBuilder: IContextBuilder;
   readonly llm: ILLMProvider;
   readonly responseGenerator?: TemplateResponseGenerator;
-  readonly memoryStore?: IMemoryStore;
+  readonly hyperParams?: QueryHyperParams;
 }
 
 function normalizeQueryText(text: string): string {
@@ -102,9 +114,11 @@ function shouldUseTemplateFallback(error: unknown): boolean {
 
 export class DefaultQueryService implements QueryService {
   private readonly responseGenerator: TemplateResponseGenerator;
+  private readonly hp: QueryHyperParams;
 
   public constructor(public readonly dependencies: QueryServiceDependencies) {
     this.responseGenerator = dependencies.responseGenerator ?? new TemplateResponseGenerator();
+    this.hp = dependencies.hyperParams ?? DEFAULT_HYPER_PARAMS;
   }
 
   public async query(request: QueryRequest): Promise<QueryResponse> {
@@ -123,7 +137,7 @@ export class DefaultQueryService implements QueryService {
     const ranking = await this.dependencies.ppr.run({
       corpusId: request.corpusId,
       initialVector,
-      teleportProbability: 0.5,
+      teleportProbability: this.hp.teleportProbability,
       convergenceEpsilon: 1e-6,
       maxIterations: 100,
       topK: request.topK,
@@ -138,9 +152,7 @@ export class DefaultQueryService implements QueryService {
     let llmInputTokens = 0;
     let llmOutputTokens = 0;
     let templateFallbackTriggered = false;
-    let hopTriggered = false;
-    let hopEntity: string | undefined;
-    let answerReplaced = false;
+    let scVotes: string[] | undefined;
 
     try {
       const prompt = isComparison
@@ -190,89 +202,29 @@ ${context.promptContext}
 
 Reasoning and answer:`;
 
-      let llmResult = await this.dependencies.llm.generate({
-        prompt,
-        temperature: 0.0,
-      });
-      responseText = DefaultQueryService.extractFinalAnswer(llmResult.text);
-      llmInputTokens = llmResult.usage.inputTokens;
-      llmOutputTokens = llmResult.usage.outputTokens;
+      // Self-consistency: generate N samples and take majority vote
+      const scTemp = this.hp.scTemperature;
+      const scN = this.hp.scSamples;
 
-      // LLM-guided graph traversal with groundedness gate (bridge queries only)
-      if (!isComparison && this.dependencies.memoryStore) {
-        const firstAnswer = responseText;
-        const isGrounded = DefaultQueryService.isAnswerGrounded(firstAnswer, context);
-
-        if (!isGrounded) {
-          hopTriggered = true;
-          const hopResult = await this.tryGraphHop(
-            request.corpusId,
-            expandedRequest.text,
-            context,
-            llmResult.text,
-          );
-
-          if (hopResult.passages.length > 0) {
-            hopEntity = hopResult.entity;
-            const citedIds = new Set(context.citedPassages.map(p => p.passageId));
-            const newPassages = hopResult.passages.filter(p => !citedIds.has(p.passageId));
-
-            if (newPassages.length > 0) {
-              const hopSection = newPassages
-                .slice(0, 3)
-                .map(p => `[${p.metadata.documentId}] ${p.text}`)
-                .join('\n\n');
-              const expandedPrompt = `You are answering a multi-hop question that requires connecting information across multiple passages.
-
-Step-by-step:
-1. Identify the first entity or fact mentioned in the question
-2. Find information about that entity in the context
-3. Follow the chain: use what you learned to find the next piece of information
-4. Continue until you reach the final answer
-5. Before answering, re-read the question: confirm exactly WHAT is being asked (a person? a place? a title? an event?)
-
-Rules:
-- Use ONLY the provided context
-- Use the full official name (do not abbreviate)
-- Answer exactly what the question asks — not an intermediate entity in the chain
-- If the context seems insufficient, give your best answer based on available information — NEVER refuse to answer
-- Your last line MUST be: FINAL: <your answer>
-- The answer should be a complete name, title, or phrase that precisely matches what is asked
-
-Question: ${expandedRequest.text}
-
-Context:
-${context.promptContext}
-
-## Additional Passages (follow-up retrieval)
-
-${hopSection}
-
-Reasoning and answer:`;
-
-              const hopLlmResult = await this.dependencies.llm.generate({
-                prompt: expandedPrompt,
-                temperature: 0.0,
-              });
-              const hopAnswer = DefaultQueryService.extractFinalAnswer(hopLlmResult.text);
-              llmInputTokens += hopLlmResult.usage.inputTokens;
-              llmOutputTokens += hopLlmResult.usage.outputTokens;
-
-              // Replacement policy: only replace if new answer is grounded in expanded context
-              const expandedPassageTexts = [
-                ...context.citedPassages.map(p => p.text),
-                ...newPassages.map(p => p.text),
-              ];
-              const hopGrounded = DefaultQueryService.isTextInPassages(hopAnswer, expandedPassageTexts);
-              if (hopGrounded) {
-                responseText = hopAnswer;
-                answerReplaced = true;
-              }
-              // else: keep firstAnswer — it was the best we had
-            }
-          }
-        }
+      const samplePromises = [
+        this.dependencies.llm.generate({ prompt, temperature: 0.0 }),
+      ];
+      for (let i = 1; i < scN; i++) {
+        samplePromises.push(
+          this.dependencies.llm.generate({ prompt, temperature: scTemp }),
+        );
       }
+      const results = await Promise.all(samplePromises);
+
+      const votes: string[] = [];
+      for (const r of results) {
+        votes.push(DefaultQueryService.extractFinalAnswer(r.text));
+        llmInputTokens += r.usage.inputTokens;
+        llmOutputTokens += r.usage.outputTokens;
+      }
+
+      scVotes = votes;
+      responseText = DefaultQueryService.majorityVote(votes);
     } catch (error) {
       if (!shouldUseTemplateFallback(error)) {
         throw error;
@@ -297,121 +249,51 @@ Reasoning and answer:`;
         citedPassageCount: context.citedPassages.length,
         llmInputTokens,
         llmOutputTokens,
-        hopTriggered: hopTriggered || undefined,
-        hopEntity,
-        answerReplaced: answerReplaced || undefined,
+        scVotes,
       },
     };
   }
 
   /**
-   * Check if an answer string appears in any cited passage text.
-   * Used as the groundedness gate — if the answer isn't grounded in context,
-   * it likely needs additional retrieval.
+   * Normalize an answer for comparison: lowercase, strip articles/punctuation/whitespace.
    */
-  private static isAnswerGrounded(answer: string, context: ContextBundle): boolean {
-    const passageTexts = context.citedPassages.map(p => p.text);
-    return DefaultQueryService.isTextInPassages(answer, passageTexts);
+  private static normalizeForVote(answer: string): string {
+    return answer.toLowerCase()
+      .replace(/\b(a|an|the)\b/g, ' ')
+      .replace(/[^a-z0-9 ]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
   }
 
   /**
-   * Check if a text string (typically an answer) appears in any of the given passage texts.
-   * Uses case-insensitive word-boundary matching.
+   * Self-consistency majority vote: pick the most common normalized answer.
+   * 2-1 split → majority wins. 3-way split → first vote (deterministic sample).
    */
-  private static isTextInPassages(text: string, passageTexts: readonly string[]): boolean {
-    if (!text || text.length < 2) return false;
-    const textLower = text.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
-    if (textLower.length < 2) return false;
-    for (const pt of passageTexts) {
-      const ptLower = pt.toLowerCase();
-      if (ptLower.includes(textLower)) return true;
+  private static majorityVote(votes: readonly string[]): string {
+    if (votes.length === 0) return '';
+    if (votes.length === 1) return votes[0]!;
+
+    // Count normalized answers
+    const counts = new Map<string, { count: number; original: string }>();
+    for (const vote of votes) {
+      const norm = DefaultQueryService.normalizeForVote(vote);
+      const existing = counts.get(norm);
+      if (existing) {
+        existing.count++;
+      } else {
+        counts.set(norm, { count: 1, original: vote });
+      }
     }
-    // Token-level check: if >60% of answer tokens appear in concatenated passages
-    const tokens = textLower.split(' ').filter(t => t.length > 2);
-    if (tokens.length >= 2) {
-      const allText = passageTexts.join(' ').toLowerCase();
-      const matched = tokens.filter(t => allText.includes(t)).length;
-      if (matched >= tokens.length * 0.6) return true;
+
+    // Find the answer with the most votes
+    let best = { count: 0, original: votes[0]! };
+    for (const entry of counts.values()) {
+      if (entry.count > best.count) {
+        best = entry;
+      }
     }
-    return false;
-  }
 
-  /**
-   * LLM-guided graph traversal: ask LLM what bridge entity is missing,
-   * then traverse fact→passage links to find relevant passages.
-   * Gate: triggers when FINAL answer is NOT grounded in cited passages.
-   */
-  private async tryGraphHop(
-    corpusId: string,
-    question: string,
-    _context: ContextBundle,
-    firstReasoning: string,
-  ): Promise<{ entity: string; passages: readonly Passage[] }> {
-    try {
-      // Ask LLM to identify the missing bridge entity
-      const gatePrompt = `Given this question and the reasoning below, identify the ONE key entity from the context whose related passages would help complete the answer chain. Reply with ONLY the entity name (a person, place, organization, or work title), or "NONE" if no additional lookup is needed.
-
-Question: ${question}
-
-Reasoning so far:
-${firstReasoning.substring(0, 500)}
-
-Missing entity:`;
-
-      const gateResult = await this.dependencies.llm.generate({
-        prompt: gatePrompt,
-        temperature: 0.0,
-      });
-
-      const entityName = gateResult.text.trim().replace(/^["']|["']$/g, '').trim();
-      if (!entityName || entityName.toUpperCase() === 'NONE' || entityName.length > 100) {
-        return { entity: '', passages: [] };
-      }
-
-      // Graph traversal: entity name → matching facts → linked passages
-      const snapshot = await this.dependencies.memoryStore!.load(corpusId);
-      const entityLower = entityName.toLowerCase();
-
-      // Find facts mentioning this entity — exact match first, then substring
-      const exactFacts: Fact[] = [];
-      const substringFacts: Fact[] = [];
-      for (const f of snapshot.facts) {
-        const headLower = f.headEntity.toLowerCase();
-        const tailLower = f.tailEntity.toLowerCase();
-        if (headLower === entityLower || tailLower === entityLower) {
-          exactFacts.push(f);
-        } else if (
-          headLower.includes(entityLower) || tailLower.includes(entityLower)
-          || entityLower.includes(headLower) || entityLower.includes(tailLower)
-        ) {
-          substringFacts.push(f);
-        }
-      }
-
-      // Prioritize exact matches, then substring matches
-      const rankedFacts = [...exactFacts, ...substringFacts];
-
-      // Collect passage IDs from ranked facts
-      const passageIds = new Set<string>();
-      for (const fact of rankedFacts.slice(0, 30)) {
-        for (const pid of fact.passageIds) {
-          passageIds.add(pid);
-        }
-      }
-
-      // Resolve to Passage objects
-      const passageMap = new Map(snapshot.passages.map(p => [p.passageId, p]));
-      const result: Passage[] = [];
-      for (const pid of passageIds) {
-        const passage = passageMap.get(pid);
-        if (passage) result.push(passage);
-        if (result.length >= 5) break;
-      }
-
-      return { entity: entityName, passages: result };
-    } catch {
-      return { entity: '', passages: [] }; // Graceful degradation
-    }
+    return best.original;
   }
 
   private static extractFinalAnswer(llmText: string): string {

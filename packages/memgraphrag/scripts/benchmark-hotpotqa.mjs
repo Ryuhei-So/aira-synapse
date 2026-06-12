@@ -279,63 +279,82 @@ async function evaluateQueries(runtime, corpusId) {
   const queryService = runtime.getService(SERVICE_TOKENS.QUERY_SERVICE);
   const questions = JSON.parse(readFileSync(QUESTIONS_FILE, 'utf-8'));
   
-  console.log(`\n=== Evaluating ${questions.length} queries ===`);
+  // Hyperparameter overrides via environment variables
+  const HP_HUB = parseInt(process.env.HP_HUB || '50');
+  const HP_TP = parseFloat(process.env.HP_TP || '0.5');
+  const HP_TOPK = parseInt(process.env.HP_TOPK || '10');
+  const HP_TOPM = parseInt(process.env.HP_TOPM || '10');
+  const HP_CTX = parseInt(process.env.HP_CTX || '3000');
+  const HP_SC_N = parseInt(process.env.HP_SC_N || '1');
+  const HP_SC_T = parseFloat(process.env.HP_SC_T || '0.0');
   
-  const results = [];
+  const hyperParams = {
+    teleportProbability: HP_TP,
+    scTemperature: HP_SC_T,
+    scSamples: HP_SC_N,
+    hubDegreeThreshold: HP_HUB,
+  };
+  
+  console.log(`\n=== Evaluating ${questions.length} queries ===`);
+  console.log(`  HyperParams: tp=${HP_TP} hub=${HP_HUB} K=${HP_TOPK} M=${HP_TOPM} ctx=${HP_CTX} sc=${HP_SC_N}@${HP_SC_T}`);
+  
+  const results = new Array(questions.length);
   let correct = 0;
   let total = 0;
   const startTime = Date.now();
+  const CONCURRENCY = 5;
   
-  for (let i = 0; i < questions.length; i++) {
-    const q = questions[i];
-    total++;
+  for (let batchStart = 0; batchStart < questions.length; batchStart += CONCURRENCY) {
+    const batchEnd = Math.min(batchStart + CONCURRENCY, questions.length);
+    const batch = questions.slice(batchStart, batchEnd);
     
-    try {
-      const result = await queryService.query({
-        corpusId,
-        text: q.question,
-        topK: 10,
-        topM: 10,
-        threshold: 0.2,
-        contextTokenLimit: 3000,
-      });
-      
-      // HotpotQA-standard normalized string accuracy
-      const isCorrect = normalizedContains(result.response, q.answer);
-      if (isCorrect) correct++;
-      
-      results.push({
-        id: q.id,
-        question: q.question,
-        goldAnswer: q.answer,
-        type: q.type,
-        response: result.response,
-        correct: isCorrect,
-        metrics: result.metrics,
-        citationCount: result.citations.length,
-        citedPassageIds: result.citations.map(c => c.passageId).slice(0, 10),
-        contextPreview: result.citations.map(c => c.snippet?.substring(0, 100)).slice(0, 5),
-      });
-      
-      if (total % 10 === 0) {
-        const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
-        const accuracy = ((correct / total) * 100).toFixed(1);
-        console.log(`  [${total}/${questions.length}] Accuracy: ${accuracy}% (${correct}/${total}) | ${elapsed}s`);
+    const batchResults = await Promise.all(batch.map(async (q, idx) => {
+      try {
+        const result = await queryService.query({
+          corpusId,
+          text: q.question,
+          topK: HP_TOPK,
+          topM: HP_TOPM,
+          threshold: 0.2,
+          contextTokenLimit: HP_CTX,
+        }, hyperParams);
+        
+        const isCorrect = normalizedContains(result.response, q.answer);
+        return {
+          id: q.id,
+          question: q.question,
+          goldAnswer: q.answer,
+          type: q.type,
+          response: result.response,
+          correct: isCorrect,
+          metrics: result.metrics,
+          citationCount: result.citations.length,
+          citedPassageIds: result.citations.map(c => c.passageId).slice(0, 10),
+          contextPreview: result.citations.map(c => c.snippet?.substring(0, 100)).slice(0, 5),
+        };
+      } catch (error) {
+        return {
+          id: q.id,
+          question: q.question,
+          goldAnswer: q.answer,
+          type: q.type,
+          response: null,
+          correct: false,
+          error: error.message,
+        };
       }
-    } catch (error) {
-      results.push({
-        id: q.id,
-        question: q.question,
-        goldAnswer: q.answer,
-        type: q.type,
-        response: null,
-        correct: false,
-        error: error.message,
-      });
-      
-      if (total % 10 === 0) {
-        console.log(`  [${total}/${questions.length}] (error: ${error.message.slice(0, 80)})`);
-      }
+    }));
+    
+    for (let j = 0; j < batchResults.length; j++) {
+      results[batchStart + j] = batchResults[j];
+      total++;
+      if (batchResults[j].correct) correct++;
+    }
+    
+    if (total % 10 === 0 || batchEnd === questions.length) {
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
+      const accuracy = ((correct / total) * 100).toFixed(1);
+      console.log(`  [${total}/${questions.length}] Accuracy: ${accuracy}% (${correct}/${total}) | ${elapsed}s`);
     }
   }
   
