@@ -2,21 +2,21 @@
   "summary": {
     "benchmark": "HotpotQA",
     "sampleSize": 500,
-    "accuracy": 77,
-    "correct": 385,
+    "accuracy": 76.8,
+    "correct": 384,
     "total": 500,
-    "timeSeconds": 6616,
+    "timeSeconds": 6951,
     "byType": {
       "bridge": {
-        "correct": 307,
+        "correct": 304,
         "total": 400
       },
       "comparison": {
-        "correct": 78,
+        "correct": 80,
         "total": 100
       }
     },
-    "timestamp": "2026-06-12T07:39:24.209Z"
+    "timestamp": "2026-06-12T09:45:38.597Z"
   },
   "results": [
     {
@@ -34,7 +34,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1724,
-        "llmOutputTokens": 42
+        "llmOutputTokens": 41
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -72,7 +72,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1551,
-        "llmOutputTokens": 59
+        "llmOutputTokens": 41
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -148,7 +148,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1444,
-        "llmOutputTokens": 57
+        "llmOutputTokens": 69
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -186,7 +186,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1607,
-        "llmOutputTokens": 69
+        "llmOutputTokens": 62
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -224,7 +224,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1652,
-        "llmOutputTokens": 28
+        "llmOutputTokens": 34
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -414,7 +414,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1695,
-        "llmOutputTokens": 31
+        "llmOutputTokens": 34
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -452,7 +452,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1639,
-        "llmOutputTokens": 51
+        "llmOutputTokens": 57
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -480,7 +480,7 @@
       "question": "Who was Chamberlain and Colonel of the military staff of The Merrie Monarch?",
       "goldAnswer": "Colonel Charles Hastings Judd",
       "type": "bridge",
-      "response": "Charles Hastings Judd",
+      "response": "Colonel Charles Hastings Judd",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -490,7 +490,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1667,
-        "llmOutputTokens": 70
+        "llmOutputTokens": 72
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -528,7 +528,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2048,
-        "llmOutputTokens": 46
+        "llmOutputTokens": 36
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -566,7 +566,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 3830,
-        "llmOutputTokens": 131
+        "llmOutputTokens": 148,
+        "hopTriggered": true,
+        "hopEntity": "Sniffin' Glue"
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -604,7 +606,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1509,
-        "llmOutputTokens": 17
+        "llmOutputTokens": 39
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -642,7 +644,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1015,
-        "llmOutputTokens": 47
+        "llmOutputTokens": 54
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -718,7 +720,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1453,
-        "llmOutputTokens": 13
+        "llmOutputTokens": 41
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -756,7 +758,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2521,
-        "llmOutputTokens": 49
+        "llmOutputTokens": 57
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -784,7 +786,7 @@
       "question": "What Kentucky county has a population of 60,316 and features the Lake Louisvilla neighborhood?",
       "goldAnswer": "Oldham County",
       "type": "bridge",
-      "response": "Oldham County, Kentucky",
+      "response": "Oldham County",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -794,7 +796,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1787,
-        "llmOutputTokens": 35
+        "llmOutputTokens": 37
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -832,7 +834,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1608,
-        "llmOutputTokens": 22
+        "llmOutputTokens": 20
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -870,7 +872,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1550,
-        "llmOutputTokens": 39
+        "llmOutputTokens": 43
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -908,7 +910,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1268,
-        "llmOutputTokens": 22
+        "llmOutputTokens": 21
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -974,7 +976,7 @@
       "question": "\"A Summer in the Cage\" and \"American Hardcore\" are both what kind of film?",
       "goldAnswer": "documentary",
       "type": "comparison",
-      "response": "documentary film",
+      "response": "documentary films",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -984,7 +986,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1793,
-        "llmOutputTokens": 11
+        "llmOutputTokens": 12
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -1060,7 +1062,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1728,
-        "llmOutputTokens": 27
+        "llmOutputTokens": 30
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -1136,7 +1138,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1670,
-        "llmOutputTokens": 54
+        "llmOutputTokens": 30
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -1250,7 +1252,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1703,
-        "llmOutputTokens": 62
+        "llmOutputTokens": 72
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -1288,7 +1290,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1388,
-        "llmOutputTokens": 52
+        "llmOutputTokens": 53
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -1364,7 +1366,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1393,
-        "llmOutputTokens": 27
+        "llmOutputTokens": 30
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -1402,7 +1404,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1385,
-        "llmOutputTokens": 49
+        "llmOutputTokens": 53
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -1468,7 +1470,7 @@
       "question": "My Secret Hotel is a television series starring a South Korean DJ who rose to fame as the lead actress in what?",
       "goldAnswer": "Queen In-hyun's Man",
       "type": "bridge",
-      "response": "Secret Garden",
+      "response": "Im Kwon-taek's General's Son",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -1478,7 +1480,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1903,
-        "llmOutputTokens": 55
+        "llmOutputTokens": 69
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -1516,7 +1518,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1599,
-        "llmOutputTokens": 43
+        "llmOutputTokens": 59
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -1554,7 +1556,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1657,
-        "llmOutputTokens": 56
+        "llmOutputTokens": 23
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -1658,7 +1660,7 @@
       "question": "The Simpsons episode that aired on February 19, 2012 entitled \"At Long Last Leave\" represented what milestone for the show? ",
       "goldAnswer": "show's 500th episode",
       "type": "bridge",
-      "response": "the 500th episode overall of The Simpsons",
+      "response": "the 500th episode overall of the series",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -1706,7 +1708,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1807,
-        "llmOutputTokens": 39
+        "llmOutputTokens": 64
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -1744,7 +1746,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1274,
-        "llmOutputTokens": 31
+        "llmOutputTokens": 29
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -1772,7 +1774,7 @@
       "question": "Which American comedian born on March 21, 1962, appeared in the movie \"Sleepless in Seattle?\"",
       "goldAnswer": "Rosie O'Donnell",
       "type": "bridge",
-      "response": "Roseann O'Donnell",
+      "response": "Rosie O'Donnell",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -1782,7 +1784,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1578,
-        "llmOutputTokens": 88
+        "llmOutputTokens": 65
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -1810,7 +1812,7 @@
       "question": "What is Rachelle Amy Beinart's role in the film that follows a group of rebels on a mission?",
       "goldAnswer": "stunt performances",
       "type": "bridge",
-      "response": "stunt performer in Rogue One",
+      "response": "Rachelle Amy Beinart is a stunt performer in **Rogue One**. FINAL: stunt performer",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -1820,7 +1822,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1502,
-        "llmOutputTokens": 36
+        "llmOutputTokens": 30
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -1895,8 +1897,10 @@
         "pprIterations": 4,
         "pprConverged": true,
         "citedPassageCount": 10,
-        "llmInputTokens": 1767,
-        "llmOutputTokens": 110
+        "llmInputTokens": 3902,
+        "llmOutputTokens": 93,
+        "hopTriggered": true,
+        "hopEntity": "Derek and the Dominos"
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -1934,7 +1938,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1407,
-        "llmOutputTokens": 48
+        "llmOutputTokens": 43
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -2000,7 +2004,7 @@
       "question": "At the 46th Grammy Awards, which award did the album by The White Stripes, which included the song Seven Nation Army, win?",
       "goldAnswer": "Best Alternative Music Album",
       "type": "bridge",
-      "response": "Grammy Award for Best Alternative Music Album",
+      "response": "Best Alternative Music Album",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -2010,7 +2014,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2227,
-        "llmOutputTokens": 47
+        "llmOutputTokens": 41
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -2048,7 +2052,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1448,
-        "llmOutputTokens": 32
+        "llmOutputTokens": 40
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -2086,7 +2090,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1439,
-        "llmOutputTokens": 66
+        "llmOutputTokens": 68
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -2314,7 +2318,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2003,
-        "llmOutputTokens": 38
+        "llmOutputTokens": 25
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -2390,7 +2394,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1809,
-        "llmOutputTokens": 61
+        "llmOutputTokens": 47
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -2456,7 +2460,7 @@
       "question": "Both Ralph Bakshi and Béla Gaál had what roll in film making?",
       "goldAnswer": "film director",
       "type": "comparison",
-      "response": "film director",
+      "response": "director",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -2466,7 +2470,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1858,
-        "llmOutputTokens": 20
+        "llmOutputTokens": 25
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -2542,7 +2546,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1879,
-        "llmOutputTokens": 62
+        "llmOutputTokens": 70
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -2580,7 +2584,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1610,
-        "llmOutputTokens": 69
+        "llmOutputTokens": 67
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -2618,7 +2622,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2005,
-        "llmOutputTokens": 36
+        "llmOutputTokens": 44
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -2732,7 +2736,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1541,
-        "llmOutputTokens": 7
+        "llmOutputTokens": 11
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -2770,7 +2774,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1664,
-        "llmOutputTokens": 33
+        "llmOutputTokens": 25
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -2846,7 +2850,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1966,
-        "llmOutputTokens": 20
+        "llmOutputTokens": 105
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -2950,7 +2954,7 @@
       "question": "What musical action does Ndebele music and Musical bow have in common?",
       "goldAnswer": "played",
       "type": "bridge",
-      "response": "playing a bow-like instrument for music",
+      "response": "played with the hands",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -2960,7 +2964,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1513,
-        "llmOutputTokens": 22
+        "llmOutputTokens": 18
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -2988,7 +2992,7 @@
       "question": "What kind of energy does a plasma weapon produce?",
       "goldAnswer": "electromagnetic field",
       "type": "bridge",
-      "response": "thermal energy",
+      "response": "plasma, a very hot, highly energetic excited matter",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -2998,7 +3002,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2226,
-        "llmOutputTokens": 22
+        "llmOutputTokens": 35
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -3036,7 +3040,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1198,
-        "llmOutputTokens": 34
+        "llmOutputTokens": 51
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -3112,7 +3116,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1899,
-        "llmOutputTokens": 87
+        "llmOutputTokens": 64
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -3150,7 +3154,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1764,
-        "llmOutputTokens": 29
+        "llmOutputTokens": 63
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -3216,7 +3220,7 @@
       "question": "Which Western action-adventure video game by Rockstar did Tyler Bunch act for?",
       "goldAnswer": "Red Dead Redemption",
       "type": "bridge",
-      "response": "Red Dead Revolver",
+      "response": "Red Dead Redemption",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -3226,7 +3230,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2069,
-        "llmOutputTokens": 26
+        "llmOutputTokens": 24
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -3254,7 +3258,7 @@
       "question": "From where was the award which has Matt James as a winner in 2012 has its name derived? ",
       "goldAnswer": "EN World web site",
       "type": "bridge",
-      "response": "The award is the ENnie Award, and its name is derived from the word “ennie,” from “ENN” for “Electronic News Network,” the original online source associated with the award. FINAL: ENnie Award",
+      "response": "Jack Kilby",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -3264,7 +3268,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1328,
-        "llmOutputTokens": 54
+        "llmOutputTokens": 120
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -3302,7 +3306,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1413,
-        "llmOutputTokens": 14
+        "llmOutputTokens": 8
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -3339,8 +3343,8 @@
         "pprIterations": 4,
         "pprConverged": true,
         "citedPassageCount": 10,
-        "llmInputTokens": 1800,
-        "llmOutputTokens": 74
+        "llmInputTokens": 1719,
+        "llmOutputTokens": 75
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -3349,11 +3353,11 @@
         "passage:hotpotqa_batch_012:9",
         "passage:hotpotqa_batch_015:37",
         "passage:hotpotqa_batch_044:35",
+        "passage:hotpotqa_batch_007:28",
         "passage:hotpotqa_batch_048:11",
         "passage:hotpotqa_batch_059:33",
-        "passage:hotpotqa_batch_009:23",
         "passage:hotpotqa_batch_010:21",
-        "passage:hotpotqa_batch_030:8"
+        "passage:hotpotqa_batch_009:23"
       ],
       "contextPreview": [
         "# Melanie Owen\n\nMelanie Jane \"Mel\" Owen (also Healy and Beale) is a fictional character from the BBC",
@@ -3368,8 +3372,8 @@
       "question": "What did the second First Lady to be born outside the United States or areas that would become part of the United States do before marrying?",
       "goldAnswer": "fashion model",
       "type": "bridge",
-      "response": "Abigail Smith",
-      "correct": false,
+      "response": "worked as a fashion model",
+      "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -3378,7 +3382,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1868,
-        "llmOutputTokens": 55
+        "llmOutputTokens": 71
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -3416,7 +3420,8 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1644,
-        "llmOutputTokens": 50
+        "llmOutputTokens": 50,
+        "hopTriggered": true
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -3492,7 +3497,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1852,
-        "llmOutputTokens": 45
+        "llmOutputTokens": 35
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -3568,7 +3573,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1362,
-        "llmOutputTokens": 95
+        "llmOutputTokens": 88
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -3606,7 +3611,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1678,
-        "llmOutputTokens": 30
+        "llmOutputTokens": 29
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -3644,7 +3649,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1434,
-        "llmOutputTokens": 15
+        "llmOutputTokens": 21
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -3682,7 +3687,8 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1502,
-        "llmOutputTokens": 68
+        "llmOutputTokens": 78,
+        "hopTriggered": true
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -3719,8 +3725,10 @@
         "pprIterations": 4,
         "pprConverged": true,
         "citedPassageCount": 10,
-        "llmInputTokens": 1279,
-        "llmOutputTokens": 43
+        "llmInputTokens": 2977,
+        "llmOutputTokens": 95,
+        "hopTriggered": true,
+        "hopEntity": "Walter Dornberger"
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -3796,7 +3804,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1880,
-        "llmOutputTokens": 17
+        "llmOutputTokens": 24
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -3824,8 +3832,8 @@
       "question": "Was Cars 2 released by the same company which used songs written by Lin-Manuel Miranda in another of its movies?",
       "goldAnswer": "yes",
       "type": "comparison",
-      "response": "Walt Disney Pictures",
-      "correct": false,
+      "response": "Cars 2 was released by Walt Disney Pictures, and Lin-Manuel Miranda wrote songs for Disney’s Moana, so yes. FINAL: Walt Disney Pictures",
+      "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -3834,7 +3842,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1686,
-        "llmOutputTokens": 94
+        "llmOutputTokens": 40
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -3910,7 +3918,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1672,
-        "llmOutputTokens": 55
+        "llmOutputTokens": 14
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -3976,7 +3984,7 @@
       "question": "Which former Republican won the presidential nomination at the 2012 United States Libertarian National Convention? ",
       "goldAnswer": "Gary Earl Johnson",
       "type": "bridge",
-      "response": "The former Republican who won the presidential nomination at the 2012 United States Libertarian National Convention was Gary Johnson. FINAL: Gary Johnson",
+      "response": "Gary Johnson",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -3986,7 +3994,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1712,
-        "llmOutputTokens": 36
+        "llmOutputTokens": 53
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -4014,8 +4022,8 @@
       "question": "Who is the patron saint of Europe and has a historical religions building in Castres, Languedoc, France named after him?",
       "goldAnswer": "Benedict of Nursia",
       "type": "bridge",
-      "response": "Benedict of Nursia",
-      "correct": true,
+      "response": "Castres Cathedral (\"Cathédrale Saint-Benoît de Castres\")",
+      "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -4024,7 +4032,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1896,
-        "llmOutputTokens": 68
+        "llmOutputTokens": 62
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -4062,7 +4070,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1944,
-        "llmOutputTokens": 42
+        "llmOutputTokens": 62
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -4100,7 +4108,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1838,
-        "llmOutputTokens": 32
+        "llmOutputTokens": 26
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -4176,7 +4184,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1682,
-        "llmOutputTokens": 95
+        "llmOutputTokens": 90
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -4290,7 +4298,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1438,
-        "llmOutputTokens": 21
+        "llmOutputTokens": 15
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -4318,8 +4326,8 @@
       "question": "In what movie did the male star of a movie about a widowed 37-year-old woman also star in in the year 1993?",
       "goldAnswer": "\"Red Rock West\"",
       "type": "bridge",
-      "response": "Red Rock West",
-      "correct": true,
+      "response": "Philadelphia",
+      "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -4327,8 +4335,10 @@
         "pprIterations": 4,
         "pprConverged": true,
         "citedPassageCount": 10,
-        "llmInputTokens": 1831,
-        "llmOutputTokens": 92
+        "llmInputTokens": 3905,
+        "llmOutputTokens": 127,
+        "hopTriggered": true,
+        "hopEntity": "Tom Hanks"
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -4365,8 +4375,10 @@
         "pprIterations": 4,
         "pprConverged": true,
         "citedPassageCount": 10,
-        "llmInputTokens": 1497,
-        "llmOutputTokens": 51
+        "llmInputTokens": 3302,
+        "llmOutputTokens": 112,
+        "hopTriggered": true,
+        "hopEntity": "Didsbury"
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -4404,7 +4416,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1501,
-        "llmOutputTokens": 46
+        "llmOutputTokens": 48
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -4442,7 +4454,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1710,
-        "llmOutputTokens": 58
+        "llmOutputTokens": 31
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -4470,8 +4482,8 @@
       "question": "Did Minersville School District v. Gobitis and Gravel v. United States occur in the same decade?",
       "goldAnswer": "no",
       "type": "comparison",
-      "response": "Yes. Minersville School District v. Gobitis was decided in 1940 and Gravel v. United States was decided in 1972, so they occurred in different decades. FINAL: no",
-      "correct": true,
+      "response": "yes",
+      "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -4480,7 +4492,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1867,
-        "llmOutputTokens": 49
+        "llmOutputTokens": 14
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -4556,7 +4568,8 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2264,
-        "llmOutputTokens": 41
+        "llmOutputTokens": 41,
+        "hopTriggered": true
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -4584,7 +4597,7 @@
       "question": "How many seasons has a popular tv show had, in which one of the episodes is called Moho House?",
       "goldAnswer": "28",
       "type": "bridge",
-      "response": "twenty-eighth season",
+      "response": "twenty-eight seasons",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -4594,7 +4607,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1581,
-        "llmOutputTokens": 58
+        "llmOutputTokens": 22
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -4632,7 +4645,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2038,
-        "llmOutputTokens": 86
+        "llmOutputTokens": 30
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -4670,7 +4683,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1756,
-        "llmOutputTokens": 69
+        "llmOutputTokens": 64
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -4708,7 +4721,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1782,
-        "llmOutputTokens": 74
+        "llmOutputTokens": 62
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -4746,7 +4759,8 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1871,
-        "llmOutputTokens": 44
+        "llmOutputTokens": 65,
+        "hopTriggered": true
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -4822,7 +4836,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1213,
-        "llmOutputTokens": 33
+        "llmOutputTokens": 40
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -4860,7 +4874,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1402,
-        "llmOutputTokens": 25
+        "llmOutputTokens": 45
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -5050,7 +5064,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1480,
-        "llmOutputTokens": 30
+        "llmOutputTokens": 43
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -5088,7 +5102,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1891,
-        "llmOutputTokens": 63
+        "llmOutputTokens": 45
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -5126,7 +5140,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1393,
-        "llmOutputTokens": 16
+        "llmOutputTokens": 10
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -5164,7 +5178,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1559,
-        "llmOutputTokens": 14
+        "llmOutputTokens": 41
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -5202,7 +5216,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1715,
-        "llmOutputTokens": 34
+        "llmOutputTokens": 37
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -5240,7 +5254,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1914,
-        "llmOutputTokens": 22
+        "llmOutputTokens": 29
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -5278,7 +5292,8 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1784,
-        "llmOutputTokens": 46
+        "llmOutputTokens": 46,
+        "hopTriggered": true
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -5316,7 +5331,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1590,
-        "llmOutputTokens": 68
+        "llmOutputTokens": 32
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -5344,7 +5359,7 @@
       "question": "The Legendary A&M Sessions contain five songs by the singer whose work was conducted with what band?",
       "goldAnswer": "Magic Band",
       "type": "bridge",
-      "response": "his own band",
+      "response": "Roy Young's own band",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -5354,7 +5369,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1843,
-        "llmOutputTokens": 49
+        "llmOutputTokens": 46
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -5496,7 +5511,7 @@
       "question": "In what town does the one-time star of \"And There's More\" now live?",
       "goldAnswer": "Rochdale",
       "type": "bridge",
-      "response": "Morecambe",
+      "response": "Southern California",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -5506,7 +5521,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1733,
-        "llmOutputTokens": 89
+        "llmOutputTokens": 81
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -5582,7 +5597,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1674,
-        "llmOutputTokens": 37
+        "llmOutputTokens": 79
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -5648,7 +5663,7 @@
       "question": "Who is younger, Pelle Almqvist or Steve Winwood?",
       "goldAnswer": "Pelle Almqvist",
       "type": "comparison",
-      "response": "Pelle Almqvist",
+      "response": "Pelle Almqvist is younger than Steve Winwood. FINAL: Pelle Almqvist",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -5771,28 +5786,28 @@
         "pprIterations": 4,
         "pprConverged": true,
         "citedPassageCount": 10,
-        "llmInputTokens": 1740,
-        "llmOutputTokens": 27
+        "llmInputTokens": 1850,
+        "llmOutputTokens": 31
       },
       "citationCount": 10,
       "citedPassageIds": [
         "passage:hotpotqa_batch_033:11",
         "passage:hotpotqa_batch_056:40",
         "passage:hotpotqa_batch_063:42",
+        "passage:hotpotqa_batch_008:14",
         "passage:hotpotqa_batch_007:28",
         "passage:hotpotqa_batch_010:21",
         "passage:hotpotqa_batch_018:45",
         "passage:hotpotqa_batch_032:50",
         "passage:hotpotqa_batch_020:14",
-        "passage:hotpotqa_batch_048:11",
-        "passage:hotpotqa_batch_030:2"
+        "passage:hotpotqa_batch_048:11"
       ],
       "contextPreview": [
         "# Focus (2015 film)\n\nFocus is a 2015 American romantic crime comedy-drama film written and directed ",
         "# Margot Robbie\n\nMargot Elise Robbie ( ; born 2 July 1990) is an Australian actress and producer. Ro",
         "# Nicole Kidman filmography\n\nAustralian actress Nicole Kidman made her film debut in the drama remak",
-        "# Alin Sumarwata\n\nAlin Sumarwata is an Australian actress. She is best known for her role in the Aus",
-        "# Ashleigh Brewer\n\nAshleigh May Brewer (born 9 December 1990) is an Australian actress. She had a re"
+        "# Amy Mizzi\n\nAmy Mizzi (born 21 July 1983) is an Australian actress. She starred as Kit Hunter in th",
+        "# Alin Sumarwata\n\nAlin Sumarwata is an Australian actress. She is best known for her role in the Aus"
       ]
     },
     {
@@ -5810,7 +5825,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1526,
-        "llmOutputTokens": 89
+        "llmOutputTokens": 98
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -5886,7 +5901,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1736,
-        "llmOutputTokens": 49
+        "llmOutputTokens": 51
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -5924,7 +5939,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1658,
-        "llmOutputTokens": 35
+        "llmOutputTokens": 41
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -6038,7 +6053,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1787,
-        "llmOutputTokens": 52
+        "llmOutputTokens": 41
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -6114,7 +6129,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1701,
-        "llmOutputTokens": 26
+        "llmOutputTokens": 38
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -6151,8 +6166,8 @@
         "pprIterations": 4,
         "pprConverged": true,
         "citedPassageCount": 10,
-        "llmInputTokens": 1284,
-        "llmOutputTokens": 24
+        "llmInputTokens": 1257,
+        "llmOutputTokens": 18
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -6163,8 +6178,8 @@
         "passage:hotpotqa_batch_004:43",
         "passage:hotpotqa_batch_036:1",
         "passage:hotpotqa_batch_025:18",
-        "passage:hotpotqa_batch_035:6",
         "passage:hotpotqa_batch_039:21",
+        "passage:hotpotqa_batch_035:6",
         "passage:hotpotqa_batch_004:44"
       ],
       "contextPreview": [
@@ -6190,7 +6205,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1850,
-        "llmOutputTokens": 36
+        "llmOutputTokens": 42
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -6228,7 +6243,8 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1707,
-        "llmOutputTokens": 30
+        "llmOutputTokens": 30,
+        "hopTriggered": true
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -6266,7 +6282,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2122,
-        "llmOutputTokens": 41
+        "llmOutputTokens": 36
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -6342,7 +6358,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1568,
-        "llmOutputTokens": 130
+        "llmOutputTokens": 128
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -6380,7 +6396,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1609,
-        "llmOutputTokens": 26
+        "llmOutputTokens": 48
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -6484,7 +6500,7 @@
       "question": "Bandit was built in 1988 by which Japanese amusement ride company that built roller coasters, giant wheels, carousels, flumes, dark rides, sky cycles and other amusement rides?",
       "goldAnswer": "TOGO company",
       "type": "bridge",
-      "response": "TOGO Company",
+      "response": "TOGO company",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -6494,7 +6510,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1758,
-        "llmOutputTokens": 51
+        "llmOutputTokens": 28
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -6570,7 +6586,8 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1542,
-        "llmOutputTokens": 37
+        "llmOutputTokens": 37,
+        "hopTriggered": true
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -6598,7 +6615,7 @@
       "question": "Was Suzanne Chun Oakland a member of the upper of lower chamber of the Hawaii State Legislature?",
       "goldAnswer": "lower chamber",
       "type": "bridge",
-      "response": "upper chamber",
+      "response": "the upper chamber of the Hawaii State Legislature",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -6608,7 +6625,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1559,
-        "llmOutputTokens": 30
+        "llmOutputTokens": 34
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -6760,7 +6777,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1360,
-        "llmOutputTokens": 28
+        "llmOutputTokens": 22
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -6798,7 +6815,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1522,
-        "llmOutputTokens": 72
+        "llmOutputTokens": 65
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -6836,7 +6853,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1620,
-        "llmOutputTokens": 29
+        "llmOutputTokens": 23
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -6864,7 +6881,7 @@
       "question": "What are the letters of the radio station serves the area comprising all of Belknap County, among others?",
       "goldAnswer": "WANH",
       "type": "bridge",
-      "response": "insufficient information to determine a radio station call sign from the provided context",
+      "response": "KQIP-LP",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -6874,7 +6891,8 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2035,
-        "llmOutputTokens": 92
+        "llmOutputTokens": 90,
+        "hopTriggered": true
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -6902,8 +6920,8 @@
       "question": "Who is younger Kirk Humphreys or Tom Coburn?",
       "goldAnswer": "Kirk Humphreys",
       "type": "bridge",
-      "response": "Kirk Humphreys",
-      "correct": true,
+      "response": "Tom Coburn",
+      "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -6912,7 +6930,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1445,
-        "llmOutputTokens": 17
+        "llmOutputTokens": 106
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -6950,7 +6968,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1493,
-        "llmOutputTokens": 18
+        "llmOutputTokens": 20
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -6987,8 +7005,11 @@
         "pprIterations": 4,
         "pprConverged": true,
         "citedPassageCount": 10,
-        "llmInputTokens": 1933,
-        "llmOutputTokens": 20
+        "llmInputTokens": 4142,
+        "llmOutputTokens": 73,
+        "hopTriggered": true,
+        "hopEntity": "Northern Ireland",
+        "answerReplaced": true
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -7025,8 +7046,8 @@
         "pprIterations": 4,
         "pprConverged": true,
         "citedPassageCount": 10,
-        "llmInputTokens": 3438,
-        "llmOutputTokens": 131
+        "llmInputTokens": 1563,
+        "llmOutputTokens": 56
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -7054,7 +7075,7 @@
       "question": "Which band was formed in a country closer to England, Kodaline or Rivermaya ?",
       "goldAnswer": "Kodaline",
       "type": "comparison",
-      "response": "Kodaline was formed in Ireland, which is closer to England than the Philippines, where Rivermaya was formed. FINAL: Kodaline",
+      "response": "Kodaline",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -7064,7 +7085,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1545,
-        "llmOutputTokens": 37
+        "llmOutputTokens": 25
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -7178,7 +7199,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1540,
-        "llmOutputTokens": 31
+        "llmOutputTokens": 33
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -7216,7 +7237,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1643,
-        "llmOutputTokens": 34
+        "llmOutputTokens": 22
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -7292,7 +7313,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1719,
-        "llmOutputTokens": 33
+        "llmOutputTokens": 35
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -7396,7 +7417,7 @@
       "question": "Clifford Odets was seen as a successor to a Nobel Prize winner known as what?",
       "goldAnswer": "American playwright and Nobel laureate in Literature",
       "type": "bridge",
-      "response": "playwright",
+      "response": "American playwright",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -7406,7 +7427,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1634,
-        "llmOutputTokens": 51
+        "llmOutputTokens": 54
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -7510,8 +7531,8 @@
       "question": "Was the band The Shins formed before the band Paramore?  ",
       "goldAnswer": "yes",
       "type": "comparison",
-      "response": "The context only gives Paramore’s formation year (2004) and does not provide The Shins’ formation year, so based on the available information I cannot confirm that The Shins was formed before Paramore. FINAL: Cannot be determined from the provided context",
-      "correct": true,
+      "response": "no",
+      "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -7519,8 +7540,8 @@
         "pprIterations": 4,
         "pprConverged": true,
         "citedPassageCount": 10,
-        "llmInputTokens": 1705,
-        "llmOutputTokens": 61
+        "llmInputTokens": 1678,
+        "llmOutputTokens": 45
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -7596,7 +7617,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1293,
-        "llmOutputTokens": 37
+        "llmOutputTokens": 36
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -7634,7 +7655,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1606,
-        "llmOutputTokens": 19
+        "llmOutputTokens": 13
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -7672,7 +7693,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1773,
-        "llmOutputTokens": 43
+        "llmOutputTokens": 45
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -7700,7 +7721,7 @@
       "question": "What region has the indigenous language that includes the word Catuaba?",
       "goldAnswer": "South America",
       "type": "bridge",
-      "response": "South America",
+      "response": "The indigenous language is Guarani, which is spoken in South America. FINAL: South America",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -7710,7 +7731,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1839,
-        "llmOutputTokens": 38
+        "llmOutputTokens": 27
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -7824,7 +7845,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1732,
-        "llmOutputTokens": 8
+        "llmOutputTokens": 37
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -7862,7 +7883,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1889,
-        "llmOutputTokens": 33
+        "llmOutputTokens": 12
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -7890,8 +7911,8 @@
       "question": "What is the name of the English poet who wrote a poem titled Don Juan and also served as the real-life model of a character in the novel Glenarvon?",
       "goldAnswer": "Lord Byron",
       "type": "bridge",
-      "response": "George Gordon Byron, 6th Baron Byron, commonly known as Lord Byron",
-      "correct": true,
+      "response": "George Gordon Byron, 6th Baron Byron",
+      "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -7899,8 +7920,8 @@
         "pprIterations": 4,
         "pprConverged": true,
         "citedPassageCount": 10,
-        "llmInputTokens": 1253,
-        "llmOutputTokens": 69
+        "llmInputTokens": 1254,
+        "llmOutputTokens": 50
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -7908,9 +7929,9 @@
         "passage:hotpotqa_batch_036:1",
         "passage:hotpotqa_batch_027:6",
         "passage:hotpotqa_batch_035:6",
-        "passage:hotpotqa_batch_079:38",
-        "passage:hotpotqa_batch_018:24",
         "passage:hotpotqa_batch_027:7",
+        "passage:hotpotqa_batch_018:24",
+        "passage:hotpotqa_batch_079:38",
         "passage:hotpotqa_batch_045:46",
         "passage:hotpotqa_batch_026:38",
         "passage:hotpotqa_batch_036:40"
@@ -7920,7 +7941,7 @@
         "# Glenarvon\n\nGlenarvon is Lady Caroline Lamb's first novel, published in 1816. Its rakish title char",
         "# Dorian Gray (character)\n\nDorian Gray is the main character in Oscar Wilde's novel The Picture of D",
         "# George Meredith\n\nGeorge Meredith, OM (12 February 1828 – 18 May 1909) was an English novelist and ",
-        "# Sonnets from the Portuguese\n\nSonnets from the Portuguese, written ca. 1845–1846 and published firs"
+        "# Dorian Gray (disambiguation)\n\nDorian Gray is the main character of the novel \"The Picture of Doria"
       ]
     },
     {
@@ -7938,7 +7959,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1567,
-        "llmOutputTokens": 33
+        "llmOutputTokens": 34
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -7976,7 +7997,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1438,
-        "llmOutputTokens": 19
+        "llmOutputTokens": 16
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -8014,7 +8035,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1730,
-        "llmOutputTokens": 53
+        "llmOutputTokens": 65
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -8052,7 +8073,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1820,
-        "llmOutputTokens": 14
+        "llmOutputTokens": 18
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -8090,7 +8111,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1330,
-        "llmOutputTokens": 51
+        "llmOutputTokens": 46
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -8204,7 +8225,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2329,
-        "llmOutputTokens": 10
+        "llmOutputTokens": 18
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -8242,7 +8263,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1942,
-        "llmOutputTokens": 62
+        "llmOutputTokens": 36
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -8280,7 +8301,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1243,
-        "llmOutputTokens": 20
+        "llmOutputTokens": 19
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -8318,7 +8339,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1260,
-        "llmOutputTokens": 27
+        "llmOutputTokens": 48
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -8384,7 +8405,7 @@
       "question": "Which dialect spoken in the province of Scania calls Spettekaka, \"spiddekaga\"?",
       "goldAnswer": "Scanian dialects",
       "type": "bridge",
-      "response": "Scanian",
+      "response": "Scanian dialect",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -8394,7 +8415,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1810,
-        "llmOutputTokens": 62
+        "llmOutputTokens": 66
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -8432,7 +8453,8 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1543,
-        "llmOutputTokens": 40
+        "llmOutputTokens": 36,
+        "hopTriggered": true
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -8498,7 +8520,7 @@
       "question": "The boxer that defeated Oliver Lavigilante in the 2012 Summer Olympics is of what nationality?",
       "goldAnswer": "a Ghanaian boxer",
       "type": "bridge",
-      "response": "Ghanaian",
+      "response": "The boxer who defeated Oliver Lavigilante was Duke Akueteh Micah, who is Ghanaian. FINAL: Ghanaian",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -8508,7 +8530,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1763,
-        "llmOutputTokens": 30
+        "llmOutputTokens": 35
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -8546,7 +8568,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2360,
-        "llmOutputTokens": 24
+        "llmOutputTokens": 35
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -8574,7 +8596,7 @@
       "question": "What kind of company is this group whose headquarters are in AIA Central? ",
       "goldAnswer": "pan-Asian life insurance group",
       "type": "bridge",
-      "response": "the largest independent public listed pan-Asian life insurance group",
+      "response": "pan-Asian life insurance group",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -8584,7 +8606,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1312,
-        "llmOutputTokens": 33
+        "llmOutputTokens": 35
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -8650,7 +8672,7 @@
       "question": "Which satellite suburb of Melbourne is partially included in the Electoral district of Bass?",
       "goldAnswer": "Pakenham",
       "type": "bridge",
-      "response": "Pakenham, Victoria",
+      "response": "Pakenham",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -8660,7 +8682,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1321,
-        "llmOutputTokens": 62
+        "llmOutputTokens": 59
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -8698,7 +8720,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1522,
-        "llmOutputTokens": 29
+        "llmOutputTokens": 34
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -8774,7 +8796,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1910,
-        "llmOutputTokens": 35
+        "llmOutputTokens": 43
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -8812,7 +8834,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1330,
-        "llmOutputTokens": 21
+        "llmOutputTokens": 18
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -8888,7 +8910,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1400,
-        "llmOutputTokens": 45
+        "llmOutputTokens": 51
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -8964,7 +8986,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1838,
-        "llmOutputTokens": 29
+        "llmOutputTokens": 23
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -8992,8 +9014,8 @@
       "question": " John DiMaggio voices the character Shnitzel on Cartoon Network series created by who?",
       "goldAnswer": "C. H. Greenblatt",
       "type": "bridge",
-      "response": "Pendleton Ward",
-      "correct": false,
+      "response": "C. H. Greenblatt",
+      "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -9002,7 +9024,8 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1924,
-        "llmOutputTokens": 37
+        "llmOutputTokens": 41,
+        "hopTriggered": true
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -9030,7 +9053,7 @@
       "question": "Where was the air-cooled version of a weapon system used on the HMAS \"Narani\" found?",
       "goldAnswer": "World War I fighter aircraft.",
       "type": "bridge",
-      "response": "The context does not mention any air-cooled version of a weapon system used on HMAS Narani, so the location cannot be determined from the provided passages. FINAL: not specified in the provided context",
+      "response": "HMAS \"Narani",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -9040,7 +9063,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1760,
-        "llmOutputTokens": 49
+        "llmOutputTokens": 59
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -9078,7 +9101,8 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1954,
-        "llmOutputTokens": 40
+        "llmOutputTokens": 40,
+        "hopTriggered": true
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -9116,7 +9140,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1646,
-        "llmOutputTokens": 48
+        "llmOutputTokens": 28
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -9182,8 +9206,8 @@
       "question": "Not Richard, But Dick was an album by the band formed in what city?",
       "goldAnswer": "Philadelphia",
       "type": "bridge",
-      "response": "Atlanta, Georgia",
-      "correct": false,
+      "response": "Philadelphia, Pennsylvania",
+      "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -9192,7 +9216,8 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1902,
-        "llmOutputTokens": 49
+        "llmOutputTokens": 25,
+        "hopTriggered": true
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -9382,7 +9407,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1926,
-        "llmOutputTokens": 63
+        "llmOutputTokens": 65
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -9420,7 +9445,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1004,
-        "llmOutputTokens": 54
+        "llmOutputTokens": 55
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -9458,7 +9483,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1975,
-        "llmOutputTokens": 55
+        "llmOutputTokens": 20
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -9486,8 +9511,8 @@
       "question": "Are both Trace Cyrus and Jizzy Pearl vocalists?",
       "goldAnswer": "yes",
       "type": "comparison",
-      "response": "no",
-      "correct": false,
+      "response": "yes",
+      "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -9496,7 +9521,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1694,
-        "llmOutputTokens": 45
+        "llmOutputTokens": 14
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -9533,8 +9558,8 @@
         "pprIterations": 4,
         "pprConverged": true,
         "citedPassageCount": 10,
-        "llmInputTokens": 3488,
-        "llmOutputTokens": 195
+        "llmInputTokens": 1518,
+        "llmOutputTokens": 87
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -9572,7 +9597,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1608,
-        "llmOutputTokens": 8
+        "llmOutputTokens": 14
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -9724,7 +9749,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1409,
-        "llmOutputTokens": 20
+        "llmOutputTokens": 19
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -9761,8 +9786,10 @@
         "pprIterations": 3,
         "pprConverged": true,
         "citedPassageCount": 10,
-        "llmInputTokens": 1621,
-        "llmOutputTokens": 21
+        "llmInputTokens": 3435,
+        "llmOutputTokens": 53,
+        "hopTriggered": true,
+        "hopEntity": "Pornhub"
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -9799,8 +9826,8 @@
         "pprIterations": 4,
         "pprConverged": true,
         "citedPassageCount": 10,
-        "llmInputTokens": 1604,
-        "llmOutputTokens": 30
+        "llmInputTokens": 1577,
+        "llmOutputTokens": 24
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -9828,17 +9855,17 @@
       "question": "Who is younger, Keisuke Kuwata or Moya Brennan?",
       "goldAnswer": "Keisuke Kuwata",
       "type": "comparison",
-      "response": "Keisuke Kuwata is younger than Moya Brennan, since Keisuke Kuwata was born in 1956 and Moya Brennan was born in 1952. FINAL: Keisuke Kuwata",
+      "response": "Keisuke Kuwata",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
         "fallbackTriggered": false,
-        "pprIterations": 3,
+        "pprIterations": 4,
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1427,
-        "llmOutputTokens": 45
+        "llmOutputTokens": 42
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -9876,7 +9903,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1687,
-        "llmOutputTokens": 47
+        "llmOutputTokens": 49
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -9904,8 +9931,8 @@
       "question": "Who died last Vladimir Arnold or Georg Cantor?",
       "goldAnswer": "Vladimir Igorevich Arnold",
       "type": "comparison",
-      "response": "Georg Cantor",
-      "correct": false,
+      "response": "Vladimir Arnold",
+      "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -9914,7 +9941,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1625,
-        "llmOutputTokens": 53
+        "llmOutputTokens": 50
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -10056,7 +10083,7 @@
       "question": "In 2008, who were the two actors stared along with a South Korean actor, singer, and model who won best actor in five prestigious award ceremonies.",
       "goldAnswer": "Best Actor prize",
       "type": "bridge",
-      "response": "Park Sung-woong and Kim Ji-han",
+      "response": "Song Kang-ho and Jung Woo-sung",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -10065,8 +10092,10 @@
         "pprIterations": 4,
         "pprConverged": true,
         "citedPassageCount": 10,
-        "llmInputTokens": 2103,
-        "llmOutputTokens": 90
+        "llmInputTokens": 4643,
+        "llmOutputTokens": 182,
+        "hopTriggered": true,
+        "hopEntity": "The Good, the Bad, the Weird"
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -10094,7 +10123,7 @@
       "question": "Near what ocean does the highway carried by the Long-Allen bridge terminate near?",
       "goldAnswer": "the Atlantic Ocean",
       "type": "bridge",
-      "response": "Pacific Ocean",
+      "response": "Pacific Ocean coast",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -10104,7 +10133,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2023,
-        "llmOutputTokens": 50
+        "llmOutputTokens": 48
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -10142,7 +10171,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1421,
-        "llmOutputTokens": 67
+        "llmOutputTokens": 66
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -10294,7 +10323,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1866,
-        "llmOutputTokens": 62
+        "llmOutputTokens": 59
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -10332,7 +10361,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1674,
-        "llmOutputTokens": 38
+        "llmOutputTokens": 32
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -10370,7 +10399,8 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1590,
-        "llmOutputTokens": 50
+        "llmOutputTokens": 48,
+        "hopTriggered": true
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -10408,7 +10438,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1559,
-        "llmOutputTokens": 49
+        "llmOutputTokens": 34
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -10419,8 +10449,8 @@
         "passage:hotpotqa_batch_058:10",
         "passage:hotpotqa_batch_019:49",
         "passage:hotpotqa_batch_053:33",
-        "passage:hotpotqa_batch_067:9",
         "passage:hotpotqa_batch_019:37",
+        "passage:hotpotqa_batch_067:9",
         "passage:hotpotqa_batch_053:26"
       ],
       "contextPreview": [
@@ -10484,7 +10514,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1636,
-        "llmOutputTokens": 32
+        "llmOutputTokens": 26
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -10522,7 +10552,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1721,
-        "llmOutputTokens": 83
+        "llmOutputTokens": 84
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -10560,7 +10590,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1645,
-        "llmOutputTokens": 47
+        "llmOutputTokens": 29
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -10598,7 +10628,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1353,
-        "llmOutputTokens": 63
+        "llmOutputTokens": 30
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -10626,7 +10656,7 @@
       "question": "What time did the show, in which Gordon Burns was the host, usually air on Monday?",
       "goldAnswer": "7pm",
       "type": "bridge",
-      "response": "18:00 to 19:00",
+      "response": "19 April 1993 to 14 October 1994",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -10635,8 +10665,11 @@
         "pprIterations": 4,
         "pprConverged": true,
         "citedPassageCount": 10,
-        "llmInputTokens": 1700,
-        "llmOutputTokens": 70
+        "llmInputTokens": 3870,
+        "llmOutputTokens": 165,
+        "hopTriggered": true,
+        "hopEntity": "100% Entertainment",
+        "answerReplaced": true
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -10674,7 +10707,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1694,
-        "llmOutputTokens": 9
+        "llmOutputTokens": 15
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -10702,7 +10735,7 @@
       "question": "What type of group does Pablo Carballo and Argentine Air Force have in common?",
       "goldAnswer": "military",
       "type": "bridge",
-      "response": "national aviation branch",
+      "response": "Argentine Air Force",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -10712,7 +10745,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1700,
-        "llmOutputTokens": 25
+        "llmOutputTokens": 44
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -10788,7 +10821,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2169,
-        "llmOutputTokens": 71
+        "llmOutputTokens": 72
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -10892,8 +10925,8 @@
       "question": "The first person to reach both poles named a glacier after which person? ",
       "goldAnswer": "the daughter of Fridtjof Nansen.",
       "type": "bridge",
-      "response": "Roald Amundsen",
-      "correct": false,
+      "response": "Fridtjof Nansen",
+      "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -10902,7 +10935,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1631,
-        "llmOutputTokens": 65
+        "llmOutputTokens": 81
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -10978,7 +11011,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1421,
-        "llmOutputTokens": 49
+        "llmOutputTokens": 44
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -11006,7 +11039,7 @@
       "question": "The Kilby International Awards were named after the inventor who discovered what electronics phenomenon?",
       "goldAnswer": "integrated circuit",
       "type": "bridge",
-      "response": "the first integrated circuit",
+      "response": "first integrated circuit",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -11015,8 +11048,8 @@
         "pprIterations": 4,
         "pprConverged": true,
         "citedPassageCount": 10,
-        "llmInputTokens": 1517,
-        "llmOutputTokens": 63
+        "llmInputTokens": 1490,
+        "llmOutputTokens": 18
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -11054,7 +11087,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2469,
-        "llmOutputTokens": 21
+        "llmOutputTokens": 7
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -11130,7 +11163,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1396,
-        "llmOutputTokens": 22
+        "llmOutputTokens": 35
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -11158,8 +11191,8 @@
       "question": "Which of these artists is older, Warrel Dane or Roy Khan?",
       "goldAnswer": "Warrel Dane",
       "type": "comparison",
-      "response": "Roy Khan",
-      "correct": false,
+      "response": "Warrel Dane",
+      "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -11168,7 +11201,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1617,
-        "llmOutputTokens": 18
+        "llmOutputTokens": 41
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -11206,7 +11239,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1786,
-        "llmOutputTokens": 23
+        "llmOutputTokens": 17
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -11244,7 +11277,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1495,
-        "llmOutputTokens": 52
+        "llmOutputTokens": 54
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -11272,8 +11305,8 @@
       "question": "What is the day of the horse race of which ESPN covers both the post position draw and the undercard races?",
       "goldAnswer": "Saturday",
       "type": "bridge",
-      "response": "first Saturday in May",
-      "correct": true,
+      "response": "Black-Eyed Susan Stakes Day",
+      "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -11282,7 +11315,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1716,
-        "llmOutputTokens": 34
+        "llmOutputTokens": 29
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -11319,8 +11352,11 @@
         "pprIterations": 4,
         "pprConverged": true,
         "citedPassageCount": 10,
-        "llmInputTokens": 1738,
-        "llmOutputTokens": 76
+        "llmInputTokens": 3820,
+        "llmOutputTokens": 92,
+        "hopTriggered": true,
+        "hopEntity": "Office Depot Center",
+        "answerReplaced": true
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -11396,7 +11432,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1448,
-        "llmOutputTokens": 45
+        "llmOutputTokens": 28
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -11424,7 +11460,7 @@
       "question": "Where is the group of islands named after Purdue University's professor of forest ecology from 1947 to 1973?",
       "goldAnswer": "the northwest tip of Canisteo Peninsula in Amundsen Sea",
       "type": "bridge",
-      "response": "just off the northwest tip of Canisteo Peninsula in Amundsen Sea",
+      "response": "just off the northwest tip of Canisteo Peninsula in Amundsen Sea, Antarctica",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -11434,7 +11470,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1767,
-        "llmOutputTokens": 64
+        "llmOutputTokens": 68
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -11547,8 +11583,11 @@
         "pprIterations": 4,
         "pprConverged": true,
         "citedPassageCount": 10,
-        "llmInputTokens": 1895,
-        "llmOutputTokens": 74
+        "llmInputTokens": 4189,
+        "llmOutputTokens": 111,
+        "hopTriggered": true,
+        "hopEntity": "Donald Trump",
+        "answerReplaced": true
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -11586,7 +11625,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1821,
-        "llmOutputTokens": 78
+        "llmOutputTokens": 56
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -11624,7 +11663,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1484,
-        "llmOutputTokens": 14
+        "llmOutputTokens": 43
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -11662,7 +11701,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1412,
-        "llmOutputTokens": 48
+        "llmOutputTokens": 44
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -11738,7 +11777,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1561,
-        "llmOutputTokens": 65
+        "llmOutputTokens": 62
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -11814,7 +11853,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1759,
-        "llmOutputTokens": 38
+        "llmOutputTokens": 34
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -11852,7 +11891,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1542,
-        "llmOutputTokens": 23
+        "llmOutputTokens": 36
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -11928,7 +11967,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1940,
-        "llmOutputTokens": 34
+        "llmOutputTokens": 36
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -11966,7 +12005,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2076,
-        "llmOutputTokens": 14
+        "llmOutputTokens": 8
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -12032,7 +12071,7 @@
       "question": "What city does the company that owns Bumble and bumble have its headquarters in?",
       "goldAnswer": "New York City",
       "type": "bridge",
-      "response": "Midtown Manhattan, New York City",
+      "response": "New York City",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -12042,7 +12081,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1426,
-        "llmOutputTokens": 30
+        "llmOutputTokens": 52
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -12070,7 +12109,7 @@
       "question": "Who was the ruler ousted by the 30th Prime Minister of Cambodia after Khmer Rouge's victory over the Lon Nol government?",
       "goldAnswer": "Prince of Cambodia Norodom Sihanouk",
       "type": "bridge",
-      "response": "Prince of Cambodia Norodom Sihanouk",
+      "response": "Norodom Sihanouk",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -12079,8 +12118,8 @@
         "pprIterations": 4,
         "pprConverged": true,
         "citedPassageCount": 10,
-        "llmInputTokens": 2022,
-        "llmOutputTokens": 33
+        "llmInputTokens": 1995,
+        "llmOutputTokens": 22
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -12156,7 +12195,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1833,
-        "llmOutputTokens": 9
+        "llmOutputTokens": 12
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -12194,7 +12233,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1671,
-        "llmOutputTokens": 31
+        "llmOutputTokens": 37
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -12222,8 +12261,8 @@
       "question": "Which terrorist group was the cause of the battle in which Mark E. Michell won an award for his actions?",
       "goldAnswer": "al-Qaeda",
       "type": "bridge",
-      "response": "al-Qaeda",
-      "correct": true,
+      "response": "Taliban's Islamic Emirate of Afghanistan",
+      "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -12231,8 +12270,11 @@
         "pprIterations": 4,
         "pprConverged": true,
         "citedPassageCount": 10,
-        "llmInputTokens": 2035,
-        "llmOutputTokens": 54
+        "llmInputTokens": 4237,
+        "llmOutputTokens": 131,
+        "hopTriggered": true,
+        "hopEntity": "al-Qaeda",
+        "answerReplaced": true
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -12260,7 +12302,7 @@
       "question": "The primary jockey of Binocular was Champion Jockey how many consecutive times?",
       "goldAnswer": "20",
       "type": "bridge",
-      "response": "Tony McCoy 20 times",
+      "response": "Tony McCoy was Champion Jockey 20 consecutive times",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -12270,7 +12312,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1442,
-        "llmOutputTokens": 41
+        "llmOutputTokens": 60
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -12384,7 +12426,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1698,
-        "llmOutputTokens": 43
+        "llmOutputTokens": 73
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -12422,7 +12464,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1497,
-        "llmOutputTokens": 32
+        "llmOutputTokens": 40
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -12526,7 +12568,7 @@
       "question": "Live Acoustic America features a cover of a Beatles song that peaked at what number in the United Kingdom?",
       "goldAnswer": "4",
       "type": "bridge",
-      "response": "No. 4 in the United Kingdom",
+      "response": "No. 4",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -12536,7 +12578,8 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1361,
-        "llmOutputTokens": 58
+        "llmOutputTokens": 34,
+        "hopTriggered": true
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -12640,8 +12683,8 @@
       "question": "Are Mirpur University of Science and Technology and University of Debrecen both Universities located outside of the United States?",
       "goldAnswer": "yes",
       "type": "comparison",
-      "response": "yes",
-      "correct": true,
+      "response": "no",
+      "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -12650,7 +12693,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1645,
-        "llmOutputTokens": 52
+        "llmOutputTokens": 14
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -12687,8 +12730,8 @@
         "pprIterations": 4,
         "pprConverged": true,
         "citedPassageCount": 10,
-        "llmInputTokens": 4772,
-        "llmOutputTokens": 161
+        "llmInputTokens": 2208,
+        "llmOutputTokens": 67
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -12699,8 +12742,8 @@
         "passage:hotpotqa_batch_030:10",
         "passage:hotpotqa_batch_001:42",
         "passage:hotpotqa_batch_025:34",
-        "passage:hotpotqa_batch_051:17",
         "passage:hotpotqa_batch_009:12",
+        "passage:hotpotqa_batch_051:17",
         "passage:hotpotqa_batch_001:36"
       ],
       "contextPreview": [
@@ -12725,8 +12768,10 @@
         "pprIterations": 4,
         "pprConverged": true,
         "citedPassageCount": 10,
-        "llmInputTokens": 1754,
-        "llmOutputTokens": 36
+        "llmInputTokens": 3651,
+        "llmOutputTokens": 72,
+        "hopTriggered": true,
+        "hopEntity": "J. Cole"
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -12764,7 +12809,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1312,
-        "llmOutputTokens": 29
+        "llmOutputTokens": 32
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -12802,7 +12847,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2293,
-        "llmOutputTokens": 74
+        "llmOutputTokens": 76
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -12916,7 +12961,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1781,
-        "llmOutputTokens": 22
+        "llmOutputTokens": 28
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -13106,7 +13151,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1749,
-        "llmOutputTokens": 27
+        "llmOutputTokens": 35
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -13172,8 +13217,8 @@
       "question": "What is the birthplace of YouTube's 2016 overview featured creator Wengie?",
       "goldAnswer": "Guangzhou, China",
       "type": "bridge",
-      "response": "Guangzhou, China",
-      "correct": true,
+      "response": "Australia",
+      "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -13181,8 +13226,11 @@
         "pprIterations": 4,
         "pprConverged": true,
         "citedPassageCount": 10,
-        "llmInputTokens": 1745,
-        "llmOutputTokens": 59
+        "llmInputTokens": 3980,
+        "llmOutputTokens": 147,
+        "hopTriggered": true,
+        "hopEntity": "Wengie",
+        "answerReplaced": true
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -13191,11 +13239,11 @@
         "passage:hotpotqa_batch_037:36",
         "passage:hotpotqa_batch_030:10",
         "passage:hotpotqa_batch_017:30",
-        "passage:hotpotqa_batch_051:17",
         "passage:hotpotqa_batch_043:32",
+        "passage:hotpotqa_batch_051:17",
+        "passage:hotpotqa_batch_056:40",
         "passage:hotpotqa_batch_057:42",
-        "passage:hotpotqa_batch_048:41",
-        "passage:hotpotqa_batch_056:40"
+        "passage:hotpotqa_batch_048:41"
       ],
       "contextPreview": [
         "# Lilly Singh\n\nLilly Singh (born 26 September 1988) is a Canadian YouTube personality, vlogger, come",
@@ -13220,7 +13268,8 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1420,
-        "llmOutputTokens": 34
+        "llmOutputTokens": 33,
+        "hopTriggered": true
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -13372,7 +13421,8 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1494,
-        "llmOutputTokens": 39
+        "llmOutputTokens": 35,
+        "hopTriggered": true
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -13384,8 +13434,8 @@
         "passage:hotpotqa_batch_001:41",
         "passage:hotpotqa_batch_053:8",
         "passage:hotpotqa_batch_001:36",
-        "passage:hotpotqa_batch_001:34",
-        "passage:hotpotqa_batch_001:35"
+        "passage:hotpotqa_batch_001:35",
+        "passage:hotpotqa_batch_001:34"
       ],
       "contextPreview": [
         "# Nicole Gordon (badminton)\n\nNicole Gordon (born 17 March 1976 in Lower Hutt, New Zealand) is a fema",
@@ -13410,7 +13460,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2067,
-        "llmOutputTokens": 41
+        "llmOutputTokens": 43
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -13590,8 +13640,8 @@
       "question": "Who directed the 2007 film which  Sasson Gabai won an Ophir Award for?",
       "goldAnswer": "Eran Kolirin",
       "type": "bridge",
-      "response": "Eran Kolirin",
-      "correct": true,
+      "response": "The Band's Visit",
+      "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -13600,7 +13650,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1649,
-        "llmOutputTokens": 69
+        "llmOutputTokens": 96
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -13638,7 +13688,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2108,
-        "llmOutputTokens": 22
+        "llmOutputTokens": 52
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -13714,7 +13764,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1814,
-        "llmOutputTokens": 50
+        "llmOutputTokens": 41
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -13752,7 +13802,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2061,
-        "llmOutputTokens": 25
+        "llmOutputTokens": 39
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -13828,7 +13878,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2645,
-        "llmOutputTokens": 79
+        "llmOutputTokens": 103
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -13941,8 +13991,8 @@
         "pprIterations": 4,
         "pprConverged": true,
         "citedPassageCount": 10,
-        "llmInputTokens": 3416,
-        "llmOutputTokens": 189
+        "llmInputTokens": 1460,
+        "llmOutputTokens": 102
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -14018,7 +14068,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1686,
-        "llmOutputTokens": 45
+        "llmOutputTokens": 46
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -14056,7 +14106,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1944,
-        "llmOutputTokens": 45
+        "llmOutputTokens": 74
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -14094,7 +14144,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1484,
-        "llmOutputTokens": 55
+        "llmOutputTokens": 50
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -14160,7 +14210,7 @@
       "question": "The vynil collectible Vinylmation are all shaped with the body of a cartoon character created by who ?",
       "goldAnswer": "Walt Disney and Ub Iwerks",
       "type": "bridge",
-      "response": "Walt Disney",
+      "response": "Walt Disney and Ub Iwerks",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -14170,7 +14220,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1555,
-        "llmOutputTokens": 54
+        "llmOutputTokens": 61
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -14208,7 +14258,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1503,
-        "llmOutputTokens": 51
+        "llmOutputTokens": 14
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -14246,7 +14296,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1815,
-        "llmOutputTokens": 21
+        "llmOutputTokens": 41
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -14284,7 +14334,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1625,
-        "llmOutputTokens": 33
+        "llmOutputTokens": 37
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -14322,7 +14372,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1549,
-        "llmOutputTokens": 31
+        "llmOutputTokens": 72
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -14398,7 +14448,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1541,
-        "llmOutputTokens": 18
+        "llmOutputTokens": 24
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -14426,8 +14476,8 @@
       "question": "What is the name of the person that named Moltke Nunatak after the Chief of the German General staff that served from 1906 to 1914?",
       "goldAnswer": "Second German Antarctic Expedition of 1911–12 under Wilhelm Filchner.",
       "type": "bridge",
-      "response": "Helmuth Johann Ludwig von Moltke",
-      "correct": false,
+      "response": "Wilhelm Filchner",
+      "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -14436,7 +14486,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1828,
-        "llmOutputTokens": 47
+        "llmOutputTokens": 72
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -14474,15 +14524,15 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1544,
-        "llmOutputTokens": 33
+        "llmOutputTokens": 22
       },
       "citationCount": 10,
       "citedPassageIds": [
         "passage:hotpotqa_batch_024:23",
         "passage:hotpotqa_batch_063:49",
         "passage:hotpotqa_batch_029:47",
-        "passage:hotpotqa_batch_032:19",
         "passage:hotpotqa_batch_057:11",
+        "passage:hotpotqa_batch_032:19",
         "passage:hotpotqa_batch_043:36",
         "passage:hotpotqa_batch_072:9",
         "passage:hotpotqa_batch_046:47",
@@ -14493,8 +14543,8 @@
         "# Darko Kovačević\n\nDarko Kovačević (] ; Serbian Cyrillic: ; born 18 November 1973) is a Serbian form",
         "# Nihat Kahveci\n\nNihat Kahveci (born 23 November 1979) is a Turkish former footballer who played as ",
         "# Elsad Zverotić\n\nElsad Zverotić (Montenegrin Cyrillic: Eлcaд Звepoтић, born 31 October 1986) is a M",
-        "# Ferdi Taygan\n\nFerdi Taygan (born December 5, 1956), is a former professional tennis player from th",
-        "# Marko Dmitrović\n\nMarko Dmitrović (born 24 January 1992) is a Serbian professional footballer who p"
+        "# Marko Dmitrović\n\nMarko Dmitrović (born 24 January 1992) is a Serbian professional footballer who p",
+        "# Ferdi Taygan\n\nFerdi Taygan (born December 5, 1956), is a former professional tennis player from th"
       ]
     },
     {
@@ -14626,7 +14676,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1748,
-        "llmOutputTokens": 41
+        "llmOutputTokens": 52
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -14664,7 +14714,8 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2030,
-        "llmOutputTokens": 62
+        "llmOutputTokens": 82,
+        "hopTriggered": true
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -14702,7 +14753,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1803,
-        "llmOutputTokens": 42
+        "llmOutputTokens": 41
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -14740,7 +14791,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1793,
-        "llmOutputTokens": 73
+        "llmOutputTokens": 58
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -14882,8 +14933,8 @@
       "question": "Who was born first, Andy Warhol or Alexander Butler?",
       "goldAnswer": "Alexander Butler",
       "type": "comparison",
-      "response": "Andy Warhol",
-      "correct": false,
+      "response": "Alexander Butler",
+      "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -14892,7 +14943,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1995,
-        "llmOutputTokens": 21
+        "llmOutputTokens": 19
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -14903,8 +14954,8 @@
         "passage:hotpotqa_batch_007:13",
         "passage:hotpotqa_batch_041:48",
         "passage:hotpotqa_batch_045:37",
-        "passage:hotpotqa_batch_019:16",
         "passage:hotpotqa_batch_037:15",
+        "passage:hotpotqa_batch_019:16",
         "passage:hotpotqa_batch_046:39"
       ],
       "contextPreview": [
@@ -14930,7 +14981,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2197,
-        "llmOutputTokens": 48
+        "llmOutputTokens": 44
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -14958,7 +15009,7 @@
       "question": "Kresy, which roughly was a part of the land beyond the so-called Curson Line, was drawn for what reason?",
       "goldAnswer": "demarcation line between the newly emerging states, the Second Polish Republic, and the Soviet Union",
       "type": "bridge",
-      "response": "to serve as a diplomatic basis for the future border agreement",
+      "response": "a diplomatic basis for the future border agreement",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -14968,7 +15019,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1736,
-        "llmOutputTokens": 61
+        "llmOutputTokens": 58
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -14996,8 +15047,8 @@
       "question": "What city is the women's Vans Triple Crown of Surfing event hosted at?",
       "goldAnswer": "City and County of Honolulu",
       "type": "bridge",
-      "response": "Honolulu",
-      "correct": true,
+      "response": "North Shore, Oahu, Hawaii",
+      "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -15006,7 +15057,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1887,
-        "llmOutputTokens": 44
+        "llmOutputTokens": 40
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -15044,7 +15095,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2008,
-        "llmOutputTokens": 40
+        "llmOutputTokens": 38
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -15082,7 +15133,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1643,
-        "llmOutputTokens": 30
+        "llmOutputTokens": 36
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -15110,7 +15161,7 @@
       "question": "What city is the the Iranian Airlines involved in the 1993 Tehran mid-air collision based out of?",
       "goldAnswer": "Tehran, Iran",
       "type": "bridge",
-      "response": "Tehran, Iran",
+      "response": "Tehran",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -15120,7 +15171,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1690,
-        "llmOutputTokens": 45
+        "llmOutputTokens": 38
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -15196,7 +15247,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1979,
-        "llmOutputTokens": 58
+        "llmOutputTokens": 57
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -15262,7 +15313,7 @@
       "question": "What movies has Juno Temple starred in?",
       "goldAnswer": "She has appeared in films such as \" Black Mass\", \"The Other Boleyn Girl\", \"Wild Child\", \"Atonement\", \"Maleficent\", \"The Three Musketeers\" and \"The Dark Knight Rises\".",
       "type": "bridge",
-      "response": "Black Mass, The Other Boleyn Girl, Wild Child, Atonement, Maleficent, The Three Musketeers, The Dark Knight Rises, Dirty Girl, Magic Magic, Jack & Diane, and Cracks",
+      "response": "Black Mass, The Other Boleyn Girl, Wild Child, Atonement, Maleficent, The Three Musketeers, and The Dark Knight Rises",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -15272,7 +15323,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1392,
-        "llmOutputTokens": 104
+        "llmOutputTokens": 78
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -15338,7 +15389,7 @@
       "question": "Martin Flavin and Peter Benchley both did what occupation?",
       "goldAnswer": "novelist",
       "type": "comparison",
-      "response": "American authors",
+      "response": "American author",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -15348,7 +15399,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1353,
-        "llmOutputTokens": 27
+        "llmOutputTokens": 25
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -15386,7 +15437,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1622,
-        "llmOutputTokens": 43
+        "llmOutputTokens": 32
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -15414,7 +15465,7 @@
       "question": "The Admiral's Men occupied which kind of theatre in the 1590s ?",
       "goldAnswer": "Elizabethan theatre",
       "type": "bridge",
-      "response": "Rose Theatre",
+      "response": "the Rose Theatre",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -15424,7 +15475,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1597,
-        "llmOutputTokens": 29
+        "llmOutputTokens": 36
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -15500,7 +15551,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1686,
-        "llmOutputTokens": 46
+        "llmOutputTokens": 45
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -15604,7 +15655,7 @@
       "question": "3:10 to Yuma starred what American actor also known for his role as Hoban Washburne?",
       "goldAnswer": "Alan Tudyk",
       "type": "bridge",
-      "response": "Alan Wray Tudyk",
+      "response": "Alan Tudyk",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -15614,7 +15665,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2373,
-        "llmOutputTokens": 47
+        "llmOutputTokens": 39
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -15718,7 +15769,7 @@
       "question": "what is the english name of Émile Verdets editorial?",
       "goldAnswer": "Annals of Chemistry and of Physics",
       "type": "bridge",
-      "response": "insufficient information",
+      "response": "Émile Verdets editorial",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -15728,7 +15779,8 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1619,
-        "llmOutputTokens": 41
+        "llmOutputTokens": 51,
+        "hopTriggered": true
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -15804,7 +15856,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1644,
-        "llmOutputTokens": 46
+        "llmOutputTokens": 72
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -15880,7 +15932,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1885,
-        "llmOutputTokens": 45
+        "llmOutputTokens": 38
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -15946,7 +15998,7 @@
       "question": "The song by English indie rock band Florence and the Machine written by Florence Welch and Francis \"Eg\" White and released in 2011 is named after the painting which was completed in which year?",
       "goldAnswer": "1938",
       "type": "bridge",
-      "response": "2011",
+      "response": "Lover to Lover",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -15956,7 +16008,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1814,
-        "llmOutputTokens": 85
+        "llmOutputTokens": 96
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -16032,7 +16084,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1303,
-        "llmOutputTokens": 49
+        "llmOutputTokens": 35
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -16108,7 +16160,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1709,
-        "llmOutputTokens": 68
+        "llmOutputTokens": 36
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -16184,7 +16236,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1408,
-        "llmOutputTokens": 45
+        "llmOutputTokens": 66
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -16336,7 +16388,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1563,
-        "llmOutputTokens": 34
+        "llmOutputTokens": 38
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -16374,7 +16426,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1643,
-        "llmOutputTokens": 38
+        "llmOutputTokens": 24
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -16440,7 +16492,7 @@
       "question": "when was Quiet in Heaven/Song of Liberty recorded?",
       "goldAnswer": "Before settling on their current name in 1982",
       "type": "bridge",
-      "response": "The context does not give a recording date for \"Quiet in Heaven\"/\"Song of Liberty\"; it only says it was the only official release by Faith No Man. FINAL: not specified in the provided context",
+      "response": "not specified in the provided context",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -16449,8 +16501,10 @@
         "pprIterations": 4,
         "pprConverged": true,
         "citedPassageCount": 10,
-        "llmInputTokens": 1824,
-        "llmOutputTokens": 50
+        "llmInputTokens": 4164,
+        "llmOutputTokens": 102,
+        "hopTriggered": true,
+        "hopEntity": "Faith No Man"
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -16478,7 +16532,7 @@
       "question": "Janet Williams has performed with an internationally recognized solo pianist whose recordings have earned him five what?",
       "goldAnswer": "Grammy awards",
       "type": "bridge",
-      "response": "five Grammy Awards nominations",
+      "response": "Grammy Awards",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -16487,8 +16541,11 @@
         "pprIterations": 4,
         "pprConverged": true,
         "citedPassageCount": 10,
-        "llmInputTokens": 1834,
-        "llmOutputTokens": 35
+        "llmInputTokens": 4051,
+        "llmOutputTokens": 67,
+        "hopTriggered": true,
+        "hopEntity": "Fred Hersch",
+        "answerReplaced": true
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -16564,7 +16621,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1836,
-        "llmOutputTokens": 72
+        "llmOutputTokens": 60
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -16602,7 +16659,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2400,
-        "llmOutputTokens": 42
+        "llmOutputTokens": 41
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -16754,7 +16811,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1555,
-        "llmOutputTokens": 23
+        "llmOutputTokens": 17
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -16867,8 +16924,8 @@
         "pprIterations": 4,
         "pprConverged": true,
         "citedPassageCount": 10,
-        "llmInputTokens": 4090,
-        "llmOutputTokens": 141
+        "llmInputTokens": 1777,
+        "llmOutputTokens": 57
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -16906,7 +16963,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1719,
-        "llmOutputTokens": 23
+        "llmOutputTokens": 17
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -16944,7 +17001,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1720,
-        "llmOutputTokens": 73
+        "llmOutputTokens": 67
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -16982,7 +17039,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2118,
-        "llmOutputTokens": 37
+        "llmOutputTokens": 21
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -17010,7 +17067,7 @@
       "question": "What role was the English actress. who starred in The Priory known for ",
       "goldAnswer": "Sarah Hurst in \"Easy Virtue\"",
       "type": "bridge",
-      "response": "C.J. Lamb on the NBC drama series \"L.A. Law",
+      "response": "Mrs. Robinson in \"The Graduate",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -17020,7 +17077,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1745,
-        "llmOutputTokens": 65
+        "llmOutputTokens": 76
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -17058,7 +17115,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1731,
-        "llmOutputTokens": 79
+        "llmOutputTokens": 50
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -17096,7 +17153,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1829,
-        "llmOutputTokens": 50
+        "llmOutputTokens": 56
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -17134,7 +17191,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1821,
-        "llmOutputTokens": 30
+        "llmOutputTokens": 32
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -17172,7 +17229,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1977,
-        "llmOutputTokens": 71
+        "llmOutputTokens": 22
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -17276,7 +17333,7 @@
       "question": "What flag features 13 stars, and has a creator who also has a memorial bridge named after her connecting Pennsylvania and New Jersey?",
       "goldAnswer": "Betsy Ross",
       "type": "bridge",
-      "response": "Betsy Ross flag",
+      "response": "The Betsy Ross flag",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -17286,7 +17343,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2118,
-        "llmOutputTokens": 54
+        "llmOutputTokens": 22
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -17314,8 +17371,8 @@
       "question": "Where was one of Sergei Prokofiev's most well-known operas first performed in 1921?",
       "goldAnswer": "Chicago, Illinois",
       "type": "bridge",
-      "response": "Chicago Opera Association",
-      "correct": false,
+      "response": "Chicago",
+      "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -17324,7 +17381,8 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2149,
-        "llmOutputTokens": 65
+        "llmOutputTokens": 65,
+        "hopTriggered": true
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -17362,7 +17420,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1410,
-        "llmOutputTokens": 33
+        "llmOutputTokens": 40
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -17438,7 +17496,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1851,
-        "llmOutputTokens": 71
+        "llmOutputTokens": 69
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -17590,7 +17648,8 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1393,
-        "llmOutputTokens": 35
+        "llmOutputTokens": 36,
+        "hopTriggered": true
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -17884,7 +17943,7 @@
       "question": "At what theater is the composer and lyricist for the musical Big Fish a residential artist?",
       "goldAnswer": "Ars Nova Theater",
       "type": "bridge",
-      "response": "Ars Nova Theater in New York City",
+      "response": "The Ars Nova Theater in New York City",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -17894,7 +17953,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1481,
-        "llmOutputTokens": 48
+        "llmOutputTokens": 28
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -17932,7 +17991,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1920,
-        "llmOutputTokens": 31
+        "llmOutputTokens": 79
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -18008,7 +18067,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1406,
-        "llmOutputTokens": 74
+        "llmOutputTokens": 65
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -18036,7 +18095,7 @@
       "question": " \"Collateral Damage\" is an episode of the television series \"Millennium\" and features the host of a late night talk show that airs how often?",
       "goldAnswer": "seven nights a week",
       "type": "bridge",
-      "response": "from 1989 to 1992",
+      "response": "regularly from 1989 to 1992",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -18046,7 +18105,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1455,
-        "llmOutputTokens": 79
+        "llmOutputTokens": 102
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -18122,7 +18181,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1426,
-        "llmOutputTokens": 39
+        "llmOutputTokens": 33
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -18198,7 +18257,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1568,
-        "llmOutputTokens": 37
+        "llmOutputTokens": 49
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -18236,7 +18295,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1365,
-        "llmOutputTokens": 36
+        "llmOutputTokens": 43
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -18264,7 +18323,7 @@
       "question": "The university where Rolf Martin Theodor Dahlgren worked as a professor has how many employees?",
       "goldAnswer": "9,000",
       "type": "bridge",
-      "response": "130 employees",
+      "response": "approximately 30,000 employees",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -18274,7 +18333,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1662,
-        "llmOutputTokens": 50
+        "llmOutputTokens": 56
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -18312,7 +18371,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1969,
-        "llmOutputTokens": 35
+        "llmOutputTokens": 53
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -18388,7 +18447,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1541,
-        "llmOutputTokens": 66
+        "llmOutputTokens": 47
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -18654,7 +18713,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1588,
-        "llmOutputTokens": 71
+        "llmOutputTokens": 69
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -18768,7 +18827,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2095,
-        "llmOutputTokens": 68
+        "llmOutputTokens": 70
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -18806,7 +18865,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1836,
-        "llmOutputTokens": 70
+        "llmOutputTokens": 72
       },
       "citationCount": 10,
       "citedPassageIds": [
@@ -18920,7 +18979,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1487,
-        "llmOutputTokens": 47
+        "llmOutputTokens": 41
       },
       "citationCount": 10,
       "citedPassageIds": [

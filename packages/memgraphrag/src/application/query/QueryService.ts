@@ -41,6 +41,9 @@ export interface QueryMetrics {
   readonly citedPassageCount: number;
   readonly llmInputTokens: number;
   readonly llmOutputTokens: number;
+  readonly hopTriggered?: boolean;
+  readonly hopEntity?: string;
+  readonly answerReplaced?: boolean;
 }
 
 export interface QueryResponse {
@@ -135,6 +138,9 @@ export class DefaultQueryService implements QueryService {
     let llmInputTokens = 0;
     let llmOutputTokens = 0;
     let templateFallbackTriggered = false;
+    let hopTriggered = false;
+    let hopEntity: string | undefined;
+    let answerReplaced = false;
 
     try {
       const prompt = isComparison
@@ -192,25 +198,31 @@ Reasoning and answer:`;
       llmInputTokens = llmResult.usage.inputTokens;
       llmOutputTokens = llmResult.usage.outputTokens;
 
-      // LLM-guided graph traversal (bridge queries only)
+      // LLM-guided graph traversal with groundedness gate (bridge queries only)
       if (!isComparison && this.dependencies.memoryStore) {
-        const hopPassages = await this.tryGraphHop(
-          request.corpusId,
-          expandedRequest.text,
-          context,
-          llmResult.text,
-        );
+        const firstAnswer = responseText;
+        const isGrounded = DefaultQueryService.isAnswerGrounded(firstAnswer, context);
 
-        if (hopPassages.length > 0) {
-          const citedIds = new Set(context.citedPassages.map(p => p.passageId));
-          const newPassages = hopPassages.filter(p => !citedIds.has(p.passageId));
+        if (!isGrounded) {
+          hopTriggered = true;
+          const hopResult = await this.tryGraphHop(
+            request.corpusId,
+            expandedRequest.text,
+            context,
+            llmResult.text,
+          );
 
-          if (newPassages.length > 0) {
-            const hopSection = newPassages
-              .slice(0, 3)
-              .map(p => `[${p.metadata.documentId}] ${p.text}`)
-              .join('\n\n');
-            const expandedPrompt = `You are answering a multi-hop question that requires connecting information across multiple passages.
+          if (hopResult.passages.length > 0) {
+            hopEntity = hopResult.entity;
+            const citedIds = new Set(context.citedPassages.map(p => p.passageId));
+            const newPassages = hopResult.passages.filter(p => !citedIds.has(p.passageId));
+
+            if (newPassages.length > 0) {
+              const hopSection = newPassages
+                .slice(0, 3)
+                .map(p => `[${p.metadata.documentId}] ${p.text}`)
+                .join('\n\n');
+              const expandedPrompt = `You are answering a multi-hop question that requires connecting information across multiple passages.
 
 Step-by-step:
 1. Identify the first entity or fact mentioned in the question
@@ -238,13 +250,26 @@ ${hopSection}
 
 Reasoning and answer:`;
 
-            llmResult = await this.dependencies.llm.generate({
-              prompt: expandedPrompt,
-              temperature: 0.0,
-            });
-            responseText = DefaultQueryService.extractFinalAnswer(llmResult.text);
-            llmInputTokens += llmResult.usage.inputTokens;
-            llmOutputTokens += llmResult.usage.outputTokens;
+              const hopLlmResult = await this.dependencies.llm.generate({
+                prompt: expandedPrompt,
+                temperature: 0.0,
+              });
+              const hopAnswer = DefaultQueryService.extractFinalAnswer(hopLlmResult.text);
+              llmInputTokens += hopLlmResult.usage.inputTokens;
+              llmOutputTokens += hopLlmResult.usage.outputTokens;
+
+              // Replacement policy: only replace if new answer is grounded in expanded context
+              const expandedPassageTexts = [
+                ...context.citedPassages.map(p => p.text),
+                ...newPassages.map(p => p.text),
+              ];
+              const hopGrounded = DefaultQueryService.isTextInPassages(hopAnswer, expandedPassageTexts);
+              if (hopGrounded) {
+                responseText = hopAnswer;
+                answerReplaced = true;
+              }
+              // else: keep firstAnswer — it was the best we had
+            }
           }
         }
       }
@@ -272,31 +297,56 @@ Reasoning and answer:`;
         citedPassageCount: context.citedPassages.length,
         llmInputTokens,
         llmOutputTokens,
+        hopTriggered: hopTriggered || undefined,
+        hopEntity,
+        answerReplaced: answerReplaced || undefined,
       },
     };
   }
 
   /**
+   * Check if an answer string appears in any cited passage text.
+   * Used as the groundedness gate — if the answer isn't grounded in context,
+   * it likely needs additional retrieval.
+   */
+  private static isAnswerGrounded(answer: string, context: ContextBundle): boolean {
+    const passageTexts = context.citedPassages.map(p => p.text);
+    return DefaultQueryService.isTextInPassages(answer, passageTexts);
+  }
+
+  /**
+   * Check if a text string (typically an answer) appears in any of the given passage texts.
+   * Uses case-insensitive word-boundary matching.
+   */
+  private static isTextInPassages(text: string, passageTexts: readonly string[]): boolean {
+    if (!text || text.length < 2) return false;
+    const textLower = text.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (textLower.length < 2) return false;
+    for (const pt of passageTexts) {
+      const ptLower = pt.toLowerCase();
+      if (ptLower.includes(textLower)) return true;
+    }
+    // Token-level check: if >60% of answer tokens appear in concatenated passages
+    const tokens = textLower.split(' ').filter(t => t.length > 2);
+    if (tokens.length >= 2) {
+      const allText = passageTexts.join(' ').toLowerCase();
+      const matched = tokens.filter(t => allText.includes(t)).length;
+      if (matched >= tokens.length * 0.6) return true;
+    }
+    return false;
+  }
+
+  /**
    * LLM-guided graph traversal: ask LLM what bridge entity is missing,
    * then traverse fact→passage links to find relevant passages.
-   * Only triggers when the LLM's reasoning suggests incomplete information.
+   * Gate: triggers when FINAL answer is NOT grounded in cited passages.
    */
   private async tryGraphHop(
     corpusId: string,
     question: string,
     _context: ContextBundle,
     firstReasoning: string,
-  ): Promise<readonly Passage[]> {
-    // Gate: check if reasoning indicates uncertainty or incomplete chain
-    const uncertaintySignals = [
-      'not mentioned', 'no information', 'not clear', 'cannot determine',
-      'not found', 'not provided', 'insufficient', 'unclear',
-      'does not mention', 'no direct', 'not explicitly',
-    ];
-    const reasoningLower = firstReasoning.toLowerCase();
-    const hasUncertainty = uncertaintySignals.some(s => reasoningLower.includes(s));
-    if (!hasUncertainty) return [];
-
+  ): Promise<{ entity: string; passages: readonly Passage[] }> {
     try {
       // Ask LLM to identify the missing bridge entity
       const gatePrompt = `Given this question and the reasoning below, identify the ONE key entity from the context whose related passages would help complete the answer chain. Reply with ONLY the entity name (a person, place, organization, or work title), or "NONE" if no additional lookup is needed.
@@ -315,24 +365,35 @@ Missing entity:`;
 
       const entityName = gateResult.text.trim().replace(/^["']|["']$/g, '').trim();
       if (!entityName || entityName.toUpperCase() === 'NONE' || entityName.length > 100) {
-        return [];
+        return { entity: '', passages: [] };
       }
 
       // Graph traversal: entity name → matching facts → linked passages
       const snapshot = await this.dependencies.memoryStore!.load(corpusId);
       const entityLower = entityName.toLowerCase();
 
-      // Find facts mentioning this entity (head or tail)
-      const matchingFacts = snapshot.facts.filter(f =>
-        f.headEntity.toLowerCase().includes(entityLower)
-        || f.tailEntity.toLowerCase().includes(entityLower)
-        || entityLower.includes(f.headEntity.toLowerCase())
-        || entityLower.includes(f.tailEntity.toLowerCase()),
-      );
+      // Find facts mentioning this entity — exact match first, then substring
+      const exactFacts: Fact[] = [];
+      const substringFacts: Fact[] = [];
+      for (const f of snapshot.facts) {
+        const headLower = f.headEntity.toLowerCase();
+        const tailLower = f.tailEntity.toLowerCase();
+        if (headLower === entityLower || tailLower === entityLower) {
+          exactFacts.push(f);
+        } else if (
+          headLower.includes(entityLower) || tailLower.includes(entityLower)
+          || entityLower.includes(headLower) || entityLower.includes(tailLower)
+        ) {
+          substringFacts.push(f);
+        }
+      }
 
-      // Collect passage IDs from matching facts
+      // Prioritize exact matches, then substring matches
+      const rankedFacts = [...exactFacts, ...substringFacts];
+
+      // Collect passage IDs from ranked facts
       const passageIds = new Set<string>();
-      for (const fact of matchingFacts.slice(0, 30)) {
+      for (const fact of rankedFacts.slice(0, 30)) {
         for (const pid of fact.passageIds) {
           passageIds.add(pid);
         }
@@ -347,9 +408,9 @@ Missing entity:`;
         if (result.length >= 5) break;
       }
 
-      return result;
+      return { entity: entityName, passages: result };
     } catch {
-      return []; // Graceful degradation
+      return { entity: '', passages: [] }; // Graceful degradation
     }
   }
 
