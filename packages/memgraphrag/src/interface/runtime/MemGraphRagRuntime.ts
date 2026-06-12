@@ -259,6 +259,7 @@ class QueryServiceFacade implements QueryService {
       projection: new SQLiteGraphProjection(this.graphStore),
       contextBuilder: new SimpleContextBuilder(this.memoryStore),
       llm: this.llm,
+      memoryStore: this.memoryStore,
     });
     return service.query(request);
   }

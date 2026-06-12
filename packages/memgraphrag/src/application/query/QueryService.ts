@@ -14,6 +14,7 @@ import type {
 } from '../../domain/retrieval/ppr.js';
 import type { Fact } from '../../domain/memory/fact.js';
 import type { Passage } from '../../domain/memory/passage.js';
+import type { IMemoryStore } from '../../domain/storage/index.js';
 import { ThesaurusExpansionPolicy } from './ThesaurusExpansionPolicy.js';
 import { TemplateResponseGenerator } from './TemplateResponseGenerator.js';
 import { isComparisonQuery } from './comparisonDetector.js';
@@ -63,6 +64,7 @@ export interface QueryServiceDependencies {
   readonly contextBuilder: IContextBuilder;
   readonly llm: ILLMProvider;
   readonly responseGenerator?: TemplateResponseGenerator;
+  readonly memoryStore?: IMemoryStore;
 }
 
 function normalizeQueryText(text: string): string {
@@ -182,20 +184,70 @@ ${context.promptContext}
 
 Reasoning and answer:`;
 
-      const llm = await this.dependencies.llm.generate({
+      let llmResult = await this.dependencies.llm.generate({
         prompt,
         temperature: 0.0,
       });
-      // Extract answer from FINAL: line, fall back to last line
-      const lines = llm.text.trim().split('\n').filter(l => l.trim());
-      const finalLine = lines.find(l => /^FINAL:/i.test(l.trim()));
-      responseText = finalLine
-        ? finalLine.replace(/^FINAL:\s*/i, '').trim()
-        : lines[lines.length - 1]?.trim() ?? llm.text.trim();
-      // Strip surrounding quotes if present
-      responseText = responseText.replace(/^["']|["']$/g, '').trim();
-      llmInputTokens = llm.usage.inputTokens;
-      llmOutputTokens = llm.usage.outputTokens;
+      responseText = DefaultQueryService.extractFinalAnswer(llmResult.text);
+      llmInputTokens = llmResult.usage.inputTokens;
+      llmOutputTokens = llmResult.usage.outputTokens;
+
+      // LLM-guided graph traversal (bridge queries only)
+      if (!isComparison && this.dependencies.memoryStore) {
+        const hopPassages = await this.tryGraphHop(
+          request.corpusId,
+          expandedRequest.text,
+          context,
+          llmResult.text,
+        );
+
+        if (hopPassages.length > 0) {
+          const citedIds = new Set(context.citedPassages.map(p => p.passageId));
+          const newPassages = hopPassages.filter(p => !citedIds.has(p.passageId));
+
+          if (newPassages.length > 0) {
+            const hopSection = newPassages
+              .slice(0, 3)
+              .map(p => `[${p.metadata.documentId}] ${p.text}`)
+              .join('\n\n');
+            const expandedPrompt = `You are answering a multi-hop question that requires connecting information across multiple passages.
+
+Step-by-step:
+1. Identify the first entity or fact mentioned in the question
+2. Find information about that entity in the context
+3. Follow the chain: use what you learned to find the next piece of information
+4. Continue until you reach the final answer
+5. Before answering, re-read the question: confirm exactly WHAT is being asked (a person? a place? a title? an event?)
+
+Rules:
+- Use ONLY the provided context
+- Use the full official name (do not abbreviate)
+- Answer exactly what the question asks — not an intermediate entity in the chain
+- If the context seems insufficient, give your best answer based on available information — NEVER refuse to answer
+- Your last line MUST be: FINAL: <your answer>
+- The answer should be a complete name, title, or phrase that precisely matches what is asked
+
+Question: ${expandedRequest.text}
+
+Context:
+${context.promptContext}
+
+## Additional Passages (follow-up retrieval)
+
+${hopSection}
+
+Reasoning and answer:`;
+
+            llmResult = await this.dependencies.llm.generate({
+              prompt: expandedPrompt,
+              temperature: 0.0,
+            });
+            responseText = DefaultQueryService.extractFinalAnswer(llmResult.text);
+            llmInputTokens += llmResult.usage.inputTokens;
+            llmOutputTokens += llmResult.usage.outputTokens;
+          }
+        }
+      }
     } catch (error) {
       if (!shouldUseTemplateFallback(error)) {
         throw error;
@@ -222,6 +274,93 @@ Reasoning and answer:`;
         llmOutputTokens,
       },
     };
+  }
+
+  /**
+   * LLM-guided graph traversal: ask LLM what bridge entity is missing,
+   * then traverse fact→passage links to find relevant passages.
+   * Only triggers when the LLM's reasoning suggests incomplete information.
+   */
+  private async tryGraphHop(
+    corpusId: string,
+    question: string,
+    _context: ContextBundle,
+    firstReasoning: string,
+  ): Promise<readonly Passage[]> {
+    // Gate: check if reasoning indicates uncertainty or incomplete chain
+    const uncertaintySignals = [
+      'not mentioned', 'no information', 'not clear', 'cannot determine',
+      'not found', 'not provided', 'insufficient', 'unclear',
+      'does not mention', 'no direct', 'not explicitly',
+    ];
+    const reasoningLower = firstReasoning.toLowerCase();
+    const hasUncertainty = uncertaintySignals.some(s => reasoningLower.includes(s));
+    if (!hasUncertainty) return [];
+
+    try {
+      // Ask LLM to identify the missing bridge entity
+      const gatePrompt = `Given this question and the reasoning below, identify the ONE key entity from the context whose related passages would help complete the answer chain. Reply with ONLY the entity name (a person, place, organization, or work title), or "NONE" if no additional lookup is needed.
+
+Question: ${question}
+
+Reasoning so far:
+${firstReasoning.substring(0, 500)}
+
+Missing entity:`;
+
+      const gateResult = await this.dependencies.llm.generate({
+        prompt: gatePrompt,
+        temperature: 0.0,
+      });
+
+      const entityName = gateResult.text.trim().replace(/^["']|["']$/g, '').trim();
+      if (!entityName || entityName.toUpperCase() === 'NONE' || entityName.length > 100) {
+        return [];
+      }
+
+      // Graph traversal: entity name → matching facts → linked passages
+      const snapshot = await this.dependencies.memoryStore!.load(corpusId);
+      const entityLower = entityName.toLowerCase();
+
+      // Find facts mentioning this entity (head or tail)
+      const matchingFacts = snapshot.facts.filter(f =>
+        f.headEntity.toLowerCase().includes(entityLower)
+        || f.tailEntity.toLowerCase().includes(entityLower)
+        || entityLower.includes(f.headEntity.toLowerCase())
+        || entityLower.includes(f.tailEntity.toLowerCase()),
+      );
+
+      // Collect passage IDs from matching facts
+      const passageIds = new Set<string>();
+      for (const fact of matchingFacts.slice(0, 30)) {
+        for (const pid of fact.passageIds) {
+          passageIds.add(pid);
+        }
+      }
+
+      // Resolve to Passage objects
+      const passageMap = new Map(snapshot.passages.map(p => [p.passageId, p]));
+      const result: Passage[] = [];
+      for (const pid of passageIds) {
+        const passage = passageMap.get(pid);
+        if (passage) result.push(passage);
+        if (result.length >= 5) break;
+      }
+
+      return result;
+    } catch {
+      return []; // Graceful degradation
+    }
+  }
+
+  private static extractFinalAnswer(llmText: string): string {
+    const lines = llmText.trim().split('\n').filter(l => l.trim());
+    const finalLine = lines.find(l => /^FINAL:/i.test(l.trim()));
+    let answer = finalLine
+      ? finalLine.replace(/^FINAL:\s*/i, '').trim()
+      : lines[lines.length - 1]?.trim() ?? llmText.trim();
+    answer = answer.replace(/^["']|["']$/g, '').trim();
+    return answer;
   }
 }
 
