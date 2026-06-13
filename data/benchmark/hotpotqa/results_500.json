@@ -2,21 +2,21 @@
   "summary": {
     "benchmark": "HotpotQA",
     "sampleSize": 500,
-    "accuracy": 83.6,
-    "correct": 418,
+    "accuracy": 83.2,
+    "correct": 416,
     "total": 500,
-    "timeSeconds": 6732,
+    "timeSeconds": 6109,
     "byType": {
       "bridge": {
         "correct": 328,
         "total": 400
       },
       "comparison": {
-        "correct": 90,
+        "correct": 88,
         "total": 100
       }
     },
-    "timestamp": "2026-06-12T22:33:01.705Z"
+    "timestamp": "2026-06-13T01:16:45.870Z"
   },
   "results": [
     {
@@ -34,7 +34,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1724,
-        "llmOutputTokens": 154,
+        "llmOutputTokens": 109,
         "scVotes": [
           "Eenasul Fateh"
         ]
@@ -75,7 +75,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1551,
-        "llmOutputTokens": 205,
+        "llmOutputTokens": 227,
         "scVotes": [
           "IFFHS World's Best Goalkeeper"
         ]
@@ -116,7 +116,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1475,
-        "llmOutputTokens": 91,
+        "llmOutputTokens": 63,
         "scVotes": [
           "yes"
         ]
@@ -157,7 +157,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1444,
-        "llmOutputTokens": 207,
+        "llmOutputTokens": 225,
         "scVotes": [
           "World War II"
         ]
@@ -198,7 +198,7 @@
         "pprConverged": true,
         "citedPassageCount": 8,
         "llmInputTokens": 1445,
-        "llmOutputTokens": 200,
+        "llmOutputTokens": 129,
         "scVotes": [
           "Carabao Cup"
         ]
@@ -237,7 +237,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1652,
-        "llmOutputTokens": 177,
+        "llmOutputTokens": 130,
         "scVotes": [
           "William Jefferson Clinton"
         ]
@@ -278,7 +278,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1485,
-        "llmOutputTokens": 145,
+        "llmOutputTokens": 63,
         "scVotes": [
           "Newport"
         ]
@@ -319,7 +319,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1693,
-        "llmOutputTokens": 93,
+        "llmOutputTokens": 71,
         "scVotes": [
           "Fairfax County"
         ]
@@ -360,7 +360,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1918,
-        "llmOutputTokens": 102,
+        "llmOutputTokens": 86,
         "scVotes": [
           "Lev Yilmaz"
         ]
@@ -401,7 +401,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1673,
-        "llmOutputTokens": 192,
+        "llmOutputTokens": 83,
         "scVotes": [
           "Marvel Comics"
         ]
@@ -442,7 +442,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1695,
-        "llmOutputTokens": 193,
+        "llmOutputTokens": 114,
         "scVotes": [
           "The Beatles"
         ]
@@ -483,7 +483,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1639,
-        "llmOutputTokens": 528,
+        "llmOutputTokens": 181,
         "scVotes": [
           "Murray Hill, New Jersey"
         ]
@@ -524,7 +524,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1667,
-        "llmOutputTokens": 214,
+        "llmOutputTokens": 154,
         "scVotes": [
           "Charles Hastings Judd"
         ]
@@ -565,7 +565,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2048,
-        "llmOutputTokens": 180,
+        "llmOutputTokens": 145,
         "scVotes": [
           "25 laps"
         ]
@@ -606,7 +606,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1670,
-        "llmOutputTokens": 7150,
+        "llmOutputTokens": 2890,
         "scVotes": [
           "Ripped & Torn"
         ]
@@ -647,7 +647,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1509,
-        "llmOutputTokens": 156,
+        "llmOutputTokens": 80,
         "scVotes": [
           "Eucryphia"
         ]
@@ -688,7 +688,7 @@
         "pprConverged": true,
         "citedPassageCount": 6,
         "llmInputTokens": 1035,
-        "llmOutputTokens": 108,
+        "llmOutputTokens": 83,
         "scVotes": [
           "Ferdi Taygan"
         ]
@@ -715,7 +715,7 @@
       "question": "The Church of the Guanche People was founded in the city that is on the most populated island of what larger area?",
       "goldAnswer": "Macaronesia",
       "type": "bridge",
-      "response": "the Canary Islands",
+      "response": "Canary Islands",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -725,9 +725,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1782,
-        "llmOutputTokens": 263,
+        "llmOutputTokens": 183,
         "scVotes": [
-          "the Canary Islands"
+          "Canary Islands"
         ]
       },
       "citationCount": 10,
@@ -766,7 +766,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1453,
-        "llmOutputTokens": 129,
+        "llmOutputTokens": 87,
         "scVotes": [
           "Am Rong"
         ]
@@ -807,7 +807,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2521,
-        "llmOutputTokens": 215,
+        "llmOutputTokens": 195,
         "scVotes": [
           "29 days"
         ]
@@ -848,7 +848,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1787,
-        "llmOutputTokens": 118,
+        "llmOutputTokens": 111,
         "scVotes": [
           "Oldham County, Kentucky"
         ]
@@ -889,7 +889,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1608,
-        "llmOutputTokens": 141,
+        "llmOutputTokens": 65,
         "scVotes": [
           "FIFA Women's World Cup"
         ]
@@ -930,7 +930,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1550,
-        "llmOutputTokens": 242,
+        "llmOutputTokens": 525,
         "scVotes": [
           "Massive Entertainment"
         ]
@@ -971,7 +971,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1268,
-        "llmOutputTokens": 104,
+        "llmOutputTokens": 79,
         "scVotes": [
           "Icehouse pieces"
         ]
@@ -1011,8 +1011,8 @@
         "pprIterations": 4,
         "pprConverged": true,
         "citedPassageCount": 10,
-        "llmInputTokens": 1438,
-        "llmOutputTokens": 119,
+        "llmInputTokens": 1481,
+        "llmOutputTokens": 58,
         "scVotes": [
           "no"
         ]
@@ -1028,7 +1028,7 @@
         "passage:hotpotqa_batch_079:37",
         "passage:hotpotqa_batch_008:9",
         "passage:hotpotqa_batch_042:26",
-        "passage:hotpotqa_batch_017:11"
+        "passage:hotpotqa_batch_034:7"
       ],
       "contextPreview": [
         "# Buried Country\n\nBuried Country is a highly regarded documentary film, book and soundtrack album an",
@@ -1053,7 +1053,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1793,
-        "llmOutputTokens": 173,
+        "llmOutputTokens": 82,
         "scVotes": [
           "documentary film"
         ]
@@ -1094,7 +1094,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1899,
-        "llmOutputTokens": 96,
+        "llmOutputTokens": 69,
         "scVotes": [
           "no"
         ]
@@ -1135,7 +1135,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1728,
-        "llmOutputTokens": 155,
+        "llmOutputTokens": 123,
         "scVotes": [
           "President of the United States"
         ]
@@ -1176,7 +1176,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1687,
-        "llmOutputTokens": 223,
+        "llmOutputTokens": 404,
         "scVotes": [
           "The Bears and I"
         ]
@@ -1217,7 +1217,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1670,
-        "llmOutputTokens": 100,
+        "llmOutputTokens": 114,
         "scVotes": [
           "Unbreakable"
         ]
@@ -1258,7 +1258,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1549,
-        "llmOutputTokens": 243,
+        "llmOutputTokens": 142,
         "scVotes": [
           "Charles Joseph Scarborough"
         ]
@@ -1299,7 +1299,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1425,
-        "llmOutputTokens": 110,
+        "llmOutputTokens": 74,
         "scVotes": [
           "Tea Moderna"
         ]
@@ -1340,7 +1340,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1703,
-        "llmOutputTokens": 386,
+        "llmOutputTokens": 207,
         "scVotes": [
           "New College, Oxford"
         ]
@@ -1381,7 +1381,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1388,
-        "llmOutputTokens": 317,
+        "llmOutputTokens": 177,
         "scVotes": [
           "Canadian"
         ]
@@ -1422,7 +1422,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1685,
-        "llmOutputTokens": 101,
+        "llmOutputTokens": 80,
         "scVotes": [
           "Motion City Soundtrack"
         ]
@@ -1463,7 +1463,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1393,
-        "llmOutputTokens": 390,
+        "llmOutputTokens": 216,
         "scVotes": [
           "Hearts"
         ]
@@ -1504,7 +1504,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1402,
-        "llmOutputTokens": 141,
+        "llmOutputTokens": 112,
         "scVotes": [
           "Port Moresby, Papua New Guinea"
         ]
@@ -1545,7 +1545,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2497,
-        "llmOutputTokens": 584,
+        "llmOutputTokens": 366,
         "scVotes": [
           "Yale University"
         ]
@@ -1586,7 +1586,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1903,
-        "llmOutputTokens": 1616,
+        "llmOutputTokens": 1190,
         "scVotes": [
           "Queen In-hyun's Man"
         ]
@@ -1627,7 +1627,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1599,
-        "llmOutputTokens": 226,
+        "llmOutputTokens": 220,
         "scVotes": [
           "Vince Guaraldi"
         ]
@@ -1668,7 +1668,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1657,
-        "llmOutputTokens": 291,
+        "llmOutputTokens": 179,
         "scVotes": [
           "pro-Confederate partisan rangers"
         ]
@@ -1709,7 +1709,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1848,
-        "llmOutputTokens": 149,
+        "llmOutputTokens": 128,
         "scVotes": [
           "2005"
         ]
@@ -1750,7 +1750,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2058,
-        "llmOutputTokens": 141,
+        "llmOutputTokens": 81,
         "scVotes": [
           "Western Europe"
         ]
@@ -1791,7 +1791,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1798,
-        "llmOutputTokens": 154,
+        "llmOutputTokens": 103,
         "scVotes": [
           "the 500th episode overall of the series"
         ]
@@ -1832,7 +1832,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1807,
-        "llmOutputTokens": 318,
+        "llmOutputTokens": 200,
         "scVotes": [
           "Pennacook people"
         ]
@@ -1873,7 +1873,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1274,
-        "llmOutputTokens": 238,
+        "llmOutputTokens": 103,
         "scVotes": [
           "Michael Crawford"
         ]
@@ -1914,7 +1914,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1578,
-        "llmOutputTokens": 120,
+        "llmOutputTokens": 119,
         "scVotes": [
           "Roseann O'Donnell"
         ]
@@ -1955,7 +1955,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1502,
-        "llmOutputTokens": 274,
+        "llmOutputTokens": 335,
         "scVotes": [
           "stunt performer"
         ]
@@ -1996,7 +1996,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1854,
-        "llmOutputTokens": 125,
+        "llmOutputTokens": 81,
         "scVotes": [
           "Perfect Strangers"
         ]
@@ -2037,7 +2037,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1752,
-        "llmOutputTokens": 324,
+        "llmOutputTokens": 223,
         "scVotes": [
           "four people"
         ]
@@ -2068,7 +2068,7 @@
       "question": "What legend that lends its name to a modern medical term, inspired the plot of the horror film Ghostkeeper?",
       "goldAnswer": "Wendigo",
       "type": "bridge",
-      "response": "Windigo legend of North America",
+      "response": "the Windigo legend of North America",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -2078,9 +2078,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1407,
-        "llmOutputTokens": 267,
+        "llmOutputTokens": 221,
         "scVotes": [
-          "Windigo legend of North America"
+          "the Windigo legend of North America"
         ]
       },
       "citationCount": 10,
@@ -2119,7 +2119,7 @@
         "pprConverged": true,
         "citedPassageCount": 4,
         "llmInputTokens": 894,
-        "llmOutputTokens": 187,
+        "llmOutputTokens": 77,
         "scVotes": [
           "PPG Paints Arena in Pittsburgh, Pennsylvania"
         ]
@@ -2153,7 +2153,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2203,
-        "llmOutputTokens": 227,
+        "llmOutputTokens": 116,
         "scVotes": [
           "Grammy Award for Best Alternative Music Album"
         ]
@@ -2194,7 +2194,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1448,
-        "llmOutputTokens": 211,
+        "llmOutputTokens": 153,
         "scVotes": [
           "Preston"
         ]
@@ -2235,7 +2235,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1439,
-        "llmOutputTokens": 144,
+        "llmOutputTokens": 77,
         "scVotes": [
           "Paula Maxine Patton"
         ]
@@ -2276,7 +2276,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1627,
-        "llmOutputTokens": 189,
+        "llmOutputTokens": 108,
         "scVotes": [
           "Santa Monica, California"
         ]
@@ -2307,7 +2307,7 @@
       "question": "Albanians in Montenegro which make up 4.91 of the county's total population could be members of the Albanian Coalation Perspect which is a what? ",
       "goldAnswer": "Albanian political party in Montenegro",
       "type": "bridge",
-      "response": "Albanian political party in Montenegro",
+      "response": "Albanian political party",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -2317,9 +2317,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1832,
-        "llmOutputTokens": 288,
+        "llmOutputTokens": 127,
         "scVotes": [
-          "Albanian political party in Montenegro"
+          "Albanian political party"
         ]
       },
       "citationCount": 10,
@@ -2358,7 +2358,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1514,
-        "llmOutputTokens": 128,
+        "llmOutputTokens": 84,
         "scVotes": [
           "Mathieu Kassovitz"
         ]
@@ -2399,7 +2399,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1918,
-        "llmOutputTokens": 488,
+        "llmOutputTokens": 132,
         "scVotes": [
           "Dennis Hull"
         ]
@@ -2440,7 +2440,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1554,
-        "llmOutputTokens": 115,
+        "llmOutputTokens": 69,
         "scVotes": [
           "Girlfriends"
         ]
@@ -2481,7 +2481,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2003,
-        "llmOutputTokens": 106,
+        "llmOutputTokens": 134,
         "scVotes": [
           "Mitsubishi Motors Corporation"
         ]
@@ -2522,7 +2522,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1601,
-        "llmOutputTokens": 120,
+        "llmOutputTokens": 126,
         "scVotes": [
           "consulting services"
         ]
@@ -2563,7 +2563,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1809,
-        "llmOutputTokens": 188,
+        "llmOutputTokens": 122,
         "scVotes": [
           "Reichsführer-SS"
         ]
@@ -2604,7 +2604,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1603,
-        "llmOutputTokens": 133,
+        "llmOutputTokens": 125,
         "scVotes": [
           "Carnatic music"
         ]
@@ -2645,7 +2645,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1858,
-        "llmOutputTokens": 126,
+        "llmOutputTokens": 99,
         "scVotes": [
           "director"
         ]
@@ -2686,7 +2686,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2084,
-        "llmOutputTokens": 178,
+        "llmOutputTokens": 109,
         "scVotes": [
           "Australia"
         ]
@@ -2717,7 +2717,7 @@
       "question": "What was the profession of the one who wrote a song on a 2005 album he collaborated on with Marc Predka?",
       "goldAnswer": "professional wrestler, actor, and hip hop musician",
       "type": "bridge",
-      "response": "musician-songwriter",
+      "response": "songwriter",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -2727,9 +2727,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1775,
-        "llmOutputTokens": 9276,
+        "llmOutputTokens": 5516,
         "scVotes": [
-          "musician-songwriter"
+          "songwriter"
         ]
       },
       "citationCount": 10,
@@ -2758,7 +2758,7 @@
       "question": "Why is Minister Pool important to Black Country and the West Midlands in England?",
       "goldAnswer": "defence of the Cathedral",
       "type": "bridge",
-      "response": "Minster Pool historically helped defend the Cathedral Close of Lichfield Cathedral.",
+      "response": "historically important to the defence of the Cathedral Close",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -2768,9 +2768,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1610,
-        "llmOutputTokens": 914,
+        "llmOutputTokens": 470,
         "scVotes": [
-          "Minster Pool historically helped defend the Cathedral Close of Lichfield Cathedral."
+          "historically important to the defence of the Cathedral Close"
         ]
       },
       "citationCount": 10,
@@ -2809,7 +2809,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2033,
-        "llmOutputTokens": 347,
+        "llmOutputTokens": 217,
         "scVotes": [
           "Boeing EA-18G Growler"
         ]
@@ -2850,7 +2850,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1452,
-        "llmOutputTokens": 449,
+        "llmOutputTokens": 462,
         "scVotes": [
           "New York City"
         ]
@@ -2891,7 +2891,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1836,
-        "llmOutputTokens": 212,
+        "llmOutputTokens": 88,
         "scVotes": [
           "Tatton Park"
         ]
@@ -2932,7 +2932,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1541,
-        "llmOutputTokens": 149,
+        "llmOutputTokens": 123,
         "scVotes": [
           "Royal Navy"
         ]
@@ -2973,7 +2973,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1664,
-        "llmOutputTokens": 792,
+        "llmOutputTokens": 1668,
         "scVotes": [
           "Robert Smigel"
         ]
@@ -3014,7 +3014,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1414,
-        "llmOutputTokens": 133,
+        "llmOutputTokens": 77,
         "scVotes": [
           "Aleksandr Ivanovsky"
         ]
@@ -3055,7 +3055,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1966,
-        "llmOutputTokens": 294,
+        "llmOutputTokens": 190,
         "scVotes": [
           "Province of New York"
         ]
@@ -3096,7 +3096,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1702,
-        "llmOutputTokens": 107,
+        "llmOutputTokens": 62,
         "scVotes": [
           "David Dunn"
         ]
@@ -3127,7 +3127,7 @@
       "question": "What relationship does Fred Gehrke have to the 23rd overall pick in the 2010 Major League Baseball Draft?",
       "goldAnswer": "great-grandfather",
       "type": "bridge",
-      "response": "great-grandfather of Christian Stephen Yelich",
+      "response": "great-grandfather",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -3137,9 +3137,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1595,
-        "llmOutputTokens": 298,
+        "llmOutputTokens": 183,
         "scVotes": [
-          "great-grandfather of Christian Stephen Yelich"
+          "great-grandfather"
         ]
       },
       "citationCount": 10,
@@ -3168,8 +3168,8 @@
       "question": "What musical action does Ndebele music and Musical bow have in common?",
       "goldAnswer": "played",
       "type": "bridge",
-      "response": "played",
-      "correct": true,
+      "response": "hands",
+      "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -3178,9 +3178,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1513,
-        "llmOutputTokens": 1021,
+        "llmOutputTokens": 161,
         "scVotes": [
-          "played"
+          "hands"
         ]
       },
       "citationCount": 10,
@@ -3219,7 +3219,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2226,
-        "llmOutputTokens": 1046,
+        "llmOutputTokens": 206,
         "scVotes": [
           "thermal energy"
         ]
@@ -3250,7 +3250,7 @@
       "question": "Where is the transportation company that owns Talbot based in?",
       "goldAnswer": "Montreal",
       "type": "bridge",
-      "response": "Portland, Oregon, United States",
+      "response": "Hay River, Northwest Territories",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -3260,9 +3260,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1198,
-        "llmOutputTokens": 6753,
+        "llmOutputTokens": 738,
         "scVotes": [
-          "Portland, Oregon, United States"
+          "Hay River, Northwest Territories"
         ]
       },
       "citationCount": 10,
@@ -3301,7 +3301,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1743,
-        "llmOutputTokens": 201,
+        "llmOutputTokens": 129,
         "scVotes": [
           "Alan Young"
         ]
@@ -3342,7 +3342,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1899,
-        "llmOutputTokens": 166,
+        "llmOutputTokens": 149,
         "scVotes": [
           "Duchy of Saxe-Coburg and Gotha"
         ]
@@ -3383,7 +3383,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1764,
-        "llmOutputTokens": 229,
+        "llmOutputTokens": 217,
         "scVotes": [
           "Isla de Xativa"
         ]
@@ -3424,7 +3424,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1510,
-        "llmOutputTokens": 161,
+        "llmOutputTokens": 123,
         "scVotes": [
           "John Lasseter"
         ]
@@ -3455,7 +3455,7 @@
       "question": "Which Western action-adventure video game by Rockstar did Tyler Bunch act for?",
       "goldAnswer": "Red Dead Redemption",
       "type": "bridge",
-      "response": "Red Dead Revolver",
+      "response": "Red Dead Redemption",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -3465,9 +3465,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2069,
-        "llmOutputTokens": 2634,
+        "llmOutputTokens": 1469,
         "scVotes": [
-          "Red Dead Revolver"
+          "Red Dead Redemption"
         ]
       },
       "citationCount": 10,
@@ -3506,7 +3506,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1328,
-        "llmOutputTokens": 1436,
+        "llmOutputTokens": 676,
         "scVotes": [
           "EN World"
         ]
@@ -3547,7 +3547,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1520,
-        "llmOutputTokens": 246,
+        "llmOutputTokens": 142,
         "scVotes": [
           "no"
         ]
@@ -3578,7 +3578,7 @@
       "question": "which actress was a notable practitioner at the white bear theatre and is also known for playing the role of melanie owen in the BBC one soap opera \"eatenders\"?",
       "goldAnswer": "Tamzin Outhwaite",
       "type": "bridge",
-      "response": "Tamzin Maria Outhwaite",
+      "response": "Tamzin Outhwaite",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -3587,10 +3587,10 @@
         "pprIterations": 4,
         "pprConverged": true,
         "citedPassageCount": 10,
-        "llmInputTokens": 1719,
-        "llmOutputTokens": 408,
+        "llmInputTokens": 1800,
+        "llmOutputTokens": 203,
         "scVotes": [
-          "Tamzin Maria Outhwaite"
+          "Tamzin Outhwaite"
         ]
       },
       "citationCount": 10,
@@ -3600,11 +3600,11 @@
         "passage:hotpotqa_batch_012:9",
         "passage:hotpotqa_batch_015:37",
         "passage:hotpotqa_batch_044:35",
-        "passage:hotpotqa_batch_007:28",
         "passage:hotpotqa_batch_048:11",
         "passage:hotpotqa_batch_059:33",
+        "passage:hotpotqa_batch_009:23",
         "passage:hotpotqa_batch_010:21",
-        "passage:hotpotqa_batch_009:23"
+        "passage:hotpotqa_batch_030:8"
       ],
       "contextPreview": [
         "# Melanie Owen\n\nMelanie Jane \"Mel\" Owen (also Healy and Beale) is a fictional character from the BBC",
@@ -3629,7 +3629,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1868,
-        "llmOutputTokens": 316,
+        "llmOutputTokens": 251,
         "scVotes": [
           "worked as a fashion model"
         ]
@@ -3670,7 +3670,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1644,
-        "llmOutputTokens": 406,
+        "llmOutputTokens": 458,
         "scVotes": [
           "April 28, 1989"
         ]
@@ -3701,8 +3701,8 @@
       "question": "Who directed and wrote the 2016 film featuring the voice of Townsend Coleman?",
       "goldAnswer": "Garth Jennings",
       "type": "bridge",
-      "response": "Garth Jennings",
-      "correct": true,
+      "response": "Rick Morales, Michael Jelenic, and James Tucker",
+      "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -3711,9 +3711,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1709,
-        "llmOutputTokens": 1918,
+        "llmOutputTokens": 2526,
         "scVotes": [
-          "Garth Jennings"
+          "Rick Morales, Michael Jelenic, and James Tucker"
         ]
       },
       "citationCount": 10,
@@ -3752,7 +3752,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1852,
-        "llmOutputTokens": 181,
+        "llmOutputTokens": 111,
         "scVotes": [
           "Mandalay Entertainment"
         ]
@@ -3793,7 +3793,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1910,
-        "llmOutputTokens": 132,
+        "llmOutputTokens": 78,
         "scVotes": [
           "Daron Malakian"
         ]
@@ -3808,8 +3808,8 @@
         "passage:hotpotqa_batch_071:36",
         "passage:hotpotqa_batch_050:36",
         "passage:hotpotqa_batch_038:22",
-        "passage:hotpotqa_batch_054:20",
-        "passage:hotpotqa_batch_078:2"
+        "passage:hotpotqa_batch_078:2",
+        "passage:hotpotqa_batch_054:20"
       ],
       "contextPreview": [
         "# Daron Malakian\n\nDaron Vartan Malakian (Armenian: Տարօն/Տարոն Վարդան Մալաքեան, born July 18, 1975) ",
@@ -3834,7 +3834,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1362,
-        "llmOutputTokens": 220,
+        "llmOutputTokens": 86,
         "scVotes": [
           "Naked Killer"
         ]
@@ -3875,7 +3875,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1678,
-        "llmOutputTokens": 389,
+        "llmOutputTokens": 168,
         "scVotes": [
           "Hamlet"
         ]
@@ -3916,7 +3916,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1434,
-        "llmOutputTokens": 109,
+        "llmOutputTokens": 116,
         "scVotes": [
           "Brett Scallions"
         ]
@@ -3957,7 +3957,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1502,
-        "llmOutputTokens": 677,
+        "llmOutputTokens": 482,
         "scVotes": [
           "VNO"
         ]
@@ -3998,7 +3998,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1279,
-        "llmOutputTokens": 253,
+        "llmOutputTokens": 168,
         "scVotes": [
           "1895"
         ]
@@ -4039,7 +4039,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1405,
-        "llmOutputTokens": 170,
+        "llmOutputTokens": 89,
         "scVotes": [
           "Dead Poets Society"
         ]
@@ -4080,7 +4080,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1880,
-        "llmOutputTokens": 273,
+        "llmOutputTokens": 257,
         "scVotes": [
           "Melanie Owen"
         ]
@@ -4111,7 +4111,7 @@
       "question": "Was Cars 2 released by the same company which used songs written by Lin-Manuel Miranda in another of its movies?",
       "goldAnswer": "yes",
       "type": "comparison",
-      "response": "Yes, Walt Disney Pictures.",
+      "response": "Yes, Walt Disney Pictures",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -4121,9 +4121,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1686,
-        "llmOutputTokens": 704,
+        "llmOutputTokens": 493,
         "scVotes": [
-          "Yes, Walt Disney Pictures."
+          "Yes, Walt Disney Pictures"
         ]
       },
       "citationCount": 10,
@@ -4162,7 +4162,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1606,
-        "llmOutputTokens": 297,
+        "llmOutputTokens": 198,
         "scVotes": [
           "Great Neck, New York"
         ]
@@ -4203,7 +4203,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1672,
-        "llmOutputTokens": 526,
+        "llmOutputTokens": 201,
         "scVotes": [
           "no"
         ]
@@ -4244,7 +4244,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1805,
-        "llmOutputTokens": 165,
+        "llmOutputTokens": 131,
         "scVotes": [
           "Ogier the Dane"
         ]
@@ -4285,7 +4285,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1712,
-        "llmOutputTokens": 187,
+        "llmOutputTokens": 174,
         "scVotes": [
           "Gary Earl Johnson"
         ]
@@ -4326,7 +4326,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1896,
-        "llmOutputTokens": 249,
+        "llmOutputTokens": 126,
         "scVotes": [
           "Benedict of Nursia"
         ]
@@ -4357,7 +4357,7 @@
       "question": "The structure in Wyoming in which Bořeň is similar to has a summit that is how many feet above sea level?",
       "goldAnswer": "5,112 feet",
       "type": "bridge",
-      "response": "5,112 feet above sea level",
+      "response": "5,112 feet",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -4367,9 +4367,9 @@
         "pprConverged": true,
         "citedPassageCount": 9,
         "llmInputTokens": 1816,
-        "llmOutputTokens": 175,
+        "llmOutputTokens": 131,
         "scVotes": [
-          "5,112 feet above sea level"
+          "5,112 feet"
         ]
       },
       "citationCount": 9,
@@ -4407,7 +4407,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1838,
-        "llmOutputTokens": 129,
+        "llmOutputTokens": 104,
         "scVotes": [
           "Gloria Trevi"
         ]
@@ -4448,7 +4448,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2111,
-        "llmOutputTokens": 494,
+        "llmOutputTokens": 687,
         "scVotes": [
           "Maryland"
         ]
@@ -4489,7 +4489,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1682,
-        "llmOutputTokens": 373,
+        "llmOutputTokens": 271,
         "scVotes": [
           "Baa, Baa, Black Sheep"
         ]
@@ -4530,7 +4530,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1803,
-        "llmOutputTokens": 398,
+        "llmOutputTokens": 205,
         "scVotes": [
           "Alceste"
         ]
@@ -4561,7 +4561,7 @@
       "question": "Cherie Currie and Steve Augeri were both what?",
       "goldAnswer": "American musician",
       "type": "comparison",
-      "response": "singers",
+      "response": "singer",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -4571,9 +4571,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1744,
-        "llmOutputTokens": 237,
+        "llmOutputTokens": 105,
         "scVotes": [
-          "singers"
+          "singer"
         ]
       },
       "citationCount": 10,
@@ -4612,7 +4612,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1438,
-        "llmOutputTokens": 87,
+        "llmOutputTokens": 66,
         "scVotes": [
           "Brunswick Golden Isles Airport"
         ]
@@ -4653,7 +4653,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1831,
-        "llmOutputTokens": 5023,
+        "llmOutputTokens": 1976,
         "scVotes": [
           "Deadfall"
         ]
@@ -4694,7 +4694,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1497,
-        "llmOutputTokens": 162,
+        "llmOutputTokens": 110,
         "scVotes": [
           "26,788"
         ]
@@ -4735,7 +4735,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1501,
-        "llmOutputTokens": 210,
+        "llmOutputTokens": 107,
         "scVotes": [
           "Patrick Dempsey"
         ]
@@ -4776,7 +4776,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1710,
-        "llmOutputTokens": 860,
+        "llmOutputTokens": 865,
         "scVotes": [
           "Henry Gwyn Jeffreys Moseley"
         ]
@@ -4817,7 +4817,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1867,
-        "llmOutputTokens": 106,
+        "llmOutputTokens": 58,
         "scVotes": [
           "no"
         ]
@@ -4858,7 +4858,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1569,
-        "llmOutputTokens": 109,
+        "llmOutputTokens": 121,
         "scVotes": [
           "Edward Joseph Leonski"
         ]
@@ -4899,7 +4899,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2264,
-        "llmOutputTokens": 155,
+        "llmOutputTokens": 112,
         "scVotes": [
           "KWCH-DT"
         ]
@@ -4940,7 +4940,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1581,
-        "llmOutputTokens": 493,
+        "llmOutputTokens": 328,
         "scVotes": [
           "twenty-eight seasons"
         ]
@@ -4981,7 +4981,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2038,
-        "llmOutputTokens": 182,
+        "llmOutputTokens": 167,
         "scVotes": [
           "Tim Cluess"
         ]
@@ -5022,7 +5022,7 @@
         "pprConverged": true,
         "citedPassageCount": 4,
         "llmInputTokens": 877,
-        "llmOutputTokens": 267,
+        "llmOutputTokens": 162,
         "scVotes": [
           "1892"
         ]
@@ -5046,7 +5046,7 @@
       "question": "St. John's College, Belize offers an education in a tradition in which what three subjects were the core?",
       "goldAnswer": "Grammar, logic, and rhetoric",
       "type": "bridge",
-      "response": "Grammar, logic, and rhetoric",
+      "response": "grammar, logic, and rhetoric",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -5056,9 +5056,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1782,
-        "llmOutputTokens": 237,
+        "llmOutputTokens": 190,
         "scVotes": [
-          "Grammar, logic, and rhetoric"
+          "grammar, logic, and rhetoric"
         ]
       },
       "citationCount": 10,
@@ -5087,7 +5087,7 @@
       "question": "During which period the sedan variant of the Volvo V50 car was manufactured?",
       "goldAnswer": "1995 to 2012",
       "type": "bridge",
-      "response": "2004 to 2012",
+      "response": "2004 to 2012 model years",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -5097,9 +5097,9 @@
         "pprConverged": true,
         "citedPassageCount": 9,
         "llmInputTokens": 1726,
-        "llmOutputTokens": 1206,
+        "llmOutputTokens": 720,
         "scVotes": [
-          "2004 to 2012"
+          "2004 to 2012 model years"
         ]
       },
       "citationCount": 9,
@@ -5137,7 +5137,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1562,
-        "llmOutputTokens": 341,
+        "llmOutputTokens": 247,
         "scVotes": [
           "rockets"
         ]
@@ -5178,7 +5178,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1213,
-        "llmOutputTokens": 91,
+        "llmOutputTokens": 62,
         "scVotes": [
           "Myrsine"
         ]
@@ -5219,7 +5219,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1293,
-        "llmOutputTokens": 158,
+        "llmOutputTokens": 102,
         "scVotes": [
           "4 April 1963"
         ]
@@ -5260,7 +5260,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1903,
-        "llmOutputTokens": 376,
+        "llmOutputTokens": 182,
         "scVotes": [
           "Town of Brookhaven"
         ]
@@ -5301,7 +5301,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1993,
-        "llmOutputTokens": 160,
+        "llmOutputTokens": 81,
         "scVotes": [
           "no"
         ]
@@ -5342,7 +5342,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1537,
-        "llmOutputTokens": 251,
+        "llmOutputTokens": 117,
         "scVotes": [
           "yes"
         ]
@@ -5383,7 +5383,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1461,
-        "llmOutputTokens": 2348,
+        "llmOutputTokens": 473,
         "scVotes": [
           "Brag"
         ]
@@ -5424,7 +5424,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1480,
-        "llmOutputTokens": 114,
+        "llmOutputTokens": 88,
         "scVotes": [
           "Bernard Malamud"
         ]
@@ -5465,7 +5465,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1891,
-        "llmOutputTokens": 161,
+        "llmOutputTokens": 98,
         "scVotes": [
           "John André"
         ]
@@ -5506,7 +5506,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1393,
-        "llmOutputTokens": 101,
+        "llmOutputTokens": 71,
         "scVotes": [
           "film director"
         ]
@@ -5547,7 +5547,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1559,
-        "llmOutputTokens": 109,
+        "llmOutputTokens": 83,
         "scVotes": [
           "no"
         ]
@@ -5588,7 +5588,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1794,
-        "llmOutputTokens": 175,
+        "llmOutputTokens": 136,
         "scVotes": [
           "42.195 kilometers"
         ]
@@ -5629,7 +5629,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1914,
-        "llmOutputTokens": 197,
+        "llmOutputTokens": 115,
         "scVotes": [
           "Konstantīns Raudive"
         ]
@@ -5670,7 +5670,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1784,
-        "llmOutputTokens": 207,
+        "llmOutputTokens": 253,
         "scVotes": [
           "two albums"
         ]
@@ -5711,7 +5711,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1590,
-        "llmOutputTokens": 183,
+        "llmOutputTokens": 115,
         "scVotes": [
           "1955"
         ]
@@ -5742,7 +5742,7 @@
       "question": "The Legendary A&M Sessions contain five songs by the singer whose work was conducted with what band?",
       "goldAnswer": "Magic Band",
       "type": "bridge",
-      "response": "his own band",
+      "response": "Roy Young Band",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -5752,9 +5752,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1843,
-        "llmOutputTokens": 5581,
+        "llmOutputTokens": 2974,
         "scVotes": [
-          "his own band"
+          "Roy Young Band"
         ]
       },
       "citationCount": 10,
@@ -5793,7 +5793,7 @@
         "pprConverged": true,
         "citedPassageCount": 9,
         "llmInputTokens": 1499,
-        "llmOutputTokens": 223,
+        "llmOutputTokens": 137,
         "scVotes": [
           "Mikoyan design bureau"
         ]
@@ -5823,7 +5823,7 @@
       "question": "What was the companion piece that Poe's brother published?",
       "goldAnswer": "\"The Whalestoe Letters\"",
       "type": "bridge",
-      "response": "House of Leaves",
+      "response": "Haunted",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -5833,9 +5833,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1488,
-        "llmOutputTokens": 519,
+        "llmOutputTokens": 524,
         "scVotes": [
-          "House of Leaves"
+          "Haunted"
         ]
       },
       "citationCount": 10,
@@ -5874,7 +5874,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1778,
-        "llmOutputTokens": 302,
+        "llmOutputTokens": 296,
         "scVotes": [
           "Columbine"
         ]
@@ -5905,7 +5905,7 @@
       "question": "In what town does the one-time star of \"And There's More\" now live?",
       "goldAnswer": "Rochdale",
       "type": "bridge",
-      "response": "Southport",
+      "response": "Cookstown",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -5915,9 +5915,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1733,
-        "llmOutputTokens": 3525,
+        "llmOutputTokens": 1282,
         "scVotes": [
-          "Southport"
+          "Cookstown"
         ]
       },
       "citationCount": 10,
@@ -5956,7 +5956,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1397,
-        "llmOutputTokens": 158,
+        "llmOutputTokens": 114,
         "scVotes": [
           "Bertalan Farkas"
         ]
@@ -5997,7 +5997,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1674,
-        "llmOutputTokens": 353,
+        "llmOutputTokens": 271,
         "scVotes": [
           "WikiLeaks"
         ]
@@ -6028,7 +6028,7 @@
       "question": "Which English singer from the 1960s has an album entitled Dangerous Acquaintances released in 1981?",
       "goldAnswer": "Marianne Evelyn Gabriel Faithfull",
       "type": "bridge",
-      "response": "Marianne Evelyn Gabriel Faithfull",
+      "response": "Marianne Faithfull",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -6038,9 +6038,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1882,
-        "llmOutputTokens": 316,
+        "llmOutputTokens": 119,
         "scVotes": [
-          "Marianne Evelyn Gabriel Faithfull"
+          "Marianne Faithfull"
         ]
       },
       "citationCount": 10,
@@ -6079,7 +6079,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1587,
-        "llmOutputTokens": 145,
+        "llmOutputTokens": 95,
         "scVotes": [
           "Pelle Almqvist"
         ]
@@ -6120,7 +6120,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1579,
-        "llmOutputTokens": 116,
+        "llmOutputTokens": 93,
         "scVotes": [
           "Appenzeller Sennenhund"
         ]
@@ -6151,7 +6151,7 @@
       "question": "What are some other areas that share a common deer species with the forests of Mara and Mondrem?",
       "goldAnswer": "New Zealand, Canada, the United States, the Falkland Islands, and Peru.",
       "type": "bridge",
-      "response": "Sri Lanka, South and Southeast Asia, and Argentina, Bolivia, Peru, Brazil, Uruguay, and Paraguay",
+      "response": "Cheshire, England",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -6161,9 +6161,9 @@
         "pprConverged": true,
         "citedPassageCount": 8,
         "llmInputTokens": 1482,
-        "llmOutputTokens": 4192,
+        "llmOutputTokens": 1567,
         "scVotes": [
-          "Sri Lanka, South and Southeast Asia, and Argentina, Bolivia, Peru, Brazil, Uruguay, and Paraguay"
+          "Cheshire, England"
         ]
       },
       "citationCount": 8,
@@ -6199,8 +6199,8 @@
         "pprIterations": 4,
         "pprConverged": true,
         "citedPassageCount": 10,
-        "llmInputTokens": 1740,
-        "llmOutputTokens": 109,
+        "llmInputTokens": 1850,
+        "llmOutputTokens": 75,
         "scVotes": [
           "Neighbours"
         ]
@@ -6210,20 +6210,20 @@
         "passage:hotpotqa_batch_033:11",
         "passage:hotpotqa_batch_056:40",
         "passage:hotpotqa_batch_063:42",
+        "passage:hotpotqa_batch_008:14",
         "passage:hotpotqa_batch_007:28",
         "passage:hotpotqa_batch_010:21",
         "passage:hotpotqa_batch_018:45",
         "passage:hotpotqa_batch_032:50",
         "passage:hotpotqa_batch_020:14",
-        "passage:hotpotqa_batch_048:11",
-        "passage:hotpotqa_batch_030:2"
+        "passage:hotpotqa_batch_048:11"
       ],
       "contextPreview": [
         "# Focus (2015 film)\n\nFocus is a 2015 American romantic crime comedy-drama film written and directed ",
         "# Margot Robbie\n\nMargot Elise Robbie ( ; born 2 July 1990) is an Australian actress and producer. Ro",
         "# Nicole Kidman filmography\n\nAustralian actress Nicole Kidman made her film debut in the drama remak",
-        "# Alin Sumarwata\n\nAlin Sumarwata is an Australian actress. She is best known for her role in the Aus",
-        "# Ashleigh Brewer\n\nAshleigh May Brewer (born 9 December 1990) is an Australian actress. She had a re"
+        "# Amy Mizzi\n\nAmy Mizzi (born 21 July 1983) is an Australian actress. She starred as Kit Hunter in th",
+        "# Alin Sumarwata\n\nAlin Sumarwata is an Australian actress. She is best known for her role in the Aus"
       ]
     },
     {
@@ -6231,8 +6231,8 @@
       "question": "The twenty-first season of South Park was entitled \"White People Renovating Houses\" is which episode of the series overall?",
       "goldAnswer": "278th episode",
       "type": "bridge",
-      "response": "the 280th episode of the series overall",
-      "correct": false,
+      "response": "the 278th episode of the series overall",
+      "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -6240,10 +6240,10 @@
         "pprIterations": 3,
         "pprConverged": true,
         "citedPassageCount": 10,
-        "llmInputTokens": 1526,
-        "llmOutputTokens": 700,
+        "llmInputTokens": 1525,
+        "llmOutputTokens": 963,
         "scVotes": [
-          "the 280th episode of the series overall"
+          "the 278th episode of the series overall"
         ]
       },
       "citationCount": 10,
@@ -6282,7 +6282,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1296,
-        "llmOutputTokens": 293,
+        "llmOutputTokens": 133,
         "scVotes": [
           "University of Southern California School of Medicine"
         ]
@@ -6313,7 +6313,7 @@
       "question": "Which drink is larger, the Apple-Kneel or the Flaming volcano?",
       "goldAnswer": "The flaming volcano",
       "type": "comparison",
-      "response": "flaming volcano",
+      "response": "Flaming volcano",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -6323,9 +6323,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1736,
-        "llmOutputTokens": 127,
+        "llmOutputTokens": 117,
         "scVotes": [
-          "flaming volcano"
+          "Flaming volcano"
         ]
       },
       "citationCount": 10,
@@ -6364,7 +6364,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1658,
-        "llmOutputTokens": 114,
+        "llmOutputTokens": 66,
         "scVotes": [
           "Washington"
         ]
@@ -6405,7 +6405,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1623,
-        "llmOutputTokens": 227,
+        "llmOutputTokens": 226,
         "scVotes": [
           "bass guitar"
         ]
@@ -6446,7 +6446,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1594,
-        "llmOutputTokens": 111,
+        "llmOutputTokens": 62,
         "scVotes": [
           "Luca Guadagnino"
         ]
@@ -6487,7 +6487,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1787,
-        "llmOutputTokens": 152,
+        "llmOutputTokens": 180,
         "scVotes": [
           "Johnny D. Bright"
         ]
@@ -6528,7 +6528,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1782,
-        "llmOutputTokens": 107,
+        "llmOutputTokens": 86,
         "scVotes": [
           "2004"
         ]
@@ -6569,7 +6569,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1701,
-        "llmOutputTokens": 97,
+        "llmOutputTokens": 69,
         "scVotes": [
           "Barbados"
         ]
@@ -6610,7 +6610,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1257,
-        "llmOutputTokens": 150,
+        "llmOutputTokens": 148,
         "scVotes": [
           "The Picture of Dorian Gray"
         ]
@@ -6651,7 +6651,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1850,
-        "llmOutputTokens": 165,
+        "llmOutputTokens": 107,
         "scVotes": [
           "Province of Canterbury"
         ]
@@ -6692,7 +6692,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1707,
-        "llmOutputTokens": 222,
+        "llmOutputTokens": 132,
         "scVotes": [
           "10 Academy Awards"
         ]
@@ -6733,7 +6733,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2122,
-        "llmOutputTokens": 234,
+        "llmOutputTokens": 320,
         "scVotes": [
           "West African descendants"
         ]
@@ -6764,7 +6764,7 @@
       "question": "What was the Volvo S70 essentially modeled after and was the first all wheel drive Volvo?",
       "goldAnswer": "Volvo 850",
       "type": "bridge",
-      "response": "Volvo 850; yes",
+      "response": "Volvo 850; no",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -6774,9 +6774,9 @@
         "pprConverged": true,
         "citedPassageCount": 9,
         "llmInputTokens": 1819,
-        "llmOutputTokens": 535,
+        "llmOutputTokens": 1549,
         "scVotes": [
-          "Volvo 850; yes"
+          "Volvo 850; no"
         ]
       },
       "citationCount": 9,
@@ -6814,7 +6814,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1568,
-        "llmOutputTokens": 206,
+        "llmOutputTokens": 283,
         "scVotes": [
           "The Entity"
         ]
@@ -6855,7 +6855,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1609,
-        "llmOutputTokens": 116,
+        "llmOutputTokens": 106,
         "scVotes": [
           "William Dwight Schultz"
         ]
@@ -6896,7 +6896,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1617,
-        "llmOutputTokens": 242,
+        "llmOutputTokens": 193,
         "scVotes": [
           "no"
         ]
@@ -6937,7 +6937,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1552,
-        "llmOutputTokens": 106,
+        "llmOutputTokens": 130,
         "scVotes": [
           "Basset Bleu de Gascogne"
         ]
@@ -6968,7 +6968,7 @@
       "question": "Bandit was built in 1988 by which Japanese amusement ride company that built roller coasters, giant wheels, carousels, flumes, dark rides, sky cycles and other amusement rides?",
       "goldAnswer": "TOGO company",
       "type": "bridge",
-      "response": "Kabushiki-gaisha Tōgo",
+      "response": "TOGO (株式会社トーゴ, Kabushiki-gaisha Tōgo)",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -6978,9 +6978,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1758,
-        "llmOutputTokens": 540,
+        "llmOutputTokens": 347,
         "scVotes": [
-          "Kabushiki-gaisha Tōgo"
+          "TOGO (株式会社トーゴ, Kabushiki-gaisha Tōgo)"
         ]
       },
       "citationCount": 10,
@@ -7019,7 +7019,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1479,
-        "llmOutputTokens": 244,
+        "llmOutputTokens": 199,
         "scVotes": [
           "no"
         ]
@@ -7060,7 +7060,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1542,
-        "llmOutputTokens": 730,
+        "llmOutputTokens": 337,
         "scVotes": [
           "Aden"
         ]
@@ -7101,7 +7101,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1559,
-        "llmOutputTokens": 234,
+        "llmOutputTokens": 232,
         "scVotes": [
           "upper chamber of the Hawaii State Legislature"
         ]
@@ -7142,7 +7142,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1537,
-        "llmOutputTokens": 560,
+        "llmOutputTokens": 288,
         "scVotes": [
           "rhythm guitar"
         ]
@@ -7173,7 +7173,7 @@
       "question": "In what city does a Christian minister who won the singles title with Jan Kodes in the 1970 French Open currently reside?",
       "goldAnswer": "Perth, Western Australia",
       "type": "bridge",
-      "response": "Perth",
+      "response": "Perth, Western Australia",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -7183,9 +7183,9 @@
         "pprConverged": true,
         "citedPassageCount": 7,
         "llmInputTokens": 1146,
-        "llmOutputTokens": 443,
+        "llmOutputTokens": 215,
         "scVotes": [
-          "Perth"
+          "Perth, Western Australia"
         ]
       },
       "citationCount": 7,
@@ -7221,7 +7221,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1726,
-        "llmOutputTokens": 388,
+        "llmOutputTokens": 178,
         "scVotes": [
           "country music"
         ]
@@ -7262,7 +7262,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1360,
-        "llmOutputTokens": 140,
+        "llmOutputTokens": 106,
         "scVotes": [
           "Bougainville – Our Island Our Fight"
         ]
@@ -7303,7 +7303,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1522,
-        "llmOutputTokens": 230,
+        "llmOutputTokens": 123,
         "scVotes": [
           "June 12, 2017"
         ]
@@ -7344,7 +7344,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1620,
-        "llmOutputTokens": 108,
+        "llmOutputTokens": 88,
         "scVotes": [
           "Mary Magdalene"
         ]
@@ -7385,7 +7385,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2035,
-        "llmOutputTokens": 7587,
+        "llmOutputTokens": 946,
         "scVotes": [
           "WLNH-FM"
         ]
@@ -7426,7 +7426,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1445,
-        "llmOutputTokens": 253,
+        "llmOutputTokens": 285,
         "scVotes": [
           "Kirk Humphreys"
         ]
@@ -7467,7 +7467,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1493,
-        "llmOutputTokens": 191,
+        "llmOutputTokens": 99,
         "scVotes": [
           "PET"
         ]
@@ -7508,7 +7508,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1933,
-        "llmOutputTokens": 307,
+        "llmOutputTokens": 145,
         "scVotes": [
           "Northern Ireland"
         ]
@@ -7539,7 +7539,7 @@
       "question": "What city, located in Lincoln County, Montana, United States, is Vegepet based in?",
       "goldAnswer": "Troy, Montana",
       "type": "bridge",
-      "response": "Libby, Montana",
+      "response": "Libby, Montana, United States",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -7549,9 +7549,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1563,
-        "llmOutputTokens": 1563,
+        "llmOutputTokens": 810,
         "scVotes": [
-          "Libby, Montana"
+          "Libby, Montana, United States"
         ]
       },
       "citationCount": 10,
@@ -7590,7 +7590,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1545,
-        "llmOutputTokens": 136,
+        "llmOutputTokens": 96,
         "scVotes": [
           "Kodaline"
         ]
@@ -7631,7 +7631,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1667,
-        "llmOutputTokens": 197,
+        "llmOutputTokens": 143,
         "scVotes": [
           "Fredric March"
         ]
@@ -7662,7 +7662,7 @@
       "question": "Which Canadian artist is credited with first coming up with the title of Various Positions?",
       "goldAnswer": "Leonard Cohen",
       "type": "bridge",
-      "response": "Leonard Cohen",
+      "response": "Leonard Norman Cohen",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -7672,9 +7672,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1797,
-        "llmOutputTokens": 302,
+        "llmOutputTokens": 165,
         "scVotes": [
-          "Leonard Cohen"
+          "Leonard Norman Cohen"
         ]
       },
       "citationCount": 10,
@@ -7713,7 +7713,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1540,
-        "llmOutputTokens": 181,
+        "llmOutputTokens": 208,
         "scVotes": [
           "tabasco peppers"
         ]
@@ -7744,7 +7744,7 @@
       "question": "What term is the current chairman of Prince William County serving?",
       "goldAnswer": "fourth term",
       "type": "bridge",
-      "response": "fourth term",
+      "response": "his fourth term",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -7754,9 +7754,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1643,
-        "llmOutputTokens": 158,
+        "llmOutputTokens": 152,
         "scVotes": [
-          "fourth term"
+          "his fourth term"
         ]
       },
       "citationCount": 10,
@@ -7795,7 +7795,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1586,
-        "llmOutputTokens": 109,
+        "llmOutputTokens": 102,
         "scVotes": [
           "Max Ophüls"
         ]
@@ -7836,7 +7836,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1719,
-        "llmOutputTokens": 158,
+        "llmOutputTokens": 163,
         "scVotes": [
           "the first flume ride in Ireland"
         ]
@@ -7877,7 +7877,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1482,
-        "llmOutputTokens": 154,
+        "llmOutputTokens": 94,
         "scVotes": [
           "1979"
         ]
@@ -7908,7 +7908,7 @@
       "question": "Where are Catcha Lake and Hedley Mascot Mine located?",
       "goldAnswer": "British Columbia, Canada",
       "type": "comparison",
-      "response": "the central part of Nova Scotia's Halifax Regional Municipality and Hedley, British Columbia, Canada",
+      "response": "Halifax Regional Municipality, Nova Scotia, Canada; Hedley, British Columbia, Canada",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -7917,10 +7917,10 @@
         "pprIterations": 4,
         "pprConverged": true,
         "citedPassageCount": 10,
-        "llmInputTokens": 1661,
-        "llmOutputTokens": 258,
+        "llmInputTokens": 1581,
+        "llmOutputTokens": 248,
         "scVotes": [
-          "the central part of Nova Scotia's Halifax Regional Municipality and Hedley, British Columbia, Canada"
+          "Halifax Regional Municipality, Nova Scotia, Canada; Hedley, British Columbia, Canada"
         ]
       },
       "citationCount": 10,
@@ -7934,7 +7934,7 @@
         "passage:hotpotqa_batch_067:14",
         "passage:hotpotqa_batch_012:48",
         "passage:hotpotqa_batch_037:26",
-        "passage:hotpotqa_batch_027:27"
+        "passage:hotpotqa_batch_021:23"
       ],
       "contextPreview": [
         "# Hedley Mascot Mine\n\nThe Hedley Mascot Mine was a gold mine in Hedley, British Columbia, Canada. Go",
@@ -7949,7 +7949,7 @@
       "question": "Clifford Odets was seen as a successor to a Nobel Prize winner known as what?",
       "goldAnswer": "American playwright and Nobel laureate in Literature",
       "type": "bridge",
-      "response": "American playwright and Nobel laureate in Literature",
+      "response": "an American playwright and Nobel laureate in Literature",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -7959,9 +7959,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1634,
-        "llmOutputTokens": 422,
+        "llmOutputTokens": 144,
         "scVotes": [
-          "American playwright and Nobel laureate in Literature"
+          "an American playwright and Nobel laureate in Literature"
         ]
       },
       "citationCount": 10,
@@ -8000,7 +8000,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1402,
-        "llmOutputTokens": 223,
+        "llmOutputTokens": 128,
         "scVotes": [
           "Geneva"
         ]
@@ -8041,7 +8041,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1704,
-        "llmOutputTokens": 147,
+        "llmOutputTokens": 98,
         "scVotes": [
           "Laura Jeanne Reese Witherspoon"
         ]
@@ -8082,7 +8082,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1678,
-        "llmOutputTokens": 389,
+        "llmOutputTokens": 237,
         "scVotes": [
           "yes"
         ]
@@ -8123,7 +8123,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1563,
-        "llmOutputTokens": 136,
+        "llmOutputTokens": 87,
         "scVotes": [
           "Scott Treleaven"
         ]
@@ -8164,7 +8164,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1293,
-        "llmOutputTokens": 203,
+        "llmOutputTokens": 78,
         "scVotes": [
           "Adelaide"
         ]
@@ -8205,7 +8205,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1606,
-        "llmOutputTokens": 106,
+        "llmOutputTokens": 60,
         "scVotes": [
           "Can't Stop"
         ]
@@ -8246,7 +8246,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1773,
-        "llmOutputTokens": 169,
+        "llmOutputTokens": 130,
         "scVotes": [
           "United States Army lieutenant general"
         ]
@@ -8287,7 +8287,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1839,
-        "llmOutputTokens": 176,
+        "llmOutputTokens": 134,
         "scVotes": [
           "South America"
         ]
@@ -8328,7 +8328,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1414,
-        "llmOutputTokens": 170,
+        "llmOutputTokens": 116,
         "scVotes": [
           "Starachowice"
         ]
@@ -8369,7 +8369,7 @@
         "pprConverged": true,
         "citedPassageCount": 9,
         "llmInputTokens": 1625,
-        "llmOutputTokens": 123,
+        "llmOutputTokens": 112,
         "scVotes": [
           "more than 265 million business records worldwide"
         ]
@@ -8409,7 +8409,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1732,
-        "llmOutputTokens": 78,
+        "llmOutputTokens": 69,
         "scVotes": [
           "no"
         ]
@@ -8440,7 +8440,7 @@
       "question": "Which  American chain of bakery-café fast casual restaurants sponsored Bill Steers Men's 4-Miler",
       "goldAnswer": "Panera Bread Company",
       "type": "bridge",
-      "response": "Panera Bread Company",
+      "response": "Panera Bread",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -8450,9 +8450,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1889,
-        "llmOutputTokens": 255,
+        "llmOutputTokens": 89,
         "scVotes": [
-          "Panera Bread Company"
+          "Panera Bread"
         ]
       },
       "citationCount": 10,
@@ -8490,8 +8490,8 @@
         "pprIterations": 4,
         "pprConverged": true,
         "citedPassageCount": 10,
-        "llmInputTokens": 1254,
-        "llmOutputTokens": 208,
+        "llmInputTokens": 1253,
+        "llmOutputTokens": 209,
         "scVotes": [
           "George Gordon Byron, 6th Baron Byron, FRS"
         ]
@@ -8502,9 +8502,9 @@
         "passage:hotpotqa_batch_036:1",
         "passage:hotpotqa_batch_027:6",
         "passage:hotpotqa_batch_035:6",
-        "passage:hotpotqa_batch_027:7",
-        "passage:hotpotqa_batch_018:24",
         "passage:hotpotqa_batch_079:38",
+        "passage:hotpotqa_batch_018:24",
+        "passage:hotpotqa_batch_027:7",
         "passage:hotpotqa_batch_045:46",
         "passage:hotpotqa_batch_026:38",
         "passage:hotpotqa_batch_036:40"
@@ -8514,7 +8514,7 @@
         "# Glenarvon\n\nGlenarvon is Lady Caroline Lamb's first novel, published in 1816. Its rakish title char",
         "# Dorian Gray (character)\n\nDorian Gray is the main character in Oscar Wilde's novel The Picture of D",
         "# George Meredith\n\nGeorge Meredith, OM (12 February 1828 – 18 May 1909) was an English novelist and ",
-        "# Dorian Gray (disambiguation)\n\nDorian Gray is the main character of the novel \"The Picture of Doria"
+        "# Sonnets from the Portuguese\n\nSonnets from the Portuguese, written ca. 1845–1846 and published firs"
       ]
     },
     {
@@ -8532,7 +8532,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1567,
-        "llmOutputTokens": 146,
+        "llmOutputTokens": 128,
         "scVotes": [
           "2013"
         ]
@@ -8573,7 +8573,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1438,
-        "llmOutputTokens": 156,
+        "llmOutputTokens": 97,
         "scVotes": [
           "film director"
         ]
@@ -8614,7 +8614,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1730,
-        "llmOutputTokens": 123,
+        "llmOutputTokens": 71,
         "scVotes": [
           "Joseph Conrad"
         ]
@@ -8655,7 +8655,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1820,
-        "llmOutputTokens": 256,
+        "llmOutputTokens": 289,
         "scVotes": [
           "American"
         ]
@@ -8696,7 +8696,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1330,
-        "llmOutputTokens": 189,
+        "llmOutputTokens": 138,
         "scVotes": [
           "Nassau Herald"
         ]
@@ -8737,7 +8737,7 @@
         "pprConverged": true,
         "citedPassageCount": 9,
         "llmInputTokens": 1699,
-        "llmOutputTokens": 191,
+        "llmOutputTokens": 122,
         "scVotes": [
           "Queensland"
         ]
@@ -8767,7 +8767,7 @@
       "question": "Which Scottish playwright wrote the poem \"Havisham\"?",
       "goldAnswer": "Carol Ann Duffy",
       "type": "bridge",
-      "response": "Dame Carol Ann Duffy",
+      "response": "Carol Ann Duffy",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -8777,9 +8777,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1715,
-        "llmOutputTokens": 171,
+        "llmOutputTokens": 109,
         "scVotes": [
-          "Dame Carol Ann Duffy"
+          "Carol Ann Duffy"
         ]
       },
       "citationCount": 10,
@@ -8808,8 +8808,8 @@
       "question": "What genre of composers were both Claudio Monteverdi and Georges Bizet? ",
       "goldAnswer": "opera",
       "type": "comparison",
-      "response": "opera composers",
-      "correct": true,
+      "response": "composer",
+      "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -8818,9 +8818,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2329,
-        "llmOutputTokens": 1142,
+        "llmOutputTokens": 116,
         "scVotes": [
-          "opera composers"
+          "composer"
         ]
       },
       "citationCount": 10,
@@ -8859,7 +8859,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1942,
-        "llmOutputTokens": 175,
+        "llmOutputTokens": 126,
         "scVotes": [
           "10 January 1920"
         ]
@@ -8900,7 +8900,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1243,
-        "llmOutputTokens": 105,
+        "llmOutputTokens": 92,
         "scVotes": [
           "Pulandian District"
         ]
@@ -8941,7 +8941,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1260,
-        "llmOutputTokens": 619,
+        "llmOutputTokens": 285,
         "scVotes": [
           "Sonya Scarlet"
         ]
@@ -8982,7 +8982,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1642,
-        "llmOutputTokens": 817,
+        "llmOutputTokens": 436,
         "scVotes": [
           "Long Island"
         ]
@@ -9023,7 +9023,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1810,
-        "llmOutputTokens": 189,
+        "llmOutputTokens": 160,
         "scVotes": [
           "Scanian dialect"
         ]
@@ -9064,7 +9064,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1590,
-        "llmOutputTokens": 516,
+        "llmOutputTokens": 140,
         "scVotes": [
           "Nick Cassavetes"
         ]
@@ -9105,7 +9105,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1813,
-        "llmOutputTokens": 277,
+        "llmOutputTokens": 152,
         "scVotes": [
           "damnatio memoriae"
         ]
@@ -9146,7 +9146,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1763,
-        "llmOutputTokens": 177,
+        "llmOutputTokens": 100,
         "scVotes": [
           "Ghanaian"
         ]
@@ -9187,7 +9187,7 @@
         "pprConverged": true,
         "citedPassageCount": 8,
         "llmInputTokens": 2103,
-        "llmOutputTokens": 183,
+        "llmOutputTokens": 139,
         "scVotes": [
           "Arsenal Football Club"
         ]
@@ -9226,7 +9226,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1312,
-        "llmOutputTokens": 293,
+        "llmOutputTokens": 133,
         "scVotes": [
           "the largest independent public listed pan-Asian life insurance group"
         ]
@@ -9257,7 +9257,7 @@
       "question": " What type of television show did Dylan Everett star in, in 2015?",
       "goldAnswer": "American-Canadian mystery-drama",
       "type": "bridge",
-      "response": "American-Canadian mystery-drama television series",
+      "response": "an American-Canadian mystery-drama television series",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -9267,9 +9267,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1937,
-        "llmOutputTokens": 252,
+        "llmOutputTokens": 148,
         "scVotes": [
-          "American-Canadian mystery-drama television series"
+          "an American-Canadian mystery-drama television series"
         ]
       },
       "citationCount": 10,
@@ -9308,7 +9308,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1321,
-        "llmOutputTokens": 304,
+        "llmOutputTokens": 96,
         "scVotes": [
           "Pakenham, Victoria"
         ]
@@ -9349,7 +9349,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1522,
-        "llmOutputTokens": 294,
+        "llmOutputTokens": 178,
         "scVotes": [
           "skogsrå"
         ]
@@ -9390,7 +9390,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1466,
-        "llmOutputTokens": 207,
+        "llmOutputTokens": 172,
         "scVotes": [
           "Teamsters leader"
         ]
@@ -9431,7 +9431,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1910,
-        "llmOutputTokens": 326,
+        "llmOutputTokens": 106,
         "scVotes": [
           "Los Angeles, California"
         ]
@@ -9472,7 +9472,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1330,
-        "llmOutputTokens": 112,
+        "llmOutputTokens": 207,
         "scVotes": [
           "The Celluloid Closet"
         ]
@@ -9513,7 +9513,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1758,
-        "llmOutputTokens": 192,
+        "llmOutputTokens": 121,
         "scVotes": [
           "Ronald Joseph Ryan"
         ]
@@ -9554,7 +9554,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1400,
-        "llmOutputTokens": 164,
+        "llmOutputTokens": 156,
         "scVotes": [
           "Chronicles of Barsetshire"
         ]
@@ -9595,7 +9595,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1385,
-        "llmOutputTokens": 87,
+        "llmOutputTokens": 97,
         "scVotes": [
           "Echeveria"
         ]
@@ -9626,7 +9626,7 @@
       "question": "What was Rosario Dawson of Josie and the Pussycats film debut",
       "goldAnswer": "She made her film debut in the 1995 teen drama \"Kids\".",
       "type": "bridge",
-      "response": "the 1995 teen drama Kids",
+      "response": "Kids",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -9636,9 +9636,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1838,
-        "llmOutputTokens": 193,
+        "llmOutputTokens": 111,
         "scVotes": [
-          "the 1995 teen drama Kids"
+          "Kids"
         ]
       },
       "citationCount": 10,
@@ -9677,7 +9677,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1924,
-        "llmOutputTokens": 170,
+        "llmOutputTokens": 130,
         "scVotes": [
           "C. H. Greenblatt"
         ]
@@ -9708,7 +9708,7 @@
       "question": "Where was the air-cooled version of a weapon system used on the HMAS \"Narani\" found?",
       "goldAnswer": "World War I fighter aircraft.",
       "type": "bridge",
-      "response": "Vickers Armstrong, Barrow",
+      "response": "Oerlikon, Zürich, Switzerland",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -9718,9 +9718,9 @@
         "pprConverged": true,
         "citedPassageCount": 9,
         "llmInputTokens": 1632,
-        "llmOutputTokens": 9853,
+        "llmOutputTokens": 2255,
         "scVotes": [
-          "Vickers Armstrong, Barrow"
+          "Oerlikon, Zürich, Switzerland"
         ]
       },
       "citationCount": 9,
@@ -9758,7 +9758,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1954,
-        "llmOutputTokens": 1208,
+        "llmOutputTokens": 527,
         "scVotes": [
           "Point Place, Wisconsin"
         ]
@@ -9799,7 +9799,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1646,
-        "llmOutputTokens": 107,
+        "llmOutputTokens": 118,
         "scVotes": [
           "Universal Pictures"
         ]
@@ -9840,7 +9840,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1752,
-        "llmOutputTokens": 368,
+        "llmOutputTokens": 260,
         "scVotes": [
           "Ionolyce helicon"
         ]
@@ -9871,7 +9871,7 @@
       "question": "Not Richard, But Dick was an album by the band formed in what city?",
       "goldAnswer": "Philadelphia",
       "type": "bridge",
-      "response": "Philadelphia",
+      "response": "Philadelphia, Pennsylvania",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -9881,9 +9881,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1902,
-        "llmOutputTokens": 324,
+        "llmOutputTokens": 388,
         "scVotes": [
-          "Philadelphia"
+          "Philadelphia, Pennsylvania"
         ]
       },
       "citationCount": 10,
@@ -9912,7 +9912,7 @@
       "question": "The school in which the Wilmslow Show is held is designated as what?",
       "goldAnswer": "Centre of Excellence",
       "type": "bridge",
-      "response": "Grade II* listed building",
+      "response": "designated Grade II* listed building",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -9922,9 +9922,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1796,
-        "llmOutputTokens": 401,
+        "llmOutputTokens": 179,
         "scVotes": [
-          "Grade II* listed building"
+          "designated Grade II* listed building"
         ]
       },
       "citationCount": 10,
@@ -9963,7 +9963,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1915,
-        "llmOutputTokens": 184,
+        "llmOutputTokens": 105,
         "scVotes": [
           "Greater Manchester's Metrolink light rail system"
         ]
@@ -10004,7 +10004,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1850,
-        "llmOutputTokens": 527,
+        "llmOutputTokens": 256,
         "scVotes": [
           "Martin Scorcese"
         ]
@@ -10035,7 +10035,7 @@
       "question": "What day of the week does the Korean cooking-variety program featuring the owner of \"Dear. bread\" air?",
       "goldAnswer": "Mondays",
       "type": "bridge",
-      "response": "Mondays",
+      "response": "Monday",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -10045,9 +10045,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1455,
-        "llmOutputTokens": 213,
+        "llmOutputTokens": 157,
         "scVotes": [
-          "Mondays"
+          "Monday"
         ]
       },
       "citationCount": 10,
@@ -10086,7 +10086,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1926,
-        "llmOutputTokens": 182,
+        "llmOutputTokens": 106,
         "scVotes": [
           "Presbyterian University College, Ghana"
         ]
@@ -10127,7 +10127,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1004,
-        "llmOutputTokens": 126,
+        "llmOutputTokens": 66,
         "scVotes": [
           "Ernst Messerschmid"
         ]
@@ -10168,7 +10168,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1975,
-        "llmOutputTokens": 389,
+        "llmOutputTokens": 203,
         "scVotes": [
           "Hole"
         ]
@@ -10209,7 +10209,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1694,
-        "llmOutputTokens": 260,
+        "llmOutputTokens": 189,
         "scVotes": [
           "no"
         ]
@@ -10250,7 +10250,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1518,
-        "llmOutputTokens": 330,
+        "llmOutputTokens": 323,
         "scVotes": [
           "1912"
         ]
@@ -10291,7 +10291,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1608,
-        "llmOutputTokens": 156,
+        "llmOutputTokens": 81,
         "scVotes": [
           "yes"
         ]
@@ -10332,7 +10332,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1424,
-        "llmOutputTokens": 800,
+        "llmOutputTokens": 912,
         "scVotes": [
           "Rachel, Nevada"
         ]
@@ -10373,7 +10373,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2542,
-        "llmOutputTokens": 804,
+        "llmOutputTokens": 284,
         "scVotes": [
           "Nashville Tribute Band"
         ]
@@ -10414,7 +10414,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1650,
-        "llmOutputTokens": 93,
+        "llmOutputTokens": 85,
         "scVotes": [
           "Lalit"
         ]
@@ -10455,7 +10455,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1409,
-        "llmOutputTokens": 123,
+        "llmOutputTokens": 102,
         "scVotes": [
           "flowering plants"
         ]
@@ -10496,7 +10496,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1599,
-        "llmOutputTokens": 349,
+        "llmOutputTokens": 433,
         "scVotes": [
           "XVideos"
         ]
@@ -10537,7 +10537,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1577,
-        "llmOutputTokens": 284,
+        "llmOutputTokens": 412,
         "scVotes": [
           "Maine"
         ]
@@ -10574,11 +10574,11 @@
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
         "fallbackTriggered": false,
-        "pprIterations": 4,
+        "pprIterations": 3,
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1427,
-        "llmOutputTokens": 147,
+        "llmOutputTokens": 97,
         "scVotes": [
           "Keisuke Kuwata"
         ]
@@ -10619,7 +10619,7 @@
         "pprConverged": true,
         "citedPassageCount": 9,
         "llmInputTokens": 1588,
-        "llmOutputTokens": 454,
+        "llmOutputTokens": 337,
         "scVotes": [
           "1896"
         ]
@@ -10659,7 +10659,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1625,
-        "llmOutputTokens": 420,
+        "llmOutputTokens": 160,
         "scVotes": [
           "Vladimir Arnold"
         ]
@@ -10700,7 +10700,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1553,
-        "llmOutputTokens": 84,
+        "llmOutputTokens": 63,
         "scVotes": [
           "no"
         ]
@@ -10741,7 +10741,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1347,
-        "llmOutputTokens": 211,
+        "llmOutputTokens": 69,
         "scVotes": [
           "older brother"
         ]
@@ -10782,7 +10782,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1559,
-        "llmOutputTokens": 95,
+        "llmOutputTokens": 84,
         "scVotes": [
           "Bruce Chatwin"
         ]
@@ -10823,7 +10823,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2103,
-        "llmOutputTokens": 1058,
+        "llmOutputTokens": 748,
         "scVotes": [
           "Song Kang-ho and Jung Woo-sung"
         ]
@@ -10854,8 +10854,8 @@
       "question": "Near what ocean does the highway carried by the Long-Allen bridge terminate near?",
       "goldAnswer": "the Atlantic Ocean",
       "type": "bridge",
-      "response": "Atlantic Ocean",
-      "correct": true,
+      "response": "Pacific Ocean",
+      "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -10864,9 +10864,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2023,
-        "llmOutputTokens": 1830,
+        "llmOutputTokens": 556,
         "scVotes": [
-          "Atlantic Ocean"
+          "Pacific Ocean"
         ]
       },
       "citationCount": 10,
@@ -10895,7 +10895,7 @@
       "question": "Are Yucca and Rodgersia both perennials?",
       "goldAnswer": "yes",
       "type": "comparison",
-      "response": "Rodgersia is explicitly a herbaceous perennial, but Yucca is not stated to be one in the provided context. FINAL: no",
+      "response": "no",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -10904,10 +10904,10 @@
         "pprIterations": 3,
         "pprConverged": true,
         "citedPassageCount": 10,
-        "llmInputTokens": 1421,
-        "llmOutputTokens": 458,
+        "llmInputTokens": 1505,
+        "llmOutputTokens": 204,
         "scVotes": [
-          "Rodgersia is explicitly a herbaceous perennial, but Yucca is not stated to be one in the provided context. FINAL: no"
+          "no"
         ]
       },
       "citationCount": 10,
@@ -10921,7 +10921,7 @@
         "passage:hotpotqa_batch_041:30",
         "passage:hotpotqa_batch_026:7",
         "passage:hotpotqa_batch_028:36",
-        "passage:hotpotqa_batch_028:38"
+        "passage:hotpotqa_batch_018:36"
       ],
       "contextPreview": [
         "# Hesperoyucca whipplei\n\nHesperoyucca whipplei (syn. \"Yucca whipplei\" ) (chaparral yucca, our Lord's",
@@ -10936,7 +10936,7 @@
       "question": "Christopher I of Denmark succeeded his brother, who was king during what period?",
       "goldAnswer": "1241 until his death in 1250",
       "type": "bridge",
-      "response": "1241 until his death in 1250",
+      "response": "from 1241 until his death in 1250",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -10946,9 +10946,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1818,
-        "llmOutputTokens": 543,
+        "llmOutputTokens": 267,
         "scVotes": [
-          "1241 until his death in 1250"
+          "from 1241 until his death in 1250"
         ]
       },
       "citationCount": 10,
@@ -10987,7 +10987,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2136,
-        "llmOutputTokens": 238,
+        "llmOutputTokens": 197,
         "scVotes": [
           "1963"
         ]
@@ -11028,7 +11028,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1816,
-        "llmOutputTokens": 219,
+        "llmOutputTokens": 100,
         "scVotes": [
           "Albany"
         ]
@@ -11069,7 +11069,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1866,
-        "llmOutputTokens": 363,
+        "llmOutputTokens": 198,
         "scVotes": [
           "Samsung Galaxy S7 series"
         ]
@@ -11109,16 +11109,16 @@
         "pprIterations": 3,
         "pprConverged": true,
         "citedPassageCount": 10,
-        "llmInputTokens": 1678,
-        "llmOutputTokens": 151,
+        "llmInputTokens": 1674,
+        "llmOutputTokens": 100,
         "scVotes": [
           "Salzkammergut"
         ]
       },
       "citationCount": 10,
       "citedPassageIds": [
-        "passage:hotpotqa_batch_075:40",
         "passage:hotpotqa_batch_065:10",
+        "passage:hotpotqa_batch_075:40",
         "passage:hotpotqa_batch_040:30",
         "passage:hotpotqa_batch_041:36",
         "passage:hotpotqa_batch_061:10",
@@ -11129,8 +11129,8 @@
         "passage:hotpotqa_batch_016:38"
       ],
       "contextPreview": [
-        "# Salzkammergut\n\nThe Salzkammergut is a resort area located in Austria. It stretches from the City o",
         "# Obertraun\n\nObertraun, Upper Austria is a village in the Salzkammergut, a region in Austria. It is ",
+        "# Salzkammergut\n\nThe Salzkammergut is a resort area located in Austria. It stretches from the City o",
         "# Hoher Eichham\n\nThe Hoher Eichham (also \"Hocheichham\"), at m (AA) , is the most dominant mountain i",
         "# Hundsheimer Berg\n\nHundsheimer Berg is a hill located in the Hundsheimer Berge hill range in Lower ",
         "# Mozarteum Orchestra Salzburg\n\nThe Mozarteum Orchestra Salzburg is an Austrian orchestra, based in "
@@ -11141,7 +11141,7 @@
       "question": "How long is the road the A12 is a part of?",
       "goldAnswer": "5320 km",
       "type": "bridge",
-      "response": "It runs from Hackney Wick in north-east London, through the Blackwall Tunnel, to Kidbrooke in south-east London.",
+      "response": "about 6,530 km",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -11151,9 +11151,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1590,
-        "llmOutputTokens": 2621,
+        "llmOutputTokens": 1047,
         "scVotes": [
-          "It runs from Hackney Wick in north-east London, through the Blackwall Tunnel, to Kidbrooke in south-east London."
+          "about 6,530 km"
         ]
       },
       "citationCount": 10,
@@ -11192,7 +11192,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1559,
-        "llmOutputTokens": 201,
+        "llmOutputTokens": 141,
         "scVotes": [
           "Kentucky Fried Chicken"
         ]
@@ -11206,8 +11206,8 @@
         "passage:hotpotqa_batch_058:10",
         "passage:hotpotqa_batch_019:49",
         "passage:hotpotqa_batch_053:33",
-        "passage:hotpotqa_batch_019:37",
         "passage:hotpotqa_batch_067:9",
+        "passage:hotpotqa_batch_019:37",
         "passage:hotpotqa_batch_053:26"
       ],
       "contextPreview": [
@@ -11233,7 +11233,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1846,
-        "llmOutputTokens": 229,
+        "llmOutputTokens": 126,
         "scVotes": [
           "no"
         ]
@@ -11274,7 +11274,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1636,
-        "llmOutputTokens": 426,
+        "llmOutputTokens": 352,
         "scVotes": [
           "Bolton, Greater Manchester"
         ]
@@ -11315,7 +11315,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1721,
-        "llmOutputTokens": 529,
+        "llmOutputTokens": 369,
         "scVotes": [
           "Levittown, New York"
         ]
@@ -11356,7 +11356,7 @@
         "pprConverged": true,
         "citedPassageCount": 8,
         "llmInputTokens": 1348,
-        "llmOutputTokens": 1717,
+        "llmOutputTokens": 1098,
         "scVotes": [
           "Louis Vuitton"
         ]
@@ -11395,7 +11395,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1353,
-        "llmOutputTokens": 148,
+        "llmOutputTokens": 85,
         "scVotes": [
           "Adelaide Lightning"
         ]
@@ -11426,7 +11426,7 @@
       "question": "What time did the show, in which Gordon Burns was the host, usually air on Monday?",
       "goldAnswer": "7pm",
       "type": "bridge",
-      "response": "8:00 p.m.",
+      "response": "7:00 p.m.",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -11436,9 +11436,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1648,
-        "llmOutputTokens": 3638,
+        "llmOutputTokens": 3247,
         "scVotes": [
-          "8:00 p.m."
+          "7:00 p.m."
         ]
       },
       "citationCount": 10,
@@ -11477,7 +11477,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1694,
-        "llmOutputTokens": 365,
+        "llmOutputTokens": 134,
         "scVotes": [
           "Carlos Santana"
         ]
@@ -11508,7 +11508,7 @@
       "question": "What type of group does Pablo Carballo and Argentine Air Force have in common?",
       "goldAnswer": "military",
       "type": "bridge",
-      "response": "military",
+      "response": "military group",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -11518,9 +11518,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1690,
-        "llmOutputTokens": 407,
+        "llmOutputTokens": 423,
         "scVotes": [
-          "military"
+          "military group"
         ]
       },
       "citationCount": 10,
@@ -11559,7 +11559,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1596,
-        "llmOutputTokens": 136,
+        "llmOutputTokens": 54,
         "scVotes": [
           "Andy García"
         ]
@@ -11600,7 +11600,7 @@
         "pprConverged": true,
         "citedPassageCount": 7,
         "llmInputTokens": 1388,
-        "llmOutputTokens": 181,
+        "llmOutputTokens": 138,
         "scVotes": [
           "Mario Lemieux"
         ]
@@ -11638,7 +11638,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1808,
-        "llmOutputTokens": 98,
+        "llmOutputTokens": 81,
         "scVotes": [
           "yes"
         ]
@@ -11679,7 +11679,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1893,
-        "llmOutputTokens": 1038,
+        "llmOutputTokens": 457,
         "scVotes": [
           "bands"
         ]
@@ -11710,8 +11710,8 @@
       "question": "The first person to reach both poles named a glacier after which person? ",
       "goldAnswer": "the daughter of Fridtjof Nansen.",
       "type": "bridge",
-      "response": "the daughter of Fridtjof Nansen",
-      "correct": true,
+      "response": "Liv Nansen",
+      "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -11720,9 +11720,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1631,
-        "llmOutputTokens": 618,
+        "llmOutputTokens": 821,
         "scVotes": [
-          "the daughter of Fridtjof Nansen"
+          "Liv Nansen"
         ]
       },
       "citationCount": 10,
@@ -11761,7 +11761,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1552,
-        "llmOutputTokens": 117,
+        "llmOutputTokens": 61,
         "scVotes": [
           "yes"
         ]
@@ -11802,7 +11802,7 @@
         "pprConverged": true,
         "citedPassageCount": 9,
         "llmInputTokens": 1276,
-        "llmOutputTokens": 116,
+        "llmOutputTokens": 121,
         "scVotes": [
           "1941"
         ]
@@ -11832,7 +11832,7 @@
       "question": "The Kilby International Awards were named after the inventor who discovered what electronics phenomenon?",
       "goldAnswer": "integrated circuit",
       "type": "bridge",
-      "response": "integrated circuit",
+      "response": "the integrated circuit",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -11842,9 +11842,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1490,
-        "llmOutputTokens": 382,
+        "llmOutputTokens": 196,
         "scVotes": [
-          "integrated circuit"
+          "the integrated circuit"
         ]
       },
       "citationCount": 10,
@@ -11883,7 +11883,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2421,
-        "llmOutputTokens": 52,
+        "llmOutputTokens": 54,
         "scVotes": [
           "Philadelphia Eagles"
         ]
@@ -11924,7 +11924,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1385,
-        "llmOutputTokens": 188,
+        "llmOutputTokens": 157,
         "scVotes": [
           "the James Bond film series"
         ]
@@ -11965,7 +11965,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1396,
-        "llmOutputTokens": 441,
+        "llmOutputTokens": 310,
         "scVotes": [
           "Brainerd Lakes Regional Airport"
         ]
@@ -12006,7 +12006,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1617,
-        "llmOutputTokens": 520,
+        "llmOutputTokens": 345,
         "scVotes": [
           "Warrel Dane"
         ]
@@ -12047,7 +12047,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1786,
-        "llmOutputTokens": 152,
+        "llmOutputTokens": 121,
         "scVotes": [
           "Lincoln Memorial University"
         ]
@@ -12088,7 +12088,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1495,
-        "llmOutputTokens": 452,
+        "llmOutputTokens": 229,
         "scVotes": [
           "Richard \"Rick\" Ducommun"
         ]
@@ -12119,8 +12119,8 @@
       "question": "What is the day of the horse race of which ESPN covers both the post position draw and the undercard races?",
       "goldAnswer": "Saturday",
       "type": "bridge",
-      "response": "Black-Eyed Susan Stakes Day",
-      "correct": false,
+      "response": "first Saturday in May",
+      "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -12129,9 +12129,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1716,
-        "llmOutputTokens": 4514,
+        "llmOutputTokens": 395,
         "scVotes": [
-          "Black-Eyed Susan Stakes Day"
+          "first Saturday in May"
         ]
       },
       "citationCount": 10,
@@ -12170,7 +12170,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1738,
-        "llmOutputTokens": 301,
+        "llmOutputTokens": 209,
         "scVotes": [
           "1998"
         ]
@@ -12211,7 +12211,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1547,
-        "llmOutputTokens": 169,
+        "llmOutputTokens": 87,
         "scVotes": [
           "Emilia Rose Elizabeth Fox"
         ]
@@ -12252,7 +12252,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1428,
-        "llmOutputTokens": 435,
+        "llmOutputTokens": 216,
         "scVotes": [
           "Zombieland"
         ]
@@ -12283,7 +12283,7 @@
       "question": "Where is the group of islands named after Purdue University's professor of forest ecology from 1947 to 1973?",
       "goldAnswer": "the northwest tip of Canisteo Peninsula in Amundsen Sea",
       "type": "bridge",
-      "response": "just off the northwest tip of the Canisteo Peninsula in the Amundsen Sea",
+      "response": "just off the northwest tip of Canisteo Peninsula in the Amundsen Sea",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -12293,9 +12293,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1767,
-        "llmOutputTokens": 246,
+        "llmOutputTokens": 169,
         "scVotes": [
-          "just off the northwest tip of the Canisteo Peninsula in the Amundsen Sea"
+          "just off the northwest tip of Canisteo Peninsula in the Amundsen Sea"
         ]
       },
       "citationCount": 10,
@@ -12334,7 +12334,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1312,
-        "llmOutputTokens": 205,
+        "llmOutputTokens": 52,
         "scVotes": [
           "Christer Fuglesang"
         ]
@@ -12375,7 +12375,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1816,
-        "llmOutputTokens": 472,
+        "llmOutputTokens": 404,
         "scVotes": [
           "professor"
         ]
@@ -12406,7 +12406,7 @@
       "question": "which persons private jet called Trump Force One which is built by Boeing Commercial Airplanes and is the manufacturer's largest single aisle passenger aircraft that is produced from 1981 to 2004?",
       "goldAnswer": "Donald J. Trump's private jet",
       "type": "bridge",
-      "response": "Donald Trump",
+      "response": "Donald John Trump",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -12416,9 +12416,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1895,
-        "llmOutputTokens": 306,
+        "llmOutputTokens": 191,
         "scVotes": [
-          "Donald Trump"
+          "Donald John Trump"
         ]
       },
       "citationCount": 10,
@@ -12457,7 +12457,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1821,
-        "llmOutputTokens": 169,
+        "llmOutputTokens": 91,
         "scVotes": [
           "Check It Out! with Dr. Steve Brule"
         ]
@@ -12498,7 +12498,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1484,
-        "llmOutputTokens": 198,
+        "llmOutputTokens": 84,
         "scVotes": [
           "yes"
         ]
@@ -12539,7 +12539,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1412,
-        "llmOutputTokens": 198,
+        "llmOutputTokens": 236,
         "scVotes": [
           "Bulgarian"
         ]
@@ -12580,7 +12580,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1650,
-        "llmOutputTokens": 134,
+        "llmOutputTokens": 98,
         "scVotes": [
           "Bank of China Building"
         ]
@@ -12621,7 +12621,7 @@
         "pprConverged": true,
         "citedPassageCount": 9,
         "llmInputTokens": 1429,
-        "llmOutputTokens": 182,
+        "llmOutputTokens": 247,
         "scVotes": [
           "Hockey Club Davos"
         ]
@@ -12661,7 +12661,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1560,
-        "llmOutputTokens": 287,
+        "llmOutputTokens": 225,
         "scVotes": [
           "128 pages"
         ]
@@ -12702,7 +12702,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1759,
-        "llmOutputTokens": 180,
+        "llmOutputTokens": 160,
         "scVotes": [
           "January 15, 1975"
         ]
@@ -12743,7 +12743,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1542,
-        "llmOutputTokens": 158,
+        "llmOutputTokens": 105,
         "scVotes": [
           "Tony Manero"
         ]
@@ -12784,7 +12784,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1735,
-        "llmOutputTokens": 251,
+        "llmOutputTokens": 151,
         "scVotes": [
           "Mona Leaves-a"
         ]
@@ -12825,7 +12825,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1940,
-        "llmOutputTokens": 1414,
+        "llmOutputTokens": 837,
         "scVotes": [
           "Sylvia Dee in Rochester, New York"
         ]
@@ -12866,7 +12866,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2076,
-        "llmOutputTokens": 149,
+        "llmOutputTokens": 125,
         "scVotes": [
           "no"
         ]
@@ -12907,7 +12907,7 @@
         "pprConverged": true,
         "citedPassageCount": 6,
         "llmInputTokens": 935,
-        "llmOutputTokens": 147,
+        "llmOutputTokens": 100,
         "scVotes": [
           "British"
         ]
@@ -12944,7 +12944,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1426,
-        "llmOutputTokens": 166,
+        "llmOutputTokens": 99,
         "scVotes": [
           "New York City"
         ]
@@ -12985,7 +12985,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1995,
-        "llmOutputTokens": 151,
+        "llmOutputTokens": 134,
         "scVotes": [
           "Norodom Sihanouk"
         ]
@@ -13025,8 +13025,8 @@
         "pprIterations": 4,
         "pprConverged": true,
         "citedPassageCount": 10,
-        "llmInputTokens": 1929,
-        "llmOutputTokens": 199,
+        "llmInputTokens": 1925,
+        "llmOutputTokens": 275,
         "scVotes": [
           "National Football Conference"
         ]
@@ -13036,20 +13036,20 @@
         "passage:hotpotqa_batch_048:38",
         "passage:hotpotqa_batch_024:16",
         "passage:hotpotqa_batch_077:7",
+        "passage:hotpotqa_batch_023:38",
         "passage:hotpotqa_batch_013:47",
         "passage:hotpotqa_batch_025:8",
         "passage:hotpotqa_batch_061:8",
         "passage:hotpotqa_batch_019:46",
         "passage:hotpotqa_batch_044:7",
-        "passage:hotpotqa_batch_023:38",
         "passage:hotpotqa_batch_059:2"
       ],
       "contextPreview": [
         "# Kevin House Jr.\n\nKevin Nathaniel House Jr. is a former professional American football player. He p",
         "# Danuel House\n\nDanuel Kennedy House Jr. (born June 7, 1993) is an American professional basketball ",
         "# Seattle Seahawks\n\nThe Seattle Seahawks are a professional American football franchise based in Sea",
-        "# Big Ten Conference\n\nThe Big Ten Conference (B1G), formerly Western Conference and Big Nine Confere",
-        "# DeSean Jackson\n\nDeSean William Jackson (born December 1, 1986) is an American football wide receiv"
+        "# Dallas Texans (NFL)\n\nThe Dallas Texans played in the National Football League (NFL) for one season",
+        "# Big Ten Conference\n\nThe Big Ten Conference (B1G), formerly Western Conference and Big Nine Confere"
       ]
     },
     {
@@ -13067,7 +13067,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1833,
-        "llmOutputTokens": 185,
+        "llmOutputTokens": 69,
         "scVotes": [
           "Munich"
         ]
@@ -13098,7 +13098,7 @@
       "question": "What is the subsidiary of the record company who released \"Love Incredible?\"",
       "goldAnswer": "Vivendi S.A.",
       "type": "bridge",
-      "response": "Interscope Geffen A&M Records",
+      "response": "Universal Music Group",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -13108,9 +13108,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1671,
-        "llmOutputTokens": 4759,
+        "llmOutputTokens": 1103,
         "scVotes": [
-          "Interscope Geffen A&M Records"
+          "Universal Music Group"
         ]
       },
       "citationCount": 10,
@@ -13149,7 +13149,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2035,
-        "llmOutputTokens": 1035,
+        "llmOutputTokens": 225,
         "scVotes": [
           "al-Qaeda"
         ]
@@ -13190,7 +13190,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1442,
-        "llmOutputTokens": 369,
+        "llmOutputTokens": 226,
         "scVotes": [
           "20 consecutive times"
         ]
@@ -13231,7 +13231,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1516,
-        "llmOutputTokens": 276,
+        "llmOutputTokens": 119,
         "scVotes": [
           "1689"
         ]
@@ -13272,7 +13272,7 @@
         "pprConverged": true,
         "citedPassageCount": 9,
         "llmInputTokens": 1806,
-        "llmOutputTokens": 1719,
+        "llmOutputTokens": 244,
         "scVotes": [
           "singer and songwriter"
         ]
@@ -13312,7 +13312,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1698,
-        "llmOutputTokens": 219,
+        "llmOutputTokens": 168,
         "scVotes": [
           "University of Hawaii"
         ]
@@ -13353,7 +13353,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1497,
-        "llmOutputTokens": 132,
+        "llmOutputTokens": 153,
         "scVotes": [
           "Attorney General and Lord Chancellor of England"
         ]
@@ -13394,7 +13394,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1626,
-        "llmOutputTokens": 172,
+        "llmOutputTokens": 158,
         "scVotes": [
           "1995"
         ]
@@ -13435,7 +13435,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1671,
-        "llmOutputTokens": 198,
+        "llmOutputTokens": 159,
         "scVotes": [
           "The Beatles"
         ]
@@ -13476,7 +13476,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1361,
-        "llmOutputTokens": 152,
+        "llmOutputTokens": 113,
         "scVotes": [
           "No. 4"
         ]
@@ -13517,7 +13517,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1673,
-        "llmOutputTokens": 148,
+        "llmOutputTokens": 130,
         "scVotes": [
           "Daniel Louis Castellaneta"
         ]
@@ -13558,7 +13558,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1654,
-        "llmOutputTokens": 296,
+        "llmOutputTokens": 357,
         "scVotes": [
           "rock and roll"
         ]
@@ -13599,7 +13599,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1645,
-        "llmOutputTokens": 649,
+        "llmOutputTokens": 187,
         "scVotes": [
           "yes"
         ]
@@ -13640,7 +13640,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2209,
-        "llmOutputTokens": 791,
+        "llmOutputTokens": 384,
         "scVotes": [
           "Marco Fu Ka-chun"
         ]
@@ -13652,8 +13652,8 @@
         "passage:hotpotqa_batch_036:16",
         "passage:hotpotqa_batch_030:10",
         "passage:hotpotqa_batch_025:34",
-        "passage:hotpotqa_batch_051:17",
         "passage:hotpotqa_batch_009:12",
+        "passage:hotpotqa_batch_051:17",
         "passage:hotpotqa_batch_004:3",
         "passage:hotpotqa_batch_071:16",
         "passage:hotpotqa_batch_042:17"
@@ -13681,7 +13681,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1754,
-        "llmOutputTokens": 230,
+        "llmOutputTokens": 123,
         "scVotes": [
           "Jermaine Lamarr Cole"
         ]
@@ -13722,7 +13722,7 @@
         "pprConverged": true,
         "citedPassageCount": 8,
         "llmInputTokens": 1202,
-        "llmOutputTokens": 118,
+        "llmOutputTokens": 101,
         "scVotes": [
           "1997"
         ]
@@ -13761,7 +13761,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2293,
-        "llmOutputTokens": 372,
+        "llmOutputTokens": 148,
         "scVotes": [
           "Synthesis of the Elements in Stars"
         ]
@@ -13802,7 +13802,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1614,
-        "llmOutputTokens": 124,
+        "llmOutputTokens": 87,
         "scVotes": [
           "University of Oxford"
         ]
@@ -13843,7 +13843,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1801,
-        "llmOutputTokens": 395,
+        "llmOutputTokens": 191,
         "scVotes": [
           "Marvel Comics"
         ]
@@ -13884,7 +13884,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1781,
-        "llmOutputTokens": 461,
+        "llmOutputTokens": 335,
         "scVotes": [
           "the United States and Canada"
         ]
@@ -13925,7 +13925,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1448,
-        "llmOutputTokens": 136,
+        "llmOutputTokens": 123,
         "scVotes": [
           "Jon Hume"
         ]
@@ -13966,7 +13966,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1830,
-        "llmOutputTokens": 251,
+        "llmOutputTokens": 133,
         "scVotes": [
           "creeks"
         ]
@@ -14007,7 +14007,7 @@
         "pprConverged": true,
         "citedPassageCount": 9,
         "llmInputTokens": 1522,
-        "llmOutputTokens": 1276,
+        "llmOutputTokens": 632,
         "scVotes": [
           "radioactive isotopes"
         ]
@@ -14047,7 +14047,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1999,
-        "llmOutputTokens": 788,
+        "llmOutputTokens": 1102,
         "scVotes": [
           "Danny Elfman"
         ]
@@ -14088,7 +14088,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1749,
-        "llmOutputTokens": 229,
+        "llmOutputTokens": 138,
         "scVotes": [
           "Deputy Barney Fife"
         ]
@@ -14129,7 +14129,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1790,
-        "llmOutputTokens": 748,
+        "llmOutputTokens": 294,
         "scVotes": [
           "punk rock band"
         ]
@@ -14170,7 +14170,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1745,
-        "llmOutputTokens": 917,
+        "llmOutputTokens": 285,
         "scVotes": [
           "Guangzhou, China"
         ]
@@ -14182,11 +14182,11 @@
         "passage:hotpotqa_batch_037:36",
         "passage:hotpotqa_batch_030:10",
         "passage:hotpotqa_batch_017:30",
-        "passage:hotpotqa_batch_043:32",
         "passage:hotpotqa_batch_051:17",
-        "passage:hotpotqa_batch_056:40",
+        "passage:hotpotqa_batch_043:32",
         "passage:hotpotqa_batch_057:42",
-        "passage:hotpotqa_batch_048:41"
+        "passage:hotpotqa_batch_048:41",
+        "passage:hotpotqa_batch_056:40"
       ],
       "contextPreview": [
         "# Lilly Singh\n\nLilly Singh (born 26 September 1988) is a Canadian YouTube personality, vlogger, come",
@@ -14201,8 +14201,8 @@
       "question": "Swingin' Down Yonder is the first full-length, 12-inch album recorded by a singer known by what nickname?",
       "goldAnswer": "\"King of Cool\"",
       "type": "bridge",
-      "response": "Dino",
-      "correct": false,
+      "response": "The King of Cool",
+      "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -14211,9 +14211,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1420,
-        "llmOutputTokens": 1845,
+        "llmOutputTokens": 158,
         "scVotes": [
-          "Dino"
+          "The King of Cool"
         ]
       },
       "citationCount": 10,
@@ -14252,7 +14252,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1801,
-        "llmOutputTokens": 103,
+        "llmOutputTokens": 89,
         "scVotes": [
           "Odysseas Elytis"
         ]
@@ -14293,7 +14293,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1356,
-        "llmOutputTokens": 164,
+        "llmOutputTokens": 151,
         "scVotes": [
           "Rashad Anton Evans"
         ]
@@ -14334,7 +14334,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1251,
-        "llmOutputTokens": 260,
+        "llmOutputTokens": 215,
         "scVotes": [
           "Suffolk County"
         ]
@@ -14374,8 +14374,8 @@
         "pprIterations": 4,
         "pprConverged": true,
         "citedPassageCount": 10,
-        "llmInputTokens": 1742,
-        "llmOutputTokens": 232,
+        "llmInputTokens": 1706,
+        "llmOutputTokens": 155,
         "scVotes": [
           "Manchester"
         ]
@@ -14391,7 +14391,7 @@
         "passage:hotpotqa_batch_003:34",
         "passage:hotpotqa_batch_071:16",
         "passage:hotpotqa_batch_053:9",
-        "passage:hotpotqa_batch_007:49"
+        "passage:hotpotqa_batch_046:15"
       ],
       "contextPreview": [
         "# Nicole Gordon (badminton)\n\nNicole Gordon (born 17 March 1976 in Lower Hutt, New Zealand) is a fema",
@@ -14416,7 +14416,7 @@
         "pprConverged": true,
         "citedPassageCount": 7,
         "llmInputTokens": 1525,
-        "llmOutputTokens": 251,
+        "llmOutputTokens": 116,
         "scVotes": [
           "The Worm"
         ]
@@ -14454,7 +14454,7 @@
         "pprConverged": true,
         "citedPassageCount": 3,
         "llmInputTokens": 603,
-        "llmOutputTokens": 270,
+        "llmOutputTokens": 207,
         "scVotes": [
           "tennis player"
         ]
@@ -14486,7 +14486,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1442,
-        "llmOutputTokens": 124,
+        "llmOutputTokens": 95,
         "scVotes": [
           "David Rockefeller"
         ]
@@ -14527,7 +14527,7 @@
         "pprConverged": true,
         "citedPassageCount": 9,
         "llmInputTokens": 1578,
-        "llmOutputTokens": 316,
+        "llmOutputTokens": 167,
         "scVotes": [
           "odd-eyed cat"
         ]
@@ -14567,7 +14567,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1805,
-        "llmOutputTokens": 805,
+        "llmOutputTokens": 216,
         "scVotes": [
           "Yulia Tymoshenko"
         ]
@@ -14608,7 +14608,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1649,
-        "llmOutputTokens": 288,
+        "llmOutputTokens": 254,
         "scVotes": [
           "Eran Kolirin"
         ]
@@ -14649,7 +14649,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2108,
-        "llmOutputTokens": 157,
+        "llmOutputTokens": 126,
         "scVotes": [
           "Jersey barrier"
         ]
@@ -14680,7 +14680,7 @@
       "question": "What did Eric Radomski produce that premiered on Disney XD on May 26, 2013?",
       "goldAnswer": "Avengers Assemble",
       "type": "bridge",
-      "response": "Avengers Assemble",
+      "response": "Avengers Assemble (TV series)",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -14690,9 +14690,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1940,
-        "llmOutputTokens": 343,
+        "llmOutputTokens": 254,
         "scVotes": [
-          "Avengers Assemble"
+          "Avengers Assemble (TV series)"
         ]
       },
       "citationCount": 10,
@@ -14731,7 +14731,7 @@
         "pprConverged": true,
         "citedPassageCount": 9,
         "llmInputTokens": 1547,
-        "llmOutputTokens": 132,
+        "llmOutputTokens": 101,
         "scVotes": [
           "1966"
         ]
@@ -14771,7 +14771,7 @@
         "pprConverged": true,
         "citedPassageCount": 8,
         "llmInputTokens": 1805,
-        "llmOutputTokens": 172,
+        "llmOutputTokens": 144,
         "scVotes": [
           "14 members"
         ]
@@ -14800,7 +14800,7 @@
       "question": "The \"unofficial national anthem\" of Australia is the basis for the nickname of what soccer team?",
       "goldAnswer": "Australian women's national soccer team",
       "type": "bridge",
-      "response": "Australia women's national soccer team",
+      "response": "Australian women's national soccer team",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -14810,9 +14810,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1498,
-        "llmOutputTokens": 195,
+        "llmOutputTokens": 167,
         "scVotes": [
-          "Australia women's national soccer team"
+          "Australian women's national soccer team"
         ]
       },
       "citationCount": 10,
@@ -14841,8 +14841,8 @@
       "question": "What 2-year worldwide tour had a round stage and a band that performed a song never before performed live?",
       "goldAnswer": "U2 360° Tour",
       "type": "bridge",
-      "response": "U2 360° Tour",
-      "correct": true,
+      "response": "Psycho Circus World Tour",
+      "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -14851,9 +14851,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2589,
-        "llmOutputTokens": 2278,
+        "llmOutputTokens": 653,
         "scVotes": [
-          "U2 360° Tour"
+          "Psycho Circus World Tour"
         ]
       },
       "citationCount": 10,
@@ -14892,7 +14892,7 @@
         "pprConverged": true,
         "citedPassageCount": 9,
         "llmInputTokens": 1642,
-        "llmOutputTokens": 199,
+        "llmOutputTokens": 104,
         "scVotes": [
           "Alfred Joel Horford Reynoso"
         ]
@@ -14922,7 +14922,7 @@
       "question": "The brother of Ferdinand Alfred Friedrich Jodl served as what position in World War II?",
       "goldAnswer": "Chief of the Operations Staff of the Armed Forces High Command",
       "type": "bridge",
-      "response": "Chief of the Operations Staff of the Armed Forces High Command",
+      "response": "Chief of the Operations Staff of the Armed Forces High Command (Oberkommando der Wehrmacht)",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -14932,9 +14932,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1666,
-        "llmOutputTokens": 269,
+        "llmOutputTokens": 125,
         "scVotes": [
-          "Chief of the Operations Staff of the Armed Forces High Command"
+          "Chief of the Operations Staff of the Armed Forces High Command (Oberkommando der Wehrmacht)"
         ]
       },
       "citationCount": 10,
@@ -14963,7 +14963,7 @@
       "question": "Who was the narrator of the 26-episode series which featured the British national museum organization with branches at five locations in England?",
       "goldAnswer": "Michael Redgrave",
       "type": "bridge",
-      "response": "Ken Barrie",
+      "response": "Leslie Hulme",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -14973,9 +14973,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1460,
-        "llmOutputTokens": 4087,
+        "llmOutputTokens": 1808,
         "scVotes": [
-          "Ken Barrie"
+          "Leslie Hulme"
         ]
       },
       "citationCount": 10,
@@ -15014,7 +15014,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1728,
-        "llmOutputTokens": 251,
+        "llmOutputTokens": 190,
         "scVotes": [
           "opera"
         ]
@@ -15055,7 +15055,7 @@
         "pprConverged": true,
         "citedPassageCount": 9,
         "llmInputTokens": 1580,
-        "llmOutputTokens": 151,
+        "llmOutputTokens": 121,
         "scVotes": [
           "1935"
         ]
@@ -15095,7 +15095,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1944,
-        "llmOutputTokens": 214,
+        "llmOutputTokens": 171,
         "scVotes": [
           "Philip Mark Quast"
         ]
@@ -15136,7 +15136,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1484,
-        "llmOutputTokens": 528,
+        "llmOutputTokens": 202,
         "scVotes": [
           "Emmitt H. Ford"
         ]
@@ -15177,7 +15177,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1616,
-        "llmOutputTokens": 261,
+        "llmOutputTokens": 111,
         "scVotes": [
           "East African Breweries Limited"
         ]
@@ -15218,7 +15218,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1555,
-        "llmOutputTokens": 428,
+        "llmOutputTokens": 306,
         "scVotes": [
           "Walt Disney and Ub Iwerks"
         ]
@@ -15259,7 +15259,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1503,
-        "llmOutputTokens": 341,
+        "llmOutputTokens": 255,
         "scVotes": [
           "England"
         ]
@@ -15290,8 +15290,8 @@
       "question": "What is the central institution of Cheyenne Indian tribal governance that Ehyophsta was not a member of?",
       "goldAnswer": "the Council of Forty-four",
       "type": "bridge",
-      "response": "Council of Forty-four",
-      "correct": true,
+      "response": "Cheyenne military societies",
+      "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -15300,9 +15300,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1815,
-        "llmOutputTokens": 518,
+        "llmOutputTokens": 923,
         "scVotes": [
-          "Council of Forty-four"
+          "Cheyenne military societies"
         ]
       },
       "citationCount": 10,
@@ -15341,7 +15341,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1568,
-        "llmOutputTokens": 227,
+        "llmOutputTokens": 171,
         "scVotes": [
           "1861–1865"
         ]
@@ -15382,7 +15382,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1549,
-        "llmOutputTokens": 330,
+        "llmOutputTokens": 325,
         "scVotes": [
           "8 miles northwest"
         ]
@@ -15423,7 +15423,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1433,
-        "llmOutputTokens": 467,
+        "llmOutputTokens": 206,
         "scVotes": [
           "about 500 m"
         ]
@@ -15464,7 +15464,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1541,
-        "llmOutputTokens": 615,
+        "llmOutputTokens": 384,
         "scVotes": [
           "film directors"
         ]
@@ -15505,7 +15505,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1828,
-        "llmOutputTokens": 339,
+        "llmOutputTokens": 151,
         "scVotes": [
           "Wilhelm Filchner"
         ]
@@ -15546,7 +15546,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1544,
-        "llmOutputTokens": 139,
+        "llmOutputTokens": 92,
         "scVotes": [
           "Nihat Kahveci"
         ]
@@ -15587,7 +15587,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1665,
-        "llmOutputTokens": 156,
+        "llmOutputTokens": 165,
         "scVotes": [
           "film"
         ]
@@ -15628,7 +15628,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1211,
-        "llmOutputTokens": 91,
+        "llmOutputTokens": 89,
         "scVotes": [
           "Ghettopoly"
         ]
@@ -15669,7 +15669,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1548,
-        "llmOutputTokens": 274,
+        "llmOutputTokens": 217,
         "scVotes": [
           "yes"
         ]
@@ -15710,7 +15710,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1748,
-        "llmOutputTokens": 171,
+        "llmOutputTokens": 132,
         "scVotes": [
           "Shukratara by Date"
         ]
@@ -15751,7 +15751,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2030,
-        "llmOutputTokens": 2600,
+        "llmOutputTokens": 1046,
         "scVotes": [
           "The Bushwackers Band"
         ]
@@ -15792,7 +15792,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1803,
-        "llmOutputTokens": 241,
+        "llmOutputTokens": 140,
         "scVotes": [
           "over 35 films"
         ]
@@ -15823,7 +15823,7 @@
       "question": "Where does the founder of The International Grenfell Association act as a missionary to?",
       "goldAnswer": "Newfoundland and Labrador",
       "type": "bridge",
-      "response": "the fisherman and coastal communities in northern Newfoundland and the coast of Labrador",
+      "response": "northern Newfoundland and the coast of Labrador",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -15833,9 +15833,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1793,
-        "llmOutputTokens": 931,
+        "llmOutputTokens": 248,
         "scVotes": [
-          "the fisherman and coastal communities in northern Newfoundland and the coast of Labrador"
+          "northern Newfoundland and the coast of Labrador"
         ]
       },
       "citationCount": 10,
@@ -15874,7 +15874,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1535,
-        "llmOutputTokens": 147,
+        "llmOutputTokens": 72,
         "scVotes": [
           "Bob Day"
         ]
@@ -15915,7 +15915,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1587,
-        "llmOutputTokens": 119,
+        "llmOutputTokens": 106,
         "scVotes": [
           "Florence Welch"
         ]
@@ -15956,7 +15956,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1528,
-        "llmOutputTokens": 179,
+        "llmOutputTokens": 92,
         "scVotes": [
           "Russian Ark"
         ]
@@ -15997,7 +15997,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1995,
-        "llmOutputTokens": 312,
+        "llmOutputTokens": 135,
         "scVotes": [
           "Alexander Butler"
         ]
@@ -16011,8 +16011,8 @@
         "passage:hotpotqa_batch_007:13",
         "passage:hotpotqa_batch_041:48",
         "passage:hotpotqa_batch_045:37",
-        "passage:hotpotqa_batch_019:16",
         "passage:hotpotqa_batch_037:15",
+        "passage:hotpotqa_batch_019:16",
         "passage:hotpotqa_batch_046:39"
       ],
       "contextPreview": [
@@ -16038,7 +16038,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2197,
-        "llmOutputTokens": 738,
+        "llmOutputTokens": 443,
         "scVotes": [
           "The Social Network"
         ]
@@ -16069,7 +16069,7 @@
       "question": "Kresy, which roughly was a part of the land beyond the so-called Curson Line, was drawn for what reason?",
       "goldAnswer": "demarcation line between the newly emerging states, the Second Polish Republic, and the Soviet Union",
       "type": "bridge",
-      "response": "a diplomatic basis for the future border agreement between the Second Polish Republic and the Soviet Union",
+      "response": "to serve as a diplomatic basis for the future border agreement between the Second Polish Republic and the Soviet Union",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -16079,9 +16079,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1736,
-        "llmOutputTokens": 910,
+        "llmOutputTokens": 354,
         "scVotes": [
-          "a diplomatic basis for the future border agreement between the Second Polish Republic and the Soviet Union"
+          "to serve as a diplomatic basis for the future border agreement between the Second Polish Republic and the Soviet Union"
         ]
       },
       "citationCount": 10,
@@ -16110,7 +16110,7 @@
       "question": "What city is the women's Vans Triple Crown of Surfing event hosted at?",
       "goldAnswer": "City and County of Honolulu",
       "type": "bridge",
-      "response": "Haleʻiwa, Hawaii",
+      "response": "Haleiwa, Hawaii",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -16120,9 +16120,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1887,
-        "llmOutputTokens": 870,
+        "llmOutputTokens": 408,
         "scVotes": [
-          "Haleʻiwa, Hawaii"
+          "Haleiwa, Hawaii"
         ]
       },
       "citationCount": 10,
@@ -16161,7 +16161,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2008,
-        "llmOutputTokens": 395,
+        "llmOutputTokens": 260,
         "scVotes": [
           "All That"
         ]
@@ -16202,7 +16202,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1643,
-        "llmOutputTokens": 97,
+        "llmOutputTokens": 71,
         "scVotes": [
           "Australian"
         ]
@@ -16243,7 +16243,7 @@
         "pprConverged": true,
         "citedPassageCount": 5,
         "llmInputTokens": 1088,
-        "llmOutputTokens": 182,
+        "llmOutputTokens": 138,
         "scVotes": [
           "Tehran"
         ]
@@ -16279,7 +16279,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1732,
-        "llmOutputTokens": 669,
+        "llmOutputTokens": 285,
         "scVotes": [
           "Emmy, Grammy, Oscar and Tony awards"
         ]
@@ -16320,7 +16320,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1979,
-        "llmOutputTokens": 280,
+        "llmOutputTokens": 223,
         "scVotes": [
           "Preacher"
         ]
@@ -16361,7 +16361,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1716,
-        "llmOutputTokens": 145,
+        "llmOutputTokens": 109,
         "scVotes": [
           "Stephanie Caroline March"
         ]
@@ -16402,7 +16402,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1413,
-        "llmOutputTokens": 756,
+        "llmOutputTokens": 474,
         "scVotes": [
           "Black Mass, The Other Boleyn Girl, Wild Child, Atonement, Maleficent, The Three Musketeers, The Dark Knight Rises, Dirty Girl, Magic Magic, Jack & Diane, Cracks, and Small Apartments"
         ]
@@ -16443,7 +16443,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1579,
-        "llmOutputTokens": 201,
+        "llmOutputTokens": 159,
         "scVotes": [
           "Sufism"
         ]
@@ -16474,7 +16474,7 @@
       "question": "Martin Flavin and Peter Benchley both did what occupation?",
       "goldAnswer": "novelist",
       "type": "comparison",
-      "response": "writer",
+      "response": "author",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -16484,9 +16484,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1353,
-        "llmOutputTokens": 515,
+        "llmOutputTokens": 524,
         "scVotes": [
-          "writer"
+          "author"
         ]
       },
       "citationCount": 10,
@@ -16525,7 +16525,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1622,
-        "llmOutputTokens": 146,
+        "llmOutputTokens": 92,
         "scVotes": [
           "Bachelor of Commerce"
         ]
@@ -16566,7 +16566,7 @@
         "pprConverged": true,
         "citedPassageCount": 9,
         "llmInputTokens": 1469,
-        "llmOutputTokens": 188,
+        "llmOutputTokens": 124,
         "scVotes": [
           "Rose Theatre"
         ]
@@ -16606,7 +16606,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1794,
-        "llmOutputTokens": 262,
+        "llmOutputTokens": 75,
         "scVotes": [
           "documentary film"
         ]
@@ -16647,7 +16647,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1686,
-        "llmOutputTokens": 266,
+        "llmOutputTokens": 230,
         "scVotes": [
           "Robert Matthew Hurley"
         ]
@@ -16688,7 +16688,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1633,
-        "llmOutputTokens": 180,
+        "llmOutputTokens": 140,
         "scVotes": [
           "Merck & Co., Inc."
         ]
@@ -16729,7 +16729,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1904,
-        "llmOutputTokens": 335,
+        "llmOutputTokens": 233,
         "scVotes": [
           "How I Raised, Folded, Bluffed, Flirted, Cursed, and Won Millions at the World Series of Poker"
         ]
@@ -16770,7 +16770,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2373,
-        "llmOutputTokens": 212,
+        "llmOutputTokens": 128,
         "scVotes": [
           "Alan Wray Tudyk"
         ]
@@ -16811,7 +16811,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1716,
-        "llmOutputTokens": 152,
+        "llmOutputTokens": 162,
         "scVotes": [
           "Mountain West Conference"
         ]
@@ -16852,7 +16852,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1424,
-        "llmOutputTokens": 132,
+        "llmOutputTokens": 106,
         "scVotes": [
           "Abbey Road"
         ]
@@ -16883,8 +16883,8 @@
       "question": "what is the english name of Émile Verdets editorial?",
       "goldAnswer": "Annals of Chemistry and of Physics",
       "type": "bridge",
-      "response": "The Shepherd of Men",
-      "correct": false,
+      "response": "Annals of Chemistry and of Physics",
+      "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -16893,9 +16893,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1619,
-        "llmOutputTokens": 5189,
+        "llmOutputTokens": 379,
         "scVotes": [
-          "The Shepherd of Men"
+          "Annals of Chemistry and of Physics"
         ]
       },
       "citationCount": 10,
@@ -16934,7 +16934,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1927,
-        "llmOutputTokens": 255,
+        "llmOutputTokens": 210,
         "scVotes": [
           "the death of his son Louis"
         ]
@@ -16975,7 +16975,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1644,
-        "llmOutputTokens": 211,
+        "llmOutputTokens": 130,
         "scVotes": [
           "the late 1960s"
         ]
@@ -17016,7 +17016,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1490,
-        "llmOutputTokens": 160,
+        "llmOutputTokens": 112,
         "scVotes": [
           "Humberside Airport"
         ]
@@ -17057,7 +17057,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1885,
-        "llmOutputTokens": 1376,
+        "llmOutputTokens": 363,
         "scVotes": [
           "Juliet"
         ]
@@ -17098,7 +17098,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2444,
-        "llmOutputTokens": 299,
+        "llmOutputTokens": 219,
         "scVotes": [
           "Westminster system"
         ]
@@ -17129,8 +17129,8 @@
       "question": "The song by English indie rock band Florence and the Machine written by Florence Welch and Francis \"Eg\" White and released in 2011 is named after the painting which was completed in which year?",
       "goldAnswer": "1938",
       "type": "bridge",
-      "response": "2011",
-      "correct": false,
+      "response": "1938",
+      "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -17139,9 +17139,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1814,
-        "llmOutputTokens": 6394,
+        "llmOutputTokens": 4064,
         "scVotes": [
-          "2011"
+          "1938"
         ]
       },
       "citationCount": 10,
@@ -17180,7 +17180,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1847,
-        "llmOutputTokens": 165,
+        "llmOutputTokens": 89,
         "scVotes": [
           "Sully"
         ]
@@ -17221,7 +17221,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1303,
-        "llmOutputTokens": 133,
+        "llmOutputTokens": 120,
         "scVotes": [
           "William Shakespeare"
         ]
@@ -17262,7 +17262,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1588,
-        "llmOutputTokens": 152,
+        "llmOutputTokens": 123,
         "scVotes": [
           "American burlesque"
         ]
@@ -17303,7 +17303,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1709,
-        "llmOutputTokens": 206,
+        "llmOutputTokens": 132,
         "scVotes": [
           "179 women"
         ]
@@ -17334,7 +17334,7 @@
       "question": "In what county did Michael Ola attend high school?",
       "goldAnswer": "Clayton County, Georgia, United States",
       "type": "bridge",
-      "response": "Clayton County, Georgia",
+      "response": "Clayton County",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -17344,9 +17344,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1704,
-        "llmOutputTokens": 316,
+        "llmOutputTokens": 153,
         "scVotes": [
-          "Clayton County, Georgia"
+          "Clayton County"
         ]
       },
       "citationCount": 10,
@@ -17385,7 +17385,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1408,
-        "llmOutputTokens": 238,
+        "llmOutputTokens": 107,
         "scVotes": [
           "Robert W. \"Bo\" Welch III"
         ]
@@ -17426,7 +17426,7 @@
         "pprConverged": true,
         "citedPassageCount": 9,
         "llmInputTokens": 1694,
-        "llmOutputTokens": 1102,
+        "llmOutputTokens": 468,
         "scVotes": [
           "1983"
         ]
@@ -17466,7 +17466,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1416,
-        "llmOutputTokens": 485,
+        "llmOutputTokens": 729,
         "scVotes": [
           "documentary films"
         ]
@@ -17507,7 +17507,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2019,
-        "llmOutputTokens": 183,
+        "llmOutputTokens": 144,
         "scVotes": [
           "Collège de France"
         ]
@@ -17548,7 +17548,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1563,
-        "llmOutputTokens": 100,
+        "llmOutputTokens": 93,
         "scVotes": [
           "La Liga"
         ]
@@ -17589,7 +17589,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1643,
-        "llmOutputTokens": 155,
+        "llmOutputTokens": 100,
         "scVotes": [
           "Hong Kong Disneyland"
         ]
@@ -17630,7 +17630,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1486,
-        "llmOutputTokens": 3811,
+        "llmOutputTokens": 2026,
         "scVotes": [
           "The Deal"
         ]
@@ -17661,7 +17661,7 @@
       "question": "when was Quiet in Heaven/Song of Liberty recorded?",
       "goldAnswer": "Before settling on their current name in 1982",
       "type": "bridge",
-      "response": "before the majority of the members quit and formed Faith No More",
+      "response": "before the majority of its members quit and formed Faith No More",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -17671,9 +17671,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1824,
-        "llmOutputTokens": 535,
+        "llmOutputTokens": 479,
         "scVotes": [
-          "before the majority of the members quit and formed Faith No More"
+          "before the majority of its members quit and formed Faith No More"
         ]
       },
       "citationCount": 10,
@@ -17702,8 +17702,8 @@
       "question": "Janet Williams has performed with an internationally recognized solo pianist whose recordings have earned him five what?",
       "goldAnswer": "Grammy awards",
       "type": "bridge",
-      "response": "Grammy nominations",
-      "correct": false,
+      "response": "Grammy Awards",
+      "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -17712,9 +17712,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1834,
-        "llmOutputTokens": 1351,
+        "llmOutputTokens": 525,
         "scVotes": [
-          "Grammy nominations"
+          "Grammy Awards"
         ]
       },
       "citationCount": 10,
@@ -17753,7 +17753,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1483,
-        "llmOutputTokens": 308,
+        "llmOutputTokens": 162,
         "scVotes": [
           "documentary films"
         ]
@@ -17794,7 +17794,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1836,
-        "llmOutputTokens": 169,
+        "llmOutputTokens": 175,
         "scVotes": [
           "University of Delaware"
         ]
@@ -17835,7 +17835,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2400,
-        "llmOutputTokens": 117,
+        "llmOutputTokens": 62,
         "scVotes": [
           "Watford Football Club"
         ]
@@ -17876,7 +17876,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1631,
-        "llmOutputTokens": 122,
+        "llmOutputTokens": 63,
         "scVotes": [
           "yes"
         ]
@@ -17917,7 +17917,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1732,
-        "llmOutputTokens": 268,
+        "llmOutputTokens": 208,
         "scVotes": [
           "TD Garden"
         ]
@@ -17948,7 +17948,7 @@
       "question": " Kenneth Anderson served under the General who was which President of the United States?",
       "goldAnswer": "34th",
       "type": "bridge",
-      "response": "the 34th President of the United States",
+      "response": "34th President of the United States",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -17958,9 +17958,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1912,
-        "llmOutputTokens": 446,
+        "llmOutputTokens": 211,
         "scVotes": [
-          "the 34th President of the United States"
+          "34th President of the United States"
         ]
       },
       "citationCount": 10,
@@ -17999,7 +17999,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1555,
-        "llmOutputTokens": 111,
+        "llmOutputTokens": 81,
         "scVotes": [
           "Edward Keonjian"
         ]
@@ -18040,7 +18040,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1869,
-        "llmOutputTokens": 476,
+        "llmOutputTokens": 671,
         "scVotes": [
           "Francis Keogh Gleason"
         ]
@@ -18081,7 +18081,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1850,
-        "llmOutputTokens": 255,
+        "llmOutputTokens": 79,
         "scVotes": [
           "over 300,000"
         ]
@@ -18122,7 +18122,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1777,
-        "llmOutputTokens": 1443,
+        "llmOutputTokens": 607,
         "scVotes": [
           "Trent Alexander-Arnold"
         ]
@@ -18163,7 +18163,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1719,
-        "llmOutputTokens": 152,
+        "llmOutputTokens": 102,
         "scVotes": [
           "Julia Compton Moore"
         ]
@@ -18204,7 +18204,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1720,
-        "llmOutputTokens": 930,
+        "llmOutputTokens": 391,
         "scVotes": [
           "Port of Boston"
         ]
@@ -18245,7 +18245,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2104,
-        "llmOutputTokens": 125,
+        "llmOutputTokens": 113,
         "scVotes": [
           "the Seasiders"
         ]
@@ -18276,7 +18276,7 @@
       "question": "What role was the English actress. who starred in The Priory known for ",
       "goldAnswer": "Sarah Hurst in \"Easy Virtue\"",
       "type": "bridge",
-      "response": "C.J. Lamb",
+      "response": "her role as C.J. Lamb on the NBC drama series L.A. Law",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -18286,9 +18286,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1745,
-        "llmOutputTokens": 3608,
+        "llmOutputTokens": 501,
         "scVotes": [
-          "C.J. Lamb"
+          "her role as C.J. Lamb on the NBC drama series L.A. Law"
         ]
       },
       "citationCount": 10,
@@ -18317,7 +18317,7 @@
       "question": "What is the title of the person who is Head of the Department of Biological Sciences at the University of Lincoln",
       "goldAnswer": "Doctor",
       "type": "bridge",
-      "response": "the United Kingdom's first Professor of Veterinary Behavioural Medicine",
+      "response": "Professor of Veterinary Behavioural Medicine",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -18327,9 +18327,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1731,
-        "llmOutputTokens": 511,
+        "llmOutputTokens": 356,
         "scVotes": [
-          "the United Kingdom's first Professor of Veterinary Behavioural Medicine"
+          "Professor of Veterinary Behavioural Medicine"
         ]
       },
       "citationCount": 10,
@@ -18358,7 +18358,7 @@
       "question": "Which region of Ghana was the city where Akrofuom is located? ",
       "goldAnswer": "Ashanti Region of Ghana",
       "type": "bridge",
-      "response": "Akrofuom is in Obuasi Municipal District, whose capital city is Obuasi, and Obuasi Municipal District is in the Ashanti Region. FINAL: Ashanti Region of Ghana",
+      "response": "Ashanti Region",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -18368,9 +18368,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1829,
-        "llmOutputTokens": 497,
+        "llmOutputTokens": 161,
         "scVotes": [
-          "Akrofuom is in Obuasi Municipal District, whose capital city is Obuasi, and Obuasi Municipal District is in the Ashanti Region. FINAL: Ashanti Region of Ghana"
+          "Ashanti Region"
         ]
       },
       "citationCount": 10,
@@ -18409,7 +18409,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1821,
-        "llmOutputTokens": 393,
+        "llmOutputTokens": 411,
         "scVotes": [
           "Mickey's Christmas Carol"
         ]
@@ -18450,7 +18450,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1977,
-        "llmOutputTokens": 169,
+        "llmOutputTokens": 139,
         "scVotes": [
           "Faby Apache"
         ]
@@ -18491,7 +18491,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1729,
-        "llmOutputTokens": 609,
+        "llmOutputTokens": 400,
         "scVotes": [
           "Rafael Márquez Méndez"
         ]
@@ -18532,7 +18532,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1430,
-        "llmOutputTokens": 1177,
+        "llmOutputTokens": 1612,
         "scVotes": [
           "BUST magazine"
         ]
@@ -18573,7 +18573,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2118,
-        "llmOutputTokens": 204,
+        "llmOutputTokens": 146,
         "scVotes": [
           "Betsy Ross flag"
         ]
@@ -18604,7 +18604,7 @@
       "question": "Where was one of Sergei Prokofiev's most well-known operas first performed in 1921?",
       "goldAnswer": "Chicago, Illinois",
       "type": "bridge",
-      "response": "The Auditorium Theatre in Chicago",
+      "response": "the Auditorium Theatre in Chicago",
       "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -18614,9 +18614,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2149,
-        "llmOutputTokens": 415,
+        "llmOutputTokens": 354,
         "scVotes": [
-          "The Auditorium Theatre in Chicago"
+          "the Auditorium Theatre in Chicago"
         ]
       },
       "citationCount": 10,
@@ -18655,7 +18655,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1410,
-        "llmOutputTokens": 180,
+        "llmOutputTokens": 121,
         "scVotes": [
           "1927"
         ]
@@ -18696,7 +18696,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1732,
-        "llmOutputTokens": 272,
+        "llmOutputTokens": 125,
         "scVotes": [
           "Etihad Aldar Spyker F1 Team"
         ]
@@ -18737,7 +18737,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1851,
-        "llmOutputTokens": 202,
+        "llmOutputTokens": 132,
         "scVotes": [
           "1828"
         ]
@@ -18778,7 +18778,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1469,
-        "llmOutputTokens": 128,
+        "llmOutputTokens": 93,
         "scVotes": [
           "Doris Lessing"
         ]
@@ -18819,7 +18819,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1702,
-        "llmOutputTokens": 147,
+        "llmOutputTokens": 171,
         "scVotes": [
           "Oklahoma Sooners men's basketball team"
         ]
@@ -18860,7 +18860,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1340,
-        "llmOutputTokens": 83,
+        "llmOutputTokens": 64,
         "scVotes": [
           "yes"
         ]
@@ -18891,7 +18891,7 @@
       "question": "What is the origin of the name of the neighbourhood in which the building at 359 Broadway is located ?",
       "goldAnswer": "a syllabic abbreviation from \"Triangle Below Canal Street",
       "type": "bridge",
-      "response": "Triangle Below Canal Street",
+      "response": "an abbreviation of “Triangle Below Canal Street”",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -18901,9 +18901,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1393,
-        "llmOutputTokens": 307,
+        "llmOutputTokens": 234,
         "scVotes": [
-          "Triangle Below Canal Street"
+          "an abbreviation of “Triangle Below Canal Street”"
         ]
       },
       "citationCount": 10,
@@ -18942,7 +18942,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1625,
-        "llmOutputTokens": 230,
+        "llmOutputTokens": 142,
         "scVotes": [
           "Bruno Richard Hauptmann"
         ]
@@ -18983,7 +18983,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1470,
-        "llmOutputTokens": 1006,
+        "llmOutputTokens": 983,
         "scVotes": [
           "Walt Disney Productions"
         ]
@@ -19024,7 +19024,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1990,
-        "llmOutputTokens": 326,
+        "llmOutputTokens": 504,
         "scVotes": [
           "Johnny Cash and Waylon Jennings"
         ]
@@ -19065,7 +19065,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1655,
-        "llmOutputTokens": 367,
+        "llmOutputTokens": 245,
         "scVotes": [
           "no"
         ]
@@ -19106,7 +19106,7 @@
         "pprConverged": true,
         "citedPassageCount": 9,
         "llmInputTokens": 1773,
-        "llmOutputTokens": 203,
+        "llmOutputTokens": 111,
         "scVotes": [
           "January 30, 1930"
         ]
@@ -19146,7 +19146,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1640,
-        "llmOutputTokens": 380,
+        "llmOutputTokens": 225,
         "scVotes": [
           "southwest Denver, Colorado near Bear Creek"
         ]
@@ -19187,7 +19187,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1291,
-        "llmOutputTokens": 214,
+        "llmOutputTokens": 119,
         "scVotes": [
           "Monson, Maine"
         ]
@@ -19228,7 +19228,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1481,
-        "llmOutputTokens": 178,
+        "llmOutputTokens": 148,
         "scVotes": [
           "Ars Nova Theater in New York City"
         ]
@@ -19269,7 +19269,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1920,
-        "llmOutputTokens": 164,
+        "llmOutputTokens": 107,
         "scVotes": [
           "Bluebeard's Castle"
         ]
@@ -19310,7 +19310,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1369,
-        "llmOutputTokens": 70,
+        "llmOutputTokens": 48,
         "scVotes": [
           "no"
         ]
@@ -19324,8 +19324,8 @@
         "passage:hotpotqa_batch_049:5",
         "passage:hotpotqa_batch_061:14",
         "passage:hotpotqa_batch_024:31",
-        "passage:hotpotqa_batch_028:10",
         "passage:hotpotqa_batch_049:4",
+        "passage:hotpotqa_batch_028:10",
         "passage:hotpotqa_batch_053:47"
       ],
       "contextPreview": [
@@ -19351,7 +19351,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1406,
-        "llmOutputTokens": 346,
+        "llmOutputTokens": 196,
         "scVotes": [
           "Anno 2053"
         ]
@@ -19392,7 +19392,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1455,
-        "llmOutputTokens": 321,
+        "llmOutputTokens": 209,
         "scVotes": [
           "seven nights a week"
         ]
@@ -19433,7 +19433,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1591,
-        "llmOutputTokens": 186,
+        "llmOutputTokens": 178,
         "scVotes": [
           "Miles Dewey Davis III"
         ]
@@ -19474,7 +19474,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1426,
-        "llmOutputTokens": 178,
+        "llmOutputTokens": 110,
         "scVotes": [
           "Madeleine L'Engle"
         ]
@@ -19515,7 +19515,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1209,
-        "llmOutputTokens": 90,
+        "llmOutputTokens": 46,
         "scVotes": [
           "yes"
         ]
@@ -19556,7 +19556,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1568,
-        "llmOutputTokens": 202,
+        "llmOutputTokens": 157,
         "scVotes": [
           "The Times Higher Education Guide"
         ]
@@ -19597,7 +19597,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1365,
-        "llmOutputTokens": 164,
+        "llmOutputTokens": 123,
         "scVotes": [
           "Nelson DeMille"
         ]
@@ -19628,7 +19628,7 @@
       "question": "The university where Rolf Martin Theodor Dahlgren worked as a professor has how many employees?",
       "goldAnswer": "9,000",
       "type": "bridge",
-      "response": "approximately 9,000 employees",
+      "response": "about 9,000 employees",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -19638,9 +19638,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1662,
-        "llmOutputTokens": 892,
+        "llmOutputTokens": 411,
         "scVotes": [
-          "approximately 9,000 employees"
+          "about 9,000 employees"
         ]
       },
       "citationCount": 10,
@@ -19679,7 +19679,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1969,
-        "llmOutputTokens": 394,
+        "llmOutputTokens": 285,
         "scVotes": [
           "poet and writer"
         ]
@@ -19720,7 +19720,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1639,
-        "llmOutputTokens": 81,
+        "llmOutputTokens": 75,
         "scVotes": [
           "Aliens of the Deep"
         ]
@@ -19761,7 +19761,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1541,
-        "llmOutputTokens": 972,
+        "llmOutputTokens": 154,
         "scVotes": [
           "Arnold Peter Møller"
         ]
@@ -19792,7 +19792,7 @@
       "question": "Japanese Weekend School of New York has offices in the entertainment complex in what section of New Rochelle?",
       "goldAnswer": "Downtown",
       "type": "bridge",
-      "response": "the Downtown section of the city of New Rochelle",
+      "response": "Downtown section of the city of New Rochelle",
       "correct": true,
       "metrics": {
         "dictionaryMatchCount": 0,
@@ -19802,9 +19802,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1512,
-        "llmOutputTokens": 180,
+        "llmOutputTokens": 142,
         "scVotes": [
-          "the Downtown section of the city of New Rochelle"
+          "Downtown section of the city of New Rochelle"
         ]
       },
       "citationCount": 10,
@@ -19833,8 +19833,8 @@
       "question": "Is Awolnation an American alternative rock band and This Mortal Coil was a music collective",
       "goldAnswer": "yes",
       "type": "comparison",
-      "response": "yes",
-      "correct": true,
+      "response": "no",
+      "correct": false,
       "metrics": {
         "dictionaryMatchCount": 0,
         "expandedTerms": [],
@@ -19843,9 +19843,9 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1842,
-        "llmOutputTokens": 335,
+        "llmOutputTokens": 224,
         "scVotes": [
-          "yes"
+          "no"
         ]
       },
       "citationCount": 10,
@@ -19884,7 +19884,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1598,
-        "llmOutputTokens": 273,
+        "llmOutputTokens": 205,
         "scVotes": [
           "Anatoly Vasilyevich Lunacharsky"
         ]
@@ -19925,7 +19925,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1599,
-        "llmOutputTokens": 130,
+        "llmOutputTokens": 96,
         "scVotes": [
           "1987"
         ]
@@ -19966,7 +19966,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1618,
-        "llmOutputTokens": 445,
+        "llmOutputTokens": 452,
         "scVotes": [
           "Gene Watson"
         ]
@@ -20007,7 +20007,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1764,
-        "llmOutputTokens": 106,
+        "llmOutputTokens": 81,
         "scVotes": [
           "1933"
         ]
@@ -20048,7 +20048,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1588,
-        "llmOutputTokens": 286,
+        "llmOutputTokens": 358,
         "scVotes": [
           "the summer solstice"
         ]
@@ -20089,7 +20089,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1719,
-        "llmOutputTokens": 255,
+        "llmOutputTokens": 225,
         "scVotes": [
           "Frederick I, Holy Roman Emperor"
         ]
@@ -20130,7 +20130,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1814,
-        "llmOutputTokens": 1752,
+        "llmOutputTokens": 316,
         "scVotes": [
           "films"
         ]
@@ -20171,7 +20171,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2095,
-        "llmOutputTokens": 275,
+        "llmOutputTokens": 157,
         "scVotes": [
           "SpongeBob SquarePants"
         ]
@@ -20212,7 +20212,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1836,
-        "llmOutputTokens": 122,
+        "llmOutputTokens": 106,
         "scVotes": [
           "Tak and the Power of Juju"
         ]
@@ -20253,7 +20253,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1390,
-        "llmOutputTokens": 947,
+        "llmOutputTokens": 522,
         "scVotes": [
           "Biloxi, Mississippi"
         ]
@@ -20294,7 +20294,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 2351,
-        "llmOutputTokens": 199,
+        "llmOutputTokens": 132,
         "scVotes": [
           "Watertown, New York"
         ]
@@ -20335,7 +20335,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1487,
-        "llmOutputTokens": 159,
+        "llmOutputTokens": 94,
         "scVotes": [
           "micronutrient-rich diet"
         ]
@@ -20376,7 +20376,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1656,
-        "llmOutputTokens": 220,
+        "llmOutputTokens": 90,
         "scVotes": [
           "Christine MacIntyre"
         ]
@@ -20417,7 +20417,7 @@
         "pprConverged": true,
         "citedPassageCount": 10,
         "llmInputTokens": 1948,
-        "llmOutputTokens": 290,
+        "llmOutputTokens": 178,
         "scVotes": [
           "the River Ouse and the River Foss"
         ]
