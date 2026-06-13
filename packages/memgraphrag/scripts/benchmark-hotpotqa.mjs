@@ -8,9 +8,13 @@ import { createMemGraphRagRuntime, SERVICE_TOKENS } from '../dist/interface/runt
 import { loadMemGraphRagConfig, resolveConfigFromEnv } from '../dist/infrastructure/config/index.js';
 
 const BENCHMARK_DIR = resolve(process.cwd(), 'data/benchmark/hotpotqa');
-const CORPUS_DIR = resolve(BENCHMARK_DIR, 'corpus_batched');
+const CORPUS_DIR = process.env.CORPUS_DIR
+  ? resolve(process.cwd(), process.env.CORPUS_DIR)
+  : resolve(BENCHMARK_DIR, 'corpus_batched');
 const QUESTIONS_FILE = resolve(BENCHMARK_DIR, 'benchmark_500.json');
-const RESULTS_FILE = resolve(BENCHMARK_DIR, 'results_500.json');
+const RESULTS_FILE = process.env.RESULTS_FILE
+  ? resolve(process.cwd(), process.env.RESULTS_FILE)
+  : resolve(BENCHMARK_DIR, 'results_500.json');
 
 // Phase control
 const PHASE = process.argv[2] || 'all'; // 'index', 'query', 'all'
