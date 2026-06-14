@@ -11,10 +11,13 @@ const BENCHMARK_DIR = resolve(process.cwd(), 'data/benchmark/hotpotqa');
 const CORPUS_DIR = process.env.CORPUS_DIR
   ? resolve(process.cwd(), process.env.CORPUS_DIR)
   : resolve(BENCHMARK_DIR, 'corpus_batched');
-const QUESTIONS_FILE = resolve(BENCHMARK_DIR, 'benchmark_500.json');
+const BENCH_SIZE = process.env.BENCH_SIZE || '500';
+const QUESTIONS_FILE = process.env.QUESTIONS_FILE
+  ? resolve(process.cwd(), process.env.QUESTIONS_FILE)
+  : resolve(BENCHMARK_DIR, `benchmark_${BENCH_SIZE}.json`);
 const RESULTS_FILE = process.env.RESULTS_FILE
   ? resolve(process.cwd(), process.env.RESULTS_FILE)
-  : resolve(BENCHMARK_DIR, 'results_500.json');
+  : resolve(BENCHMARK_DIR, `results_${BENCH_SIZE}.json`);
 
 // Phase control
 const PHASE = process.argv[2] || 'all'; // 'index', 'query', 'all'
