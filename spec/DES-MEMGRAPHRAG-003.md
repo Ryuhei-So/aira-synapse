@@ -1080,6 +1080,8 @@ sequenceDiagram
 | `src/interface/cli/lexiconCommand.ts` | Interface | DES-MG3-010a |
 | `migrations/0004_add_lexicon_evidence.sql` | Infrastructure | DES-MG3-001 |
 
+**注意**: マイグレーションファイルのパスは `src/infrastructure/storage/migrations/0004_add_lexicon_evidence.sql`（パッケージ相対）。
+
 ### 変更ファイル
 
 | ファイル | 変更内容 | 対応 DES |
