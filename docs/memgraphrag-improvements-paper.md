@@ -6,7 +6,7 @@
 
 ## Abstract
 
-We report on a clean-room reimplementation and systematic extension of the MemGraphRAG framework (Hu et al., 2025) for multi-hop question answering. Starting from the paper's algorithm descriptions alone — without access to the original source code — we designed and implemented the full system in TypeScript, reproducing the four-stage indexing pipeline and PPR-based query pipeline from first principles. This clean-room process revealed implicit design choices left unspecified in the paper, which we resolved through principled engineering and iterative benchmarking. Building on this faithful foundation, we introduced five architectural extensions: (1) a four-layer heterogeneous graph with selective hub suppression in Personalized PageRank, (2) query-type-aware retrieval with entity expansion for comparison questions, (3) reasoning-effort-aware LLM generation that leverages deep inference capabilities of modern reasoning models, (4) domain lexicon integration through term dictionaries and thesaurus-based query expansion, and (5) a robust evaluation framework with linguistically-motivated answer normalization. On HotpotQA (500 questions, bridge and comparison), our system achieves **83.6% String Accuracy** with SQLite storage — a **+12.0 percentage point improvement** over the paper's reported 71.6%. Further, by migrating the graph backend to LadybugDB (a native graph database) with in-memory cached adapters, we achieved **87.6% String Accuracy** (+16.0pt over paper, +4.0pt over SQLite baseline) at 2.7s/query — a 5× speedup over the uncached architecture. The system comprises 117 source modules with 469 unit tests.
+We report on a clean-room reimplementation and systematic extension of the MemGraphRAG framework (Hu et al., 2025) for multi-hop question answering. Starting from the paper's algorithm descriptions alone — without access to the original source code — we designed and implemented the full system in TypeScript, reproducing the four-stage indexing pipeline and PPR-based query pipeline from first principles. This clean-room process revealed implicit design choices left unspecified in the paper, which we resolved through principled engineering and iterative benchmarking. Building on this faithful foundation, we introduced six architectural extensions: (1) a four-layer heterogeneous graph with selective hub suppression in Personalized PageRank, (2) query-type-aware retrieval with entity expansion for comparison questions, (3) reasoning-effort-aware LLM generation that leverages deep inference capabilities of modern reasoning models, (4) domain lexicon integration through term dictionaries and thesaurus-based query expansion, (5) a robust evaluation framework with linguistically-motivated answer normalization, and (6) a LadybugDB graph backend with in-memory cached adapters for 18.5× query speedup. On HotpotQA (500 questions, bridge and comparison), our system achieves **83.6% String Accuracy** with SQLite storage — a **+12.0 percentage point improvement** over the paper's reported 71.6%. Further, by migrating the graph backend to LadybugDB (a native graph database) with in-memory cached adapters, we achieved **87.6% String Accuracy** (+16.0pt over paper, +4.0pt over SQLite baseline) at 2.7s/query — an 18.5× speedup over the uncached architecture. The system comprises 117 source modules with 469 unit tests.
 
 ---
 
@@ -25,7 +25,7 @@ The clean-room process revealed that the paper, while algorithmically complete, 
 
 Our clean-room baseline achieved 55.8% String Accuracy — below the paper's 71.6%, likely due to corpus differences and unspecified hyperparameter choices. Through systematic extension addressing the four areas above, we progressively raised accuracy to 83.6% (SQLite backend), surpassing the original by +12.0pt. A subsequent migration to LadybugDB graph storage with in-memory cached adapters further improved accuracy to 87.6% (+16.0pt over paper) while reducing query latency to 2.7s/query.
 
-This paper documents both the clean-room design process and the five extensions, providing ablation evidence for each and discussing lessons learned from 14 benchmark iterations.
+This paper documents both the clean-room design process and the six extensions, providing ablation evidence for each and discussing lessons learned from 15 benchmark iterations.
 
 ---
 
@@ -38,7 +38,7 @@ Our implementation followed a strict clean-room discipline: the sole input was t
 1. **Requirements analysis** — 69 EARS-format requirements extracted from the paper's algorithm descriptions, architecture diagrams, and evaluation protocol.
 2. **Design specification** — 69 design specifications mapping requirements to a four-layer architecture (Domain / Application / Infrastructure / Interface).
 3. **Task decomposition** — 77 implementation tasks across 8 phases, reviewed and approved before coding.
-4. **Test-first implementation** — Each component built with Red→Green→Blue TDD cycles, yielding 354 unit tests.
+4. **Test-first implementation** — Each component built with Red→Green→Blue TDD cycles, yielding 354 unit tests in the initial clean-room phase (469 tests and 77 test files in the final system).
 
 ### 2.2 Faithful Reproduction of Paper Architecture
 
@@ -67,19 +67,19 @@ The clean-room implementation faithfully reproduces the paper's core algorithms:
 
 The clean-room process identified several areas where the paper's description is algorithmically complete but leaves engineering choices implicit. These became the starting points for our extensions:
 
-| Unspecified Area | Our Clean-Room Decision | Extension (§3) |
+| Unspecified Area | Our Clean-Room Decision | Extension |
 |-----------------|------------------------|----------------|
-| PPR treatment of high-degree nodes | Initially uniform (paper-faithful) | §3.1 Selective hub suppression |
-| Bridge vs. comparison handling | Initially single pipeline | §3.2 Query-type-aware routing |
-| LLM generation parameters | Initially temperature only | §3.3 Reasoning effort control |
-| Lexical normalization | Initially none | §3.4 Domain lexicon integration |
-| Answer evaluation metric | Initially exact substring | §3.5 Robust evaluation framework |
+| PPR treatment of high-degree nodes | Initially uniform (paper-faithful) | §4.1 Selective hub suppression |
+| Bridge vs. comparison handling | Initially single pipeline | §4.2 Query-type-aware routing |
+| LLM generation parameters | Initially temperature only | §4.3 Reasoning effort control |
+| Lexical normalization | Initially none | §4.4 Domain lexicon integration |
+| Answer evaluation metric | Initially exact substring | §4.5 Robust evaluation framework |
 
 ### 2.4 Clean-Room Baseline Results
 
 The faithful paper reproduction achieved **55.8% String Accuracy** on HotpotQA 500 (v1). This is below the paper's reported 71.6%, which we attribute to:
 
-1. **Corpus difference** — Our corpus (100 academic papers via MarkItDown) differs from the paper's Wikipedia-based knowledge source, introducing domain shift.
+1. **Corpus difference** — Our corpus (196 batched document sets derived from HotpotQA supporting passages) differs in preprocessing from the paper's Wikipedia-based knowledge source, introducing potential coverage variation.
 2. **Embedding model difference** — We use text-embedding-3-small; the paper's embedding model is unspecified.
 3. **Hyperparameter sensitivity** — Several parameters (chunk size, PPR teleport probability, context token limit) were not specified in the paper and required tuning.
 4. **Implementation divergence in underspecified areas** — The engineering decisions listed above inevitably differ from the original authors' choices.
@@ -88,7 +88,7 @@ Despite the initial gap, the clean-room baseline validated the paper's core arch
 
 ## 3. Architectural Extensions
 
-Building on the faithful clean-room foundation, we introduced five extensions targeting the underspecified areas identified during reproduction. Each extension was developed independently, benchmarked in isolation, and integrated only after demonstrating measurable improvement.
+Building on the faithful clean-room foundation, we introduced six extensions targeting the underspecified areas identified during reproduction. Each extension was developed independently, benchmarked in isolation, and integrated only after demonstrating measurable improvement.
 
 ### 3.1 Overview
 
@@ -166,7 +166,7 @@ hubDamping(node) =
 
 **Key design decision (beyond paper scope):** Entity nodes are *excluded* from PPR transitions entirely. The entity co-occurrence subgraph is too dense and traps score in cycles, degrading passage ranking quality. This was discovered empirically during clean-room development — the paper does not discuss entity node treatment in PPR. Entity nodes are used only during the seed initialization phase for comparison queries (§4.2).
 
-**Impact.** Hub suppression prevents schema nodes from dominating the top-K passages. In our corpus (20,244 nodes, 28,483 edges), the median schema node degree is 214 (5% of the graph), confirming that unsuppressed schema hubs would absorb significant score mass.
+**Impact.** Hub suppression prevents schema nodes from dominating the top-K passages. In our corpus (206,458 nodes, 448,440 edges), high-degree schema nodes absorb significant score mass without suppression.
 
 ### 4.2 Query-Type-Aware Retrieval and Prompting
 
@@ -311,18 +311,19 @@ We use the HotpotQA validation set (distractor setting), sampling 500 questions:
 
 ### 5.2 Corpus
 
-Our knowledge corpus consists of 100 academic papers converted from PDF to Markdown using MarkItDown (Microsoft, 2024). The indexing pipeline produced:
+Our knowledge corpus consists of 196 batched document sets derived from HotpotQA supporting passages, converted to Markdown format. The indexing pipeline produced:
 
 | Metric | Value |
 |--------|-------|
-| Documents | 100 |
-| Chunks (passages) | 5,264 |
-| Extracted facts | 13,971 |
-| Graph nodes | 20,244 |
-| Graph edges | 28,483 |
-| Indexing time | ~142 min |
-| SQLite database size | 89 MB |
-| Vector index size | 76 MB |
+| Document batches | 196 |
+| Chunks (passages) | 9,987 |
+| Extracted facts | 113,223 |
+| Canonical schemas | 3,823 |
+| Graph nodes | 206,458 |
+| Graph edges | 448,440 |
+| PPR transitions (entity-excluded) | 225,633 |
+| SQLite database size | 861 MB |
+| Vector index size | 5.7 GB |
 
 ### 5.3 Model Configuration
 
@@ -360,11 +361,11 @@ To isolate the contribution of each improvement, we compare successive versions 
 | Extension | Accuracy Δ | Mechanism |
 |-----------|-----------|-----------|
 | Clean-room bug fixes | +15.6pt (v1→v5) | LRU cache eviction bug, entity node PPR exclusion |
-| Query-type-aware prompting (§4.2) | +4.0pt (v5→v9) | Separate prompts for bridge vs. comparison questions |
+| Query-type-aware prompting (§4.2) | +3.6pt (v5→v9) | Separate prompts for bridge vs. comparison questions |
 | Hub suppression in PPR (§4.1) | +1.8pt (v9→v10) | Schema-layer hub damping prevents score dilution |
 | Reasoning effort control (§4.3) | +6.8pt (v10→v14) | `reasoning_effort=high` + `verbosity=low` for deep inference |
 | LadybugDB + cached adapters (§4.6) | +4.0pt (v14→v15) | Native graph backend + in-memory caching, 18.5× speedup |
-| **Total from extensions** | **+16.6pt** | v5 (71.4%) → v15 (87.6%), paper-parity to final |
+| **Total from extensions** | **+16.2pt** | v5 (71.4%) → v15 (87.6%), paper-parity to final |
 
 ### 6.3 Error Analysis (v15)
 
@@ -399,7 +400,7 @@ Several attempted extensions yielded no measurable gain, providing important des
 
 ### 7.1 Reasoning Effort as the Dominant Factor
 
-The most significant finding of this work is that **reasoning depth control** (+6.8pt) outweighs all retrieval and graph improvements combined (+5.8pt from v5 to v10). Combined with the LadybugDB backend migration (+4.0pt from v14 to v15), the total improvement from extensions reaches +16.6pt. This suggests that for well-structured RAG systems with adequate recall, the answer generation step — not retrieval — is the primary bottleneck, though storage backend optimization can provide additional gains.
+The most significant finding of this work is that **reasoning depth control** (+6.8pt) outweighs all retrieval and graph improvements combined (+5.4pt from v5 to v10). Combined with the LadybugDB backend migration (+4.0pt from v14 to v15), the total improvement from extensions reaches +16.2pt. This suggests that for well-structured RAG systems with adequate recall, the answer generation step — not retrieval — is the primary bottleneck, though storage backend optimization can provide additional gains.
 
 The mechanism is clear from token statistics: `reasoning_effort=high` causes the model to produce ~526 output tokens (mostly internal reasoning) versus ~40 with no effort control, while `verbosity=low` keeps the final answer concise. The model effectively conducts a multi-step internal deliberation before committing to an answer.
 
@@ -423,7 +424,7 @@ The gap between our clean-room baseline (55.8%) and the paper's result (71.6%) a
 
 ### 7.5 Limitations
 
-1. **Corpus specificity.** Our corpus (100 academic papers) differs from HotpotQA's Wikipedia-based knowledge source, which may introduce distribution shift effects.
+1. **Corpus specificity.** Our corpus (196 batched document sets from HotpotQA) may differ in preprocessing and coverage from the original paper's corpus, which may affect direct comparability.
 2. **Evaluation stringency.** Our nine-rule evaluation is more permissive than exact match but less permissive than LLM-as-judge. Some correct answers may still be rejected due to complex paraphrasing.
 3. **Model dependence.** The reasoning effort improvement is specific to GPT-5/o-series models and may not transfer to other model families.
 4. **Inactive fact state.** 99.2% of facts remain in `inactive` state due to a cascading activation bug. Fixing this and enabling full Stage III conflict resolution represents an untapped improvement opportunity estimated at 1–3pt.
@@ -443,7 +444,7 @@ Starting from the paper's algorithm descriptions alone, we built a faithful Type
 5. **Rigorous evaluation methodology** — a nine-rule normalized matching function developed to reliably measure incremental improvements during iterative development.
 6. **LadybugDB graph backend with cached adapters** — migrating from SQLite to a native graph database with in-memory caching, achieving +4.0pt accuracy improvement and 18.5× query speedup.
 
-The most significant finding is that **reasoning depth control alone (+6.8pt) outweighs all retrieval and graph improvements combined (+5.8pt)**, while the storage backend migration to LadybugDB provides an additional +4.0pt. This suggests that for well-structured RAG systems with adequate recall, a layered optimization strategy — first deep reasoning, then storage architecture — yields the best returns. The **"good enough retrieval + deep reasoning + optimized storage" paradigm** may be more cost-effective than pursuing perfect recall alone.
+The most significant finding is that **reasoning depth control alone (+6.8pt) outweighs all retrieval and graph improvements combined (+5.4pt)**, while the storage backend migration to LadybugDB provides an additional +4.0pt. This suggests that for well-structured RAG systems with adequate recall, a layered optimization strategy — first deep reasoning, then storage architecture — yields the best returns. The **"good enough retrieval + deep reasoning + optimized storage" paradigm** may be more cost-effective than pursuing perfect recall alone.
 
 The clean-room methodology itself proved invaluable: by building the system from first principles, we gained the deep architectural understanding necessary for principled extension, and discovered optimization opportunities invisible to surface-level analysis of the paper.
 
