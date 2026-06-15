@@ -82,6 +82,10 @@ export { normalizeExtractedEntities } from './indexing/ThesaurusNormalizationPip
 export { computeThesaurusDistance } from './indexing/ThesaurusConflictSignals.js';
 export { buildThesaurusGraphExpansion } from './indexing/ThesaurusGraphExpansion.js';
 export {
+  LexiconBuilder,
+  type LexiconBuildResult,
+} from './indexing/LexiconBuilder.js';
+export {
   AsyncJobRunner,
   type ProcessDocumentResult,
   type DocumentIndexingPipeline,

@@ -63,6 +63,10 @@ function normalizeText(value: string): string {
   return value.trim().toLowerCase();
 }
 
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function nowIsoString(): string {
   return new Date().toISOString();
 }
@@ -155,9 +159,10 @@ export class SQLiteLexiconStore implements ITermDictionary, IThesaurus {
     for (const row of rows) {
       const entry = toDictionaryEntry(row);
       const candidates = [entry.term, entry.canonicalForm, ...entry.aliases];
-      const matchedCandidate = candidates.find((candidate) =>
-        haystack.includes(normalizeText(candidate)),
-      );
+      const matchedCandidate = candidates.find((candidate) => {
+        const pattern = new RegExp(`\\b${escapeRegex(normalizeText(candidate))}\\b`);
+        return pattern.test(haystack);
+      });
       if (!matchedCandidate) {
         continue;
       }

@@ -42,6 +42,15 @@ export interface QueryMetrics {
   readonly llmInputTokens: number;
   readonly llmOutputTokens: number;
   readonly scVotes?: readonly string[];
+  // v0.3.0 additions
+  readonly injectedFactCount?: number;
+  readonly aliasHintCount?: number;
+  readonly thesaurusExpandedTerms?: readonly string[];
+  readonly subQueryDecomposed?: boolean;
+  readonly hop1FactCount?: number;
+  readonly hop2FactCount?: number;
+  readonly comparisonVerified?: boolean;
+  readonly totalLatencyMs?: number;
 }
 
 export interface QueryResponse {
