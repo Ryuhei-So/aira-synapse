@@ -18,11 +18,6 @@ export class LadybugVectorIndex implements IVectorIndex {
     return `${corpusId}:${id}`;
   }
 
-  private domainId(storageId: string): string {
-    const idx = storageId.indexOf(':');
-    return idx >= 0 ? storageId.slice(idx + 1) : storageId;
-  }
-
   async upsert<TMetadata extends Readonly<Record<string, unknown>>>(
     records: readonly VectorRecord<TMetadata>[],
   ): Promise<void> {

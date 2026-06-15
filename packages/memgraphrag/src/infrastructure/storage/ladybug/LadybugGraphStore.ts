@@ -9,6 +9,7 @@ import type {
   IGraphStore,
 } from '../../../domain/storage/graphStore.js';
 import type { MemoryLayer } from '../../../domain/memory/types.js';
+import { isBridgeKind } from '../../../domain/memory/types.js';
 import type { ILadybugConnectionPool } from './LadybugConnection.js';
 
 export class LadybugGraphStore implements IGraphStore {
@@ -17,16 +18,6 @@ export class LadybugGraphStore implements IGraphStore {
   // --- ID Mapping ---
   private storageId(corpusId: string, nodeId: string): string {
     return `${corpusId}:${nodeId}`;
-  }
-
-  private domainId(storageId: string): string {
-    const idx = storageId.indexOf(':');
-    return idx >= 0 ? storageId.slice(idx + 1) : storageId;
-  }
-
-  private domainCorpusId(storageId: string): string {
-    const idx = storageId.indexOf(':');
-    return idx >= 0 ? storageId.slice(0, idx) : '';
   }
 
   // --- Writes ---
@@ -343,19 +334,8 @@ export class LadybugGraphStore implements IGraphStore {
 
   // --- Helpers ---
 
-  private rowToEdge(r: Record<string, unknown>): GraphEdge {
-    return {
-      edgeId: r.eid as string,
-      corpusId: r.cid as string,
-      sourceNodeId: this.domainId(r.src_pk as string),
-      targetNodeId: this.domainId(r.tgt_pk as string),
-      relation: r.rel as GraphEdge['relation'],
-      weight: r.w as number,
-      bridgeKind: (r.bk as string) || undefined,
-    };
-  }
-
   private rowToEdgeByNodeId(r: Record<string, unknown>): GraphEdge {
+    const bk = r.bk as string | undefined;
     return {
       edgeId: r.eid as string,
       corpusId: r.cid as string,
@@ -363,7 +343,7 @@ export class LadybugGraphStore implements IGraphStore {
       targetNodeId: r.tgt_nid as string,
       relation: r.rel as GraphEdge['relation'],
       weight: r.w as number,
-      bridgeKind: (r.bk as string) || undefined,
+      bridgeKind: bk && isBridgeKind(bk) ? bk : undefined,
     };
   }
 

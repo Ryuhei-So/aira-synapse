@@ -94,7 +94,7 @@ export async function createStorageAdapters(
   const { Bm25LexicalRetriever } = await import(
     '../../retrieval/Bm25LexicalRetriever.js'
   );
-  const { openDatabase, runMigrations } = await import('../sqlite.js');
+  const { openDatabase, runMigrations } = await import('../migrate.js');
 
   const db = openDatabase(opts.sqlite.sqlitePath);
   runMigrations(db);

@@ -54,7 +54,7 @@ export async function migrateCorpus(
   }
 
   // 2. Migrate GraphStore nodes
-  let srcNodes;
+  let srcNodes: readonly import('../../../domain/storage/graphStore.js').GraphNode[] | undefined;
   try {
     srcNodes = await source.graphStore.getNodes(corpusId);
     if (srcNodes.length > 0) {
@@ -69,7 +69,7 @@ export async function migrateCorpus(
   }
 
   // 3. Migrate GraphStore edges
-  let srcEdges;
+  let srcEdges: readonly import('../../../domain/storage/graphStore.js').GraphEdge[] | undefined;
   try {
     srcEdges = await source.graphStore.getEdges(corpusId);
     if (srcEdges.length > 0) {
@@ -92,7 +92,9 @@ export async function migrateCorpus(
   }
 
   // 5. Verify counts
-  let tgtNodes, tgtEdges, tgtSnapshot;
+  let tgtNodes: readonly import('../../../domain/storage/graphStore.js').GraphNode[] | undefined;
+  let tgtEdges: readonly import('../../../domain/storage/graphStore.js').GraphEdge[] | undefined;
+  let tgtSnapshot: import('../../../domain/memory/globalMemory.js').MemorySnapshot | undefined;
   try {
     tgtNodes = await target.graphStore.getNodes(corpusId);
     tgtEdges = await target.graphStore.getEdges(corpusId);

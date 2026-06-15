@@ -5,11 +5,9 @@
 
 import { EventEmitter } from 'node:events';
 import type {
-  LadybugModule,
   LadybugDatabase,
   LadybugConnection as RawConnection,
   LadybugQueryResult,
-  LadybugPreparedStatement,
 } from './loadLadybugCore.js';
 import { loadLadybugCore } from './loadLadybugCore.js';
 
