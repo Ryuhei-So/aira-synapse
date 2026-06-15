@@ -43,6 +43,9 @@ export interface ILadybugConnectionPool {
 
   /** Close all connections and the database. */
   close(): Promise<void>;
+
+  /** Drop and recreate the HNSW vector index (needed after bulk deletes). */
+  rebuildVectorIndex(): Promise<void>;
 }
 
 const POOL_SIZE = 3;
@@ -215,6 +218,15 @@ export class LadybugConnectionPool implements ILadybugConnectionPool {
       this.db = null;
     }
     this.initialized = false;
+  }
+
+  async rebuildVectorIndex(): Promise<void> {
+    await this.withConnection(async (conn) => {
+      try {
+        await conn.query('CALL DROP_VECTOR_INDEX("VectorEntry", "vec_idx")');
+      } catch { /* index may not exist */ }
+      await conn.query('CALL CREATE_VECTOR_INDEX("VectorEntry", "vec_idx", "vec")');
+    });
   }
 
   // --- Pool internals ---
