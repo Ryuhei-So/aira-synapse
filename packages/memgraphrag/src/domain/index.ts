@@ -5,6 +5,7 @@
 
 export * from './memory/index.js';
 export * from './agent/index.js';
+export * from './config/index.js';
 export * from './dictionary/index.js';
 export * from './retrieval/index.js';
 export * from './storage/index.js';

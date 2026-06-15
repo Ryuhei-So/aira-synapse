@@ -34,6 +34,7 @@ export interface FilteredMemoryCandidates {
 export interface NodeInitializationVector {
   readonly scores: Readonly<Record<string, number>>;
   readonly fallbackTriggered: boolean;
+  readonly injectedCount?: number;
 }
 
 export interface NodeInitializationRequest {

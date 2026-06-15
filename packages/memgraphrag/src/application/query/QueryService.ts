@@ -17,6 +17,7 @@ import type { Passage } from '../../domain/memory/passage.js';
 import { ThesaurusExpansionPolicy } from './ThesaurusExpansionPolicy.js';
 import { TemplateResponseGenerator } from './TemplateResponseGenerator.js';
 import { isComparisonQuery } from './comparisonDetector.js';
+import { extractFinalAnswer } from './query-utils.js';
 
 export interface CitationDto {
   readonly passageId: string;
@@ -232,7 +233,7 @@ Reasoning and answer:`;
 
       const votes: string[] = [];
       for (const r of results) {
-        votes.push(DefaultQueryService.extractFinalAnswer(r.text));
+        votes.push(extractFinalAnswer(r.text));
         llmInputTokens += r.usage.inputTokens;
         llmOutputTokens += r.usage.outputTokens;
       }
@@ -308,16 +309,6 @@ Reasoning and answer:`;
     }
 
     return best.original;
-  }
-
-  private static extractFinalAnswer(llmText: string): string {
-    const lines = llmText.trim().split('\n').filter(l => l.trim());
-    const finalLine = lines.find(l => /^FINAL:/i.test(l.trim()));
-    let answer = finalLine
-      ? finalLine.replace(/^FINAL:\s*/i, '').trim()
-      : lines[lines.length - 1]?.trim() ?? llmText.trim();
-    answer = answer.replace(/^["']|["']$/g, '').trim();
-    return answer;
   }
 }
 

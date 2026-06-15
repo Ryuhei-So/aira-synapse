@@ -49,6 +49,9 @@ export interface ContextBundle {
   readonly citedPassages: readonly Passage[];
   readonly citedFacts: readonly Fact[];
   readonly confidence: number;
+  readonly metadata?: {
+    readonly aliasHintCount?: number;
+  };
 }
 
 export interface ILexicalRetriever {
