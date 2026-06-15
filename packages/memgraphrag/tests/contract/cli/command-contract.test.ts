@@ -59,6 +59,7 @@ describe('TASK-MG-039: CLI command contract', () => {
       'stats',
       'init',
       'dictionary',
+      'lexicon',
       'thesaurus',
       'visualize',
       'conflicts',

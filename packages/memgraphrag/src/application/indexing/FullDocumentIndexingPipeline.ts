@@ -16,6 +16,7 @@ import type { ILLMProvider, IEmbeddingProvider, INLPExtractor } from '../../doma
 import type { IGraphStore, IVectorIndex, IMemoryStore } from '../../domain/storage/index.js';
 import type { Fact } from '../../domain/memory/fact.js';
 import { LLMExtractionAgent } from './LLMExtractionAgent.js';
+import { LexiconBuilder } from './LexiconBuilder.js';
 
 export interface FullPipelineOptions {
   readonly db: Database.Database;
@@ -26,6 +27,8 @@ export interface FullPipelineOptions {
   readonly embeddingProvider: IEmbeddingProvider;
   readonly nlpExtractor: INLPExtractor;
   readonly enableConflictResolution?: boolean;
+  readonly enableDictionaryIndexing?: boolean;
+  readonly dictionary?: import('../../domain/dictionary/termDictionary.js').ITermDictionary;
 }
 
 export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
@@ -151,6 +154,23 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
     );
 
     await upsertVectors(this.options.vectorIndex, this.options.embeddingProvider, nodes);
+
+    // Stage V: Lexicon construction (dictionary + thesaurus from extracted facts)
+    if (this.options.enableDictionaryIndexing !== false && this.options.dictionary) {
+      const lexiconBuilder = new LexiconBuilder(
+        this.options.dictionary,
+        this.options.db,
+        corpusId,
+      );
+      const lexResult = await lexiconBuilder.buildIncremental(
+        document.documentId,
+        allFacts,
+        passages,
+      );
+      console.log(
+        `  [${document.title}] Stage V: dict=${lexResult.dictionaryEntries} thesaurus=${lexResult.thesaurusRelations} ambiguous=${lexResult.ambiguousExcluded}`,
+      );
+    }
 
     console.log(
       `  [${document.title}] chunks=${records.length} schemas=${schemas.length} facts=${allFacts.length} nodes=${nodes.length} edges=${edges.length} conflicts=${conflictCount}`,

@@ -3,6 +3,7 @@ import { registerConflictsCommand } from './registerConflictsCommand.js';
 import { registerDictionaryCommand } from './registerDictionaryCommand.js';
 import { registerIndexCommand } from './registerIndexCommand.js';
 import { registerInitCommand } from './registerInitCommand.js';
+import { registerLexiconCommand } from './registerLexiconCommand.js';
 import { registerQueryCommand } from './registerQueryCommand.js';
 import { registerStatsCommand } from './registerStatsCommand.js';
 import { registerThesaurusCommand } from './registerThesaurusCommand.js';
@@ -21,6 +22,7 @@ export function createCli(context: CliContext = {}): Command {
   registerStatsCommand(program, context);
   registerInitCommand(program);
   registerDictionaryCommand(program, context);
+  registerLexiconCommand(program, context);
   registerThesaurusCommand(program, context);
   registerVisualizeCommand(program, context);
   registerConflictsCommand(program, context);

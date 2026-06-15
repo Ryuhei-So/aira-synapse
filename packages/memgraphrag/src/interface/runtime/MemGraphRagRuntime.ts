@@ -74,6 +74,7 @@ export const SERVICE_TOKENS = {
   QUERY_SERVICE: Symbol('QueryService'),
   DICTIONARY_SERVICE: Symbol('DictionaryService'),
   THESAURUS_SERVICE: Symbol('ThesaurusService'),
+  DB: Symbol('Database'),
 } as const;
 
 const RUNTIME_CORPUS_ID = '__runtime__';
@@ -328,6 +329,8 @@ class RuntimeImpl implements MemGraphRagRuntime {
         llmProvider,
         embeddingProvider,
         nlpExtractor,
+        enableDictionaryIndexing: true,
+        dictionary: sharedLexiconStore as ITermDictionary,
       });
     const jobRunner = new AsyncJobRunner(
       this.db,
@@ -353,6 +356,7 @@ class RuntimeImpl implements MemGraphRagRuntime {
     this.services.set(SERVICE_TOKENS.QUERY_SERVICE, queryService);
     this.services.set(SERVICE_TOKENS.DICTIONARY_SERVICE, dictionaryService);
     this.services.set(SERVICE_TOKENS.THESAURUS_SERVICE, thesaurusService);
+    this.services.set(SERVICE_TOKENS.DB, this.db);
 
     this.started = true;
   }
