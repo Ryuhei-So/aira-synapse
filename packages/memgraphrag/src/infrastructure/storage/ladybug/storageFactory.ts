@@ -1,0 +1,128 @@
+/**
+ * Infrastructure Layer — Storage adapter factory for backend selection.
+ * DES-LDB-008: Runtime DI integration — creates SQLite or LadybugDB adapters.
+ */
+
+import type { IGraphStore, IVectorIndex, IMemoryStore } from '../../../domain/storage/graphStore.js';
+import type { IGraphProjection, ILexicalRetriever } from '../../../domain/retrieval/ppr.js';
+
+export type StorageBackend = 'sqlite' | 'ladybug';
+
+export interface StorageAdapters {
+  readonly graphStore: IGraphStore;
+  readonly vectorIndex: IVectorIndex;
+  readonly memoryStore: IMemoryStore;
+  readonly graphProjection: IGraphProjection;
+  readonly lexicalRetriever: ILexicalRetriever;
+  readonly close: () => Promise<void>;
+}
+
+export interface LadybugStorageOptions {
+  readonly dbPath: string;
+}
+
+export interface SQLiteStorageOptions {
+  readonly sqlitePath: string;
+  readonly vectorIndexDir: string;
+}
+
+export interface StorageOptions {
+  readonly backend: StorageBackend;
+  readonly ladybug?: LadybugStorageOptions;
+  readonly sqlite?: SQLiteStorageOptions;
+}
+
+/**
+ * Create LadybugDB-backed storage adapters.
+ */
+export async function createLadybugAdapters(
+  opts: LadybugStorageOptions,
+): Promise<StorageAdapters> {
+  const { LadybugConnectionPool } = await import('./LadybugConnection.js');
+  const { LadybugGraphStore } = await import('./LadybugGraphStore.js');
+  const { LadybugVectorIndex } = await import('./LadybugVectorIndex.js');
+  const { LadybugMemoryStore } = await import('./LadybugMemoryStore.js');
+  const { LadybugGraphProjection } = await import('./LadybugGraphProjection.js');
+  const { LadybugLexicalRetriever } = await import('./LadybugLexicalRetriever.js');
+
+  const pool = new LadybugConnectionPool(opts.dbPath);
+  await pool.init();
+
+  const graphStore = new LadybugGraphStore(pool);
+  const vectorIndex = new LadybugVectorIndex(pool);
+  const memoryStore = new LadybugMemoryStore(pool);
+  const graphProjection = new LadybugGraphProjection(graphStore);
+  const lexicalRetriever = new LadybugLexicalRetriever(pool);
+
+  return {
+    graphStore,
+    vectorIndex,
+    memoryStore,
+    graphProjection,
+    lexicalRetriever,
+    close: () => pool.close(),
+  };
+}
+
+/**
+ * Create storage adapters based on the selected backend.
+ * Defaults to SQLite if no backend specified.
+ */
+export async function createStorageAdapters(
+  opts: StorageOptions,
+): Promise<StorageAdapters> {
+  const backend = opts.backend ?? 'sqlite';
+
+  if (backend === 'ladybug') {
+    if (!opts.ladybug) {
+      throw new Error('LadybugDB storage options required when backend is "ladybug"');
+    }
+    return createLadybugAdapters(opts.ladybug);
+  }
+
+  // SQLite backend (default) — import lazily to avoid requiring better-sqlite3
+  if (!opts.sqlite) {
+    throw new Error('SQLite storage options required when backend is "sqlite"');
+  }
+
+  const { SQLiteGraphStore } = await import('../SQLiteGraphStore.js');
+  const { FileVectorIndex } = await import('../FileVectorIndex.js');
+  const { SQLiteMemoryStore } = await import('../SQLiteMemoryStore.js');
+  const { SQLiteGraphProjection } = await import(
+    '../../../application/query/SQLiteGraphProjection.js'
+  );
+  const { Bm25LexicalRetriever } = await import(
+    '../../retrieval/Bm25LexicalRetriever.js'
+  );
+  const { openDatabase, runMigrations } = await import('../sqlite.js');
+
+  const db = openDatabase(opts.sqlite.sqlitePath);
+  runMigrations(db);
+
+  const graphStore = new SQLiteGraphStore(db);
+  const vectorIndex = new FileVectorIndex(opts.sqlite.vectorIndexDir);
+  const memoryStore = new SQLiteMemoryStore(db);
+  const graphProjection = new SQLiteGraphProjection(graphStore);
+  const lexicalRetriever = new Bm25LexicalRetriever();
+
+  return {
+    graphStore,
+    vectorIndex,
+    memoryStore,
+    graphProjection,
+    lexicalRetriever,
+    close: async () => { db.close(); },
+  };
+}
+
+/**
+ * Resolve storage backend from environment variable or config.
+ */
+export function resolveBackend(configBackend?: string): StorageBackend {
+  const envBackend = process.env.MEMGRAPHRAG_BACKEND;
+  const raw = envBackend ?? configBackend ?? 'sqlite';
+  if (raw !== 'sqlite' && raw !== 'ladybug') {
+    throw new Error(`Invalid storage backend: "${raw}". Must be "sqlite" or "ladybug".`);
+  }
+  return raw;
+}
