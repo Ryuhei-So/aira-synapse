@@ -313,7 +313,7 @@ async function evaluateQueries(runtime, corpusId) {
   let correct = 0;
   let total = 0;
   const startTime = Date.now();
-  const CONCURRENCY = 5;
+  const CONCURRENCY = parseInt(process.env.CONCURRENCY || '5');
   
   for (let batchStart = 0; batchStart < questions.length; batchStart += CONCURRENCY) {
     const batchEnd = Math.min(batchStart + CONCURRENCY, questions.length);

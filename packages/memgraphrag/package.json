@@ -44,5 +44,8 @@
     "better-sqlite3": "^12.10.0",
     "commander": "^15.0.0",
     "yaml": "^2.9.0"
+  },
+  "optionalDependencies": {
+    "@ladybugdb/core": "^0.17.1"
   }
 }
