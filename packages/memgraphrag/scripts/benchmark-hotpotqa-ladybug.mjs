@@ -1,19 +1,22 @@
 /**
- * HotpotQA Benchmark: Index corpus and evaluate queries
+ * HotpotQA Benchmark — LadybugDB Backend (Hybrid)
+ *
+ * Uses LadybugDB for graph operations (PPR, projection, traversal) and
+ * keeps FileVectorIndex + SQLiteMemoryStore for data-intensive lookups.
+ * This validates the LadybugDB graph path without impractical 113K-fact migration.
  *
  * Usage:
- *   node scripts/benchmark-hotpotqa.mjs index    # Index corpus
- *   node scripts/benchmark-hotpotqa.mjs query    # Run queries (with caching)
- *   node scripts/benchmark-hotpotqa.mjs all      # Index + query
+ *   node scripts/benchmark-hotpotqa-ladybug.mjs migrate   # Migrate graph to LadybugDB
+ *   node scripts/benchmark-hotpotqa-ladybug.mjs query     # Run 500 queries
+ *   node scripts/benchmark-hotpotqa-ladybug.mjs all       # Migrate + query
  *
  * Environment:
- *   OPENAI_API_KEY — required
+ *   OPENAI_API_KEY — required for query phase
  *   BENCH_SIZE — 500 (default) or 1000
  *   CONCURRENCY — query concurrency (default: 5)
  */
 import { resolve } from 'node:path';
-import { readFileSync, readdirSync, writeFileSync, mkdirSync } from 'node:fs';
-import { createMemGraphRagRuntime, SERVICE_TOKENS } from '../dist/interface/runtime/MemGraphRagRuntime.js';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { loadMemGraphRagConfig, resolveConfigFromEnv, resolveApiKey } from '../dist/infrastructure/config/index.js';
 import {
   SQLiteGraphStore, SQLiteMemoryStore, SQLiteLexiconStore,
@@ -21,7 +24,9 @@ import {
   CachedMemoryStore, CachedGraphProjection, CachedFileVectorIndex,
   openDatabase,
 } from '../dist/infrastructure/index.js';
-import { SQLiteGraphProjection } from '../dist/application/query/SQLiteGraphProjection.js';
+import { LadybugConnectionPool } from '../dist/infrastructure/storage/ladybug/LadybugConnection.js';
+import { LadybugGraphStore } from '../dist/infrastructure/storage/ladybug/LadybugGraphStore.js';
+import { LadybugGraphProjection } from '../dist/infrastructure/storage/ladybug/LadybugGraphProjection.js';
 import { DefaultQueryService } from '../dist/application/query/QueryService.js';
 import { VectorMemoryFilter } from '../dist/application/query/VectorMemoryFilter.js';
 import { SimpleNodeInitializer } from '../dist/application/query/SimpleNodeInitializer.js';
@@ -29,28 +34,22 @@ import { SimplePPR } from '../dist/application/query/SimplePPR.js';
 import { SimpleContextBuilder } from '../dist/application/query/SimpleContextBuilder.js';
 import { ThesaurusExpansionPolicy } from '../dist/application/index.js';
 
-const BENCHMARK_DIR = resolve(process.cwd(), 'data/benchmark/hotpotqa');
-const CORPUS_DIR = process.env.CORPUS_DIR
-  ? resolve(process.cwd(), process.env.CORPUS_DIR)
-  : resolve(BENCHMARK_DIR, 'corpus_batched');
+// ─── Paths ───
+// Benchmark data lives at repo root, not package root
+const REPO_ROOT = resolve(process.cwd(), '../..');
+const BENCHMARK_DIR = resolve(REPO_ROOT, 'data/benchmark/hotpotqa');
+const LADYBUG_DB_PATH = resolve(BENCHMARK_DIR, 'hotpotqa.lbug');
+const SQLITE_PATH = resolve(BENCHMARK_DIR, 'hotpotqa.sqlite');
+const VECTORS_DIR = resolve(BENCHMARK_DIR, 'vectors');
 const BENCH_SIZE = process.env.BENCH_SIZE || '500';
 const QUESTIONS_FILE = process.env.QUESTIONS_FILE
   ? resolve(process.cwd(), process.env.QUESTIONS_FILE)
   : resolve(BENCHMARK_DIR, `benchmark_${BENCH_SIZE}.json`);
-const RESULTS_FILE = process.env.RESULTS_FILE
-  ? resolve(process.cwd(), process.env.RESULTS_FILE)
-  : resolve(BENCHMARK_DIR, `results_${BENCH_SIZE}.json`);
+const RESULTS_FILE = resolve(BENCHMARK_DIR, `results_ladybug_${BENCH_SIZE}.json`);
+const PHASE = process.argv[2] || 'all';
+const CORPUS_ID = readFileSync(resolve(BENCHMARK_DIR, 'corpus_id.txt'), 'utf-8').trim();
 
-// Phase control
-const PHASE = process.argv[2] || 'all'; // 'index', 'query', 'all'
-const BATCH_SIZE = 20;
-
-/**
- * HotpotQA-standard normalized string accuracy.
- * Removes articles (a/an/the), punctuation, and extra whitespace before matching.
- */
-
-/** Common nickname → formal name mappings */
+// ─── Accuracy helpers (same as SQLite benchmark) ───
 const NICKNAME_MAP = {
   'bill': 'william', 'bob': 'robert', 'dick': 'richard', 'ted': 'theodore',
   'mike': 'michael', 'jim': 'james', 'joe': 'joseph', 'tom': 'thomas',
@@ -60,8 +59,6 @@ const NICKNAME_MAP = {
   'liz': 'elizabeth', 'beth': 'elizabeth', 'kate': 'katherine', 'sue': 'susan',
   'peggy': 'margaret', 'maggie': 'margaret', 'meg': 'margaret',
 };
-
-/** Country/demonym aliases (bidirectional) */
 const COUNTRY_ALIASES = [
   ['usa', 'united states', 'united states of america', 'us', 'america'],
   ['uk', 'united kingdom', 'great britain', 'britain', 'england'],
@@ -70,30 +67,18 @@ const COUNTRY_ALIASES = [
   ['south korea', 'republic of korea', 'korea'],
   ['north korea', 'democratic peoples republic of korea', 'dprk'],
 ];
-
-/** Demonym → country mapping */
 const DEMONYM_MAP = {
   'american': 'united states', 'british': 'united kingdom', 'english': 'england',
   'scottish': 'scotland', 'welsh': 'wales', 'irish': 'ireland',
-  'northern irish': 'northern ireland', 'french': 'france', 'german': 'germany',
-  'italian': 'italy', 'spanish': 'spain', 'portuguese': 'portugal',
-  'dutch': 'netherlands', 'belgian': 'belgium', 'swiss': 'switzerland',
-  'austrian': 'austria', 'swedish': 'sweden', 'norwegian': 'norway',
-  'danish': 'denmark', 'finnish': 'finland', 'polish': 'poland',
-  'russian': 'russia', 'chinese': 'china', 'japanese': 'japan',
-  'korean': 'korea', 'indian': 'india', 'australian': 'australia',
-  'canadian': 'canada', 'mexican': 'mexico', 'brazilian': 'brazil',
-  'argentinian': 'argentina', 'chilean': 'chile', 'colombian': 'colombia',
-  'turkish': 'turkey', 'greek': 'greece', 'czech': 'czech republic',
-  'hungarian': 'hungary', 'romanian': 'romania', 'serbian': 'serbia',
-  'croatian': 'croatia', 'thai': 'thailand', 'filipino': 'philippines',
-  'indonesian': 'indonesia', 'malaysian': 'malaysia', 'vietnamese': 'vietnam',
-  'egyptian': 'egypt', 'nigerian': 'nigeria', 'south african': 'south africa',
-  'kenyan': 'kenya', 'iraqi': 'iraq', 'iranian': 'iran', 'israeli': 'israel',
-  'saudi': 'saudi arabia', 'pakistani': 'pakistan', 'afghani': 'afghanistan',
+  'french': 'france', 'german': 'germany', 'italian': 'italy', 'spanish': 'spain',
+  'portuguese': 'portugal', 'dutch': 'netherlands', 'belgian': 'belgium',
+  'swiss': 'switzerland', 'austrian': 'austria', 'swedish': 'sweden',
+  'norwegian': 'norway', 'danish': 'denmark', 'finnish': 'finland',
+  'polish': 'poland', 'russian': 'russia', 'chinese': 'china',
+  'japanese': 'japan', 'korean': 'korea', 'indian': 'india',
+  'australian': 'australia', 'canadian': 'canada', 'mexican': 'mexico',
+  'brazilian': 'brazil', 'turkish': 'turkey', 'greek': 'greece',
 };
-
-/** Number words to digits */
 const NUMBER_WORDS = {
   'zero': '0', 'one': '1', 'two': '2', 'three': '3', 'four': '4', 'five': '5',
   'six': '6', 'seven': '7', 'eight': '8', 'nine': '9', 'ten': '10',
@@ -104,93 +89,58 @@ const NUMBER_WORDS = {
 };
 
 function normalizeAnswer(s) {
-  return s.toLowerCase()
-    .replace(/\b(a|an|the)\b/g, ' ')
-    .replace(/[^a-z0-9 ]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return s.toLowerCase().replace(/\b(a|an|the)\b/g, ' ').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
 }
-
-/** Simple stemming: remove common suffixes */
 function simpleStem(word) {
-  return word
-    .replace(/ies$/, 'y')
-    .replace(/ves$/, 'f')
-    .replace(/(s|ed|ing|ly)$/, '')
-    .replace(/ied$/, 'y');
+  return word.replace(/ies$/, 'y').replace(/ves$/, 'f').replace(/(s|ed|ing|ly)$/, '').replace(/ied$/, 'y');
 }
-
-/** Normalize with number conversion */
 function normalizeWithNumbers(s) {
   let norm = normalizeAnswer(s);
-  // Convert number words to digits
   for (const [word, digit] of Object.entries(NUMBER_WORDS)) {
     norm = norm.replace(new RegExp('\\b' + word + '\\b', 'g'), digit);
   }
-  // Handle compound numbers like "twenty eight" → "28"
   norm = norm.replace(/(\d+)\s+(\d+)/g, (_, tens, ones) => String(Number(tens) + Number(ones)));
   return norm;
 }
-
 function normalizedContains(response, goldAnswer) {
   if (!response || !goldAnswer) return false;
-  // Strip markdown bold markers
   const cleanResp = response.replace(/\*\*/g, '');
   const normResp = normalizeAnswer(cleanResp);
   const normGold = normalizeAnswer(goldAnswer);
-
-  // 1. Direct containment
   if (normResp.includes(normGold)) return true;
   if (normGold.includes(normResp) && normResp.length >= 3) return true;
-
-  // 2. Token-level F1: 80%+ of gold tokens in response
   const goldTokens = normGold.split(' ').filter(t => t.length > 1);
   const respTokens = new Set(normResp.split(' '));
   if (goldTokens.length >= 2) {
     const matched = goldTokens.filter(t => respTokens.has(t)).length;
     if (matched >= goldTokens.length * 0.8) return true;
   }
-
-  // 3. Number normalization
   const numResp = normalizeWithNumbers(cleanResp);
   const numGold = normalizeWithNumbers(goldAnswer);
   if (numResp.includes(numGold) || numGold.includes(numResp) && numResp.length >= 3) return true;
-
-  // 4. Stemmed token matching
   const stemGold = normGold.split(' ').map(simpleStem).join(' ');
   const stemResp = normResp.split(' ').map(simpleStem).join(' ');
   if (stemResp.includes(stemGold) || stemGold.includes(stemResp) && stemResp.length >= 3) return true;
-
-  // 5. Nickname expansion
   const respWords = normResp.split(' ');
   const goldWords = normGold.split(' ');
   const expandedResp = respWords.map(w => NICKNAME_MAP[w] || w).join(' ');
   const expandedGold = goldWords.map(w => NICKNAME_MAP[w] || w).join(' ');
   if (expandedResp.includes(expandedGold) || expandedGold.includes(expandedResp) && expandedResp.length >= 3) return true;
-
-  // 6. Stemmed token F1 with lower threshold (60%) for longer gold answers
   if (goldTokens.length >= 3) {
     const stemGoldTokens = goldTokens.map(simpleStem);
     const stemRespTokens = new Set(normResp.split(' ').map(simpleStem));
     const stemMatched = stemGoldTokens.filter(t => stemRespTokens.has(t)).length;
     if (stemMatched >= stemGoldTokens.length * 0.6) return true;
   }
-
-  // 7. Country/region alias matching — word boundary to avoid substring collisions
   for (const aliases of COUNTRY_ALIASES) {
     const respInGroup = aliases.some(a => new RegExp(`\\b${a}\\b`).test(normResp));
     const goldInGroup = aliases.some(a => new RegExp(`\\b${a}\\b`).test(normGold));
     if (respInGroup && goldInGroup) return true;
   }
-
-  // 8. Demonym ↔ country matching (e.g., "Northern Irish" ↔ "Northern Ireland")
   for (const [demonym, country] of Object.entries(DEMONYM_MAP)) {
     if ((normResp.includes(demonym) && normGold.includes(country)) ||
         (normResp.includes(country) && normGold.includes(demonym))) return true;
   }
-
-  // 9. Surname matching: person names only — require both last name AND first name prefix
-  //    Prevents false positives like "Atlantic Ocean" matching "Pacific Ocean"
   if (goldTokens.length >= 2 && goldTokens.length <= 4) {
     const lastName = goldTokens[goldTokens.length - 1];
     const firstName = goldTokens[0];
@@ -206,7 +156,6 @@ function normalizedContains(response, goldAnswer) {
   if (respTokensList.length >= 2 && respTokensList.length <= 4) {
     const respLastName = respTokensList[respTokensList.length - 1];
     if (respLastName.length >= 4 && normGold.split(' ').includes(respLastName)) {
-      // Also check first name or initial matches (with nickname expansion)
       const respFirst = respTokensList[0];
       const goldWords2 = normGold.split(' ');
       const respFirstPrefix = respFirst.substring(0, 3);
@@ -215,113 +164,98 @@ function normalizedContains(response, goldAnswer) {
       if (goldWords2.some(w => w.startsWith(respFirstPrefix) || (nicknamePrefix && w.startsWith(nicknamePrefix)))) return true;
     }
   }
-
   return false;
 }
 
-async function createBenchmarkRuntime() {
-  const configPath = resolve(process.cwd(), 'packages/memgraphrag/config/default.memgraphrag.yml');
-  const baseConfig = loadMemGraphRagConfig(configPath);
-  
-  // Override storage paths and NLP backend for benchmark
-  const config = resolveConfigFromEnv({
-    ...baseConfig,
-    storage: {
-      ...baseConfig.storage,
-      sqlitePath: './data/benchmark/hotpotqa/hotpotqa.sqlite',
-      vectorIndexDir: './data/benchmark/hotpotqa/vectors',
-    },
-    providers: {
-      ...baseConfig.providers,
-      nlp: {
-        ...baseConfig.providers.nlp,
-        backend: 'regex',
-      },
-    },
-  });
-  
-  const runtime = createMemGraphRagRuntime(config);
-  await runtime.start();
-  return runtime;
-}
+// ─── Migration ───
 
-async function indexCorpus(runtime) {
-  const corpusManager = runtime.getService(SERVICE_TOKENS.CORPUS_MANAGER);
-  const indexingService = runtime.getService(SERVICE_TOKENS.INDEXING_SERVICE);
-  
-  // Create corpus
-  console.log('Creating corpus...');
-  const corpus = await corpusManager.create('HotpotQA-500', 'HotpotQA benchmark - 500 questions');
-  const corpusId = corpus.corpusId;
-  console.log(`Corpus ID: ${corpusId}`);
-  
-  // Save corpus ID
-  writeFileSync(resolve(BENCHMARK_DIR, 'corpus_id.txt'), corpusId);
-  
-  // List all markdown files
-  const files = readdirSync(CORPUS_DIR)
-    .filter(f => f.endsWith('.md'))
-    .sort()
-    .map(f => resolve(CORPUS_DIR, f));
-  
-  console.log(`Total files: ${files.length}`);
-  
-  // Build document list
-  const documents = [];
-  for (const filePath of files) {
-    const content = readFileSync(filePath, 'utf-8');
-    const title = content.split('\n')[0]?.replace(/^#\s*/, '') || filePath;
-    const fileName = filePath.split('/').pop().replace('.md', '');
-    const documentId = `hotpotqa_${fileName}`;
-    documents.push({
-      documentId,
-      markdown: content,
-      title,
-      sourceUrl: `hotpotqa://${title}`,
-      language: 'en',
-      sourceType: 'md',
-    });
+async function migrateToLadybug() {
+  console.log('=== Migration: SQLite Graph → LadybugDB ===');
+  console.log(`Corpus: ${CORPUS_ID}`);
+  console.log(`SQLite: ${SQLITE_PATH}`);
+  console.log(`LadybugDB: ${LADYBUG_DB_PATH}`);
+  console.log('NOTE: Only graph (nodes+edges) migrated. MemoryStore stays in SQLite.');
+
+  const startMs = Date.now();
+
+  // Source: SQLite
+  const db = openDatabase(SQLITE_PATH);
+  const sqliteGraphStore = new SQLiteGraphStore(db);
+
+  // Target: LadybugDB
+  const pool = new LadybugConnectionPool(LADYBUG_DB_PATH);
+  await pool.init();
+  const lbGraphStore = new LadybugGraphStore(pool);
+
+  // 1. Migrate GraphStore nodes
+  console.log('\n[1/2] Migrating graph nodes...');
+  const nodes = await sqliteGraphStore.getNodes(CORPUS_ID);
+  console.log(`  Nodes: ${nodes.length}`);
+  const NODE_BATCH = 200;
+  for (let i = 0; i < nodes.length; i += NODE_BATCH) {
+    const batch = nodes.slice(i, i + NODE_BATCH);
+    await lbGraphStore.upsertNodes(batch);
+    if ((i + NODE_BATCH) % 2000 === 0 || i + NODE_BATCH >= nodes.length) {
+      console.log(`  ... ${Math.min(i + NODE_BATCH, nodes.length)}/${nodes.length}`);
+    }
   }
-  
-  console.log(`Submitting ${documents.length} documents as single job...`);
-  const startTime = Date.now();
-  
-  const { jobId } = await indexingService.start({ corpusId, documents });
-  console.log(`Job ID: ${jobId}`);
-  
-  // Execute the job (synchronous processing)
-  console.log('Processing documents...');
-  await indexingService.resume(jobId);
-  
-  const totalTime = ((Date.now() - startTime) / 1000).toFixed(0);
-  const finalStats = await corpusManager.getStats(corpusId);
-  console.log(`\n=== Indexing Complete ===`);
-  console.log(`  Documents: ${documents.length}`);
-  console.log(`  Time: ${totalTime}s (${(totalTime / documents.length).toFixed(1)}s/doc)`);
-  console.log(`  Nodes: ${finalStats.nodeCount}`);
-  console.log(`  Edges: ${finalStats.edgeCount}`);
-  
-  return corpusId;
+  console.log('  ✓ Nodes migrated');
+
+  // 2. Migrate GraphStore edges
+  console.log('\n[2/2] Migrating graph edges...');
+  const edges = await sqliteGraphStore.getEdges(CORPUS_ID);
+  console.log(`  Edges: ${edges.length}`);
+  const EDGE_BATCH = 200;
+  for (let i = 0; i < edges.length; i += EDGE_BATCH) {
+    const batch = edges.slice(i, i + EDGE_BATCH);
+    await lbGraphStore.upsertEdges(batch);
+    if ((i + EDGE_BATCH) % 2000 === 0 || i + EDGE_BATCH >= edges.length) {
+      console.log(`  ... ${Math.min(i + EDGE_BATCH, edges.length)}/${edges.length}`);
+    }
+  }
+  console.log('  ✓ Edges migrated');
+
+  // Verify
+  console.log('\n=== Verification ===');
+  const tgtNodes = await lbGraphStore.getNodes(CORPUS_ID);
+  const tgtEdges = await lbGraphStore.getEdges(CORPUS_ID);
+  console.log(`  Nodes: ${nodes.length} → ${tgtNodes.length} ${nodes.length === tgtNodes.length ? '✅' : '❌'}`);
+  console.log(`  Edges: ${edges.length} → ${tgtEdges.length} ${edges.length === tgtEdges.length ? '✅' : '❌'}`);
+  console.log(`  Duration: ${((Date.now() - startMs) / 1000).toFixed(0)}s`);
+
+  await pool.close();
+  db.close();
 }
 
-async function evaluateQueries(runtime, corpusId) {
-  // Build cached query infrastructure directly (bypass runtime's per-query reconstruction)
-  const configPath = resolve(process.cwd(), 'packages/memgraphrag/config/default.memgraphrag.yml');
+// ─── Query ───
+
+async function evaluateQueries() {
+  console.log('=== HotpotQA Benchmark — LadybugDB Graph Backend (Hybrid) ===');
+  console.log(`Corpus: ${CORPUS_ID}`);
+  console.log(`Questions: ${QUESTIONS_FILE}`);
+  console.log('Backend: LadybugDB (graph/PPR) + FileVectorIndex + SQLite (memory/lexicon)');
+
+  const configPath = resolve(REPO_ROOT, 'packages/memgraphrag/config/default.memgraphrag.yml');
   const baseConfig = loadMemGraphRagConfig(configPath);
   const config = resolveConfigFromEnv(baseConfig);
   const apiKey = resolveApiKey(config.providers.apiKeyFile);
 
-  const sqlitePath = resolve(process.cwd(), 'data/benchmark/hotpotqa/hotpotqa.sqlite');
-  const vectorsDir = resolve(process.cwd(), 'data/benchmark/hotpotqa/vectors');
-  const db = openDatabase(sqlitePath);
+  // LadybugDB for graph operations (PPR path)
+  const pool = new LadybugConnectionPool(LADYBUG_DB_PATH);
+  await pool.init();
+  const lbGraphStore = new LadybugGraphStore(pool);
+  const graphProjection = new CachedGraphProjection(new LadybugGraphProjection(lbGraphStore));
 
-  const graphStore = new SQLiteGraphStore(db);
-  const graphProjection = new CachedGraphProjection(new SQLiteGraphProjection(graphStore));
+  // SQLite for memory and lexicon (cached for performance)
+  const db = openDatabase(SQLITE_PATH);
   const memoryStore = new CachedMemoryStore(new SQLiteMemoryStore(db));
-  const vectorIndex = new CachedFileVectorIndex(vectorsDir);
-  const dictionary = new SQLiteLexiconStore(db, corpusId);
-  const thesaurus = new SQLiteLexiconStore(db, corpusId);
+  const dictionary = new SQLiteLexiconStore(db, CORPUS_ID);
+  const thesaurus = new SQLiteLexiconStore(db, CORPUS_ID);
 
+  // FileVectorIndex for vector search (cached in memory)
+  const vectorIndex = new CachedFileVectorIndex(VECTORS_DIR);
+
+  // OpenAI providers
   const llm = new OpenAILLMProvider({
     apiKey,
     model: config.providers.llm.model,
@@ -331,9 +265,7 @@ async function evaluateQueries(runtime, corpusId) {
     model: config.providers.embedding.model,
   });
 
-  const questions = JSON.parse(readFileSync(QUESTIONS_FILE, 'utf-8'));
-
-  // Hyperparameter overrides via environment variables
+  // Hyperparameters
   const HP_HUB = parseInt(process.env.HP_HUB || '50');
   const HP_TP = parseFloat(process.env.HP_TP || '0.5');
   const HP_TOPK = parseInt(process.env.HP_TOPK || '10');
@@ -351,10 +283,11 @@ async function evaluateQueries(runtime, corpusId) {
     verbosity: HP_VERBOSITY,
   };
 
+  // Build QueryService with LadybugDB graph + hybrid adapters
   const queryService = new DefaultQueryService({
     dictionary,
     expansionPolicy: new ThesaurusExpansionPolicy(thesaurus),
-    memoryFilter: new VectorMemoryFilter(embedding, vectorIndex, memoryStore, graphStore),
+    memoryFilter: new VectorMemoryFilter(embedding, vectorIndex, memoryStore, null),
     nodeInitializer: new SimpleNodeInitializer(memoryStore),
     ppr: new SimplePPR(HP_HUB),
     projection: graphProjection,
@@ -363,15 +296,17 @@ async function evaluateQueries(runtime, corpusId) {
     hyperParams,
   });
 
-  console.log(`\n=== Evaluating ${questions.length} queries ===`);
-  console.log(`  HyperParams: tp=${HP_TP} hub=${HP_HUB} K=${HP_TOPK} M=${HP_TOPM} ctx=${HP_CTX} effort=${HP_EFFORT} verbosity=${HP_VERBOSITY}`);
-  console.log(`  Backend: SQLite + CachedFileVectorIndex + CachedGraphProjection + CachedMemoryStore`);
-
+  const questions = JSON.parse(readFileSync(QUESTIONS_FILE, 'utf-8'));
   const results = new Array(questions.length);
   let correct = 0;
   let total = 0;
   const startTime = Date.now();
   const CONCURRENCY = parseInt(process.env.CONCURRENCY || '5');
+
+  console.log(`\n=== Evaluating ${questions.length} queries ===`);
+  console.log(`  HyperParams: tp=${HP_TP} hub=${HP_HUB} K=${HP_TOPK} M=${HP_TOPM} ctx=${HP_CTX} effort=${HP_EFFORT} verbosity=${HP_VERBOSITY}`);
+  console.log(`  Backend: LadybugDB (${LADYBUG_DB_PATH})`);
+  console.log(`  Concurrency: ${CONCURRENCY}`);
 
   for (let batchStart = 0; batchStart < questions.length; batchStart += CONCURRENCY) {
     const batchEnd = Math.min(batchStart + CONCURRENCY, questions.length);
@@ -380,7 +315,7 @@ async function evaluateQueries(runtime, corpusId) {
     const batchResults = await Promise.all(batch.map(async (q) => {
       try {
         const result = await queryService.query({
-          corpusId,
+          corpusId: CORPUS_ID,
           text: q.question,
           topK: HP_TOPK,
           topM: HP_TOPM,
@@ -398,8 +333,6 @@ async function evaluateQueries(runtime, corpusId) {
           correct: isCorrect,
           metrics: result.metrics,
           citationCount: result.citations.length,
-          citedPassageIds: result.citations.map(c => c.passageId).slice(0, 10),
-          contextPreview: result.citations.map(c => c.snippet?.substring(0, 100)).slice(0, 5),
         };
       } catch (error) {
         return {
@@ -430,7 +363,6 @@ async function evaluateQueries(runtime, corpusId) {
   // Summary
   const totalTime = ((Date.now() - startTime) / 1000).toFixed(0);
   const accuracy = ((correct / total) * 100).toFixed(2);
-
   const byType = {};
   for (const r of results) {
     const t = r.type || 'unknown';
@@ -440,7 +372,7 @@ async function evaluateQueries(runtime, corpusId) {
   }
 
   console.log(`\n${'='.repeat(60)}`);
-  console.log(`BENCHMARK RESULTS: HotpotQA ${BENCH_SIZE}`);
+  console.log(`BENCHMARK RESULTS: HotpotQA ${BENCH_SIZE} — LadybugDB`);
   console.log(`${'='.repeat(60)}`);
   console.log(`Overall Accuracy (Str-Acc): ${accuracy}% (${correct}/${total})`);
   console.log(`Time: ${totalTime}s (${(totalTime / total).toFixed(1)}s/query)`);
@@ -448,10 +380,9 @@ async function evaluateQueries(runtime, corpusId) {
     console.log(`  ${type}: ${((stats.correct / stats.total) * 100).toFixed(1)}% (${stats.correct}/${stats.total})`);
   }
 
-  // Save results
   const summary = {
     benchmark: 'HotpotQA',
-    backend: 'sqlite-cached',
+    backend: 'ladybug',
     sampleSize: total,
     accuracy: parseFloat(accuracy),
     correct,
@@ -464,31 +395,24 @@ async function evaluateQueries(runtime, corpusId) {
   writeFileSync(RESULTS_FILE, JSON.stringify({ summary, results }, null, 2));
   console.log(`\nResults saved to: ${RESULTS_FILE}`);
 
+  await pool.close();
   db.close();
+
   return summary;
 }
 
+// ─── Main ───
+
 async function main() {
-  let runtime = null;
-  
-  try {
-    let corpusId;
-    
-    if (PHASE === 'index' || PHASE === 'all') {
-      runtime = await createBenchmarkRuntime();
-      corpusId = await indexCorpus(runtime);
-    }
-    
-    if (PHASE === 'query' || PHASE === 'all') {
-      if (!corpusId) {
-        corpusId = readFileSync(resolve(BENCHMARK_DIR, 'corpus_id.txt'), 'utf-8').trim();
-      }
-      // query phase uses cached adapters directly — no runtime needed
-      await evaluateQueries(null, corpusId);
-    }
-  } finally {
-    if (runtime) await runtime.shutdown();
+  if (PHASE === 'migrate' || PHASE === 'all') {
+    await migrateToLadybug();
+  }
+  if (PHASE === 'query' || PHASE === 'all') {
+    await evaluateQueries();
   }
 }
 
-main().catch(console.error);
+main().catch(err => {
+  console.error('Benchmark failed:', err);
+  process.exit(1);
+});
