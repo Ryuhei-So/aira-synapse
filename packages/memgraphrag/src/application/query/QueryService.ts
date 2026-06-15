@@ -14,10 +14,14 @@ import type {
 } from '../../domain/retrieval/ppr.js';
 import type { Fact } from '../../domain/memory/fact.js';
 import type { Passage } from '../../domain/memory/passage.js';
+import type { QueryFeatureFlags } from '../../domain/config/featureFlags.js';
+import { DEFAULT_QUERY_FLAGS } from '../../domain/config/featureFlags.js';
 import { ThesaurusExpansionPolicy } from './ThesaurusExpansionPolicy.js';
 import { TemplateResponseGenerator } from './TemplateResponseGenerator.js';
 import { isComparisonQuery } from './comparisonDetector.js';
 import { extractFinalAnswer } from './query-utils.js';
+import type { SubQueryDecomposer } from './SubQueryDecomposer.js';
+import type { ComparisonVerifier } from './ComparisonVerifier.js';
 
 export interface CitationDto {
   readonly passageId: string;
@@ -94,6 +98,9 @@ export interface QueryServiceDependencies {
   readonly llm: ILLMProvider;
   readonly responseGenerator?: TemplateResponseGenerator;
   readonly hyperParams?: QueryHyperParams;
+  readonly featureFlags?: QueryFeatureFlags;
+  readonly subQueryDecomposer?: SubQueryDecomposer;
+  readonly comparisonVerifier?: ComparisonVerifier;
 }
 
 function normalizeQueryText(text: string): string {
@@ -129,25 +136,47 @@ function shouldUseTemplateFallback(error: unknown): boolean {
 export class DefaultQueryService implements QueryService {
   private readonly responseGenerator: TemplateResponseGenerator;
   private readonly hp: QueryHyperParams;
+  private readonly flags: QueryFeatureFlags;
 
   public constructor(public readonly dependencies: QueryServiceDependencies) {
     this.responseGenerator = dependencies.responseGenerator ?? new TemplateResponseGenerator();
     this.hp = dependencies.hyperParams ?? DEFAULT_HYPER_PARAMS;
+    this.flags = dependencies.featureFlags ?? DEFAULT_QUERY_FLAGS;
   }
 
   public async query(request: QueryRequest): Promise<QueryResponse> {
+    const startTime = Date.now();
     const normalizedText = normalizeQueryText(request.text);
     const matches = await this.dependencies.dictionary.match(normalizedText, 'unknown');
-    const expansion = await this.dependencies.expansionPolicy.expandQuery(normalizedText);
+
+    // Thesaurus expansion (controlled by flag)
+    let expansion: { expandedTerms: readonly string[]; rewrittenQuery: string; originalQuery: string };
+    if (this.flags.enableThesaurusExpansion) {
+      expansion = await this.dependencies.expansionPolicy.expandQuery(normalizedText);
+    } else {
+      expansion = { expandedTerms: [], rewrittenQuery: normalizedText, originalQuery: normalizedText };
+    }
+
     const expandedRequest: QueryRequest = {
       ...request,
       text: expansion.rewrittenQuery,
     };
     const candidates = await this.dependencies.memoryFilter.filter(expandedRequest);
-    const initialVector = await this.dependencies.nodeInitializer.initialize({
-      query: expandedRequest,
-      candidates,
-    });
+    const initRequest = { query: expandedRequest, candidates };
+    let initialVector = await this.dependencies.nodeInitializer.initialize(initRequest);
+
+    // Sub-query decomposition for bridge questions
+    let subQueryDecomposed = false;
+    let hop1FactCount = 0;
+    let hop2FactCount = 0;
+    if (this.flags.enableSubQueryDecomposition && this.dependencies.subQueryDecomposer) {
+      const subResult = await this.dependencies.subQueryDecomposer.decompose(initRequest, initialVector);
+      initialVector = subResult.mergedVector;
+      subQueryDecomposed = subResult.decomposed;
+      hop1FactCount = subResult.hop1FactCount;
+      hop2FactCount = subResult.hop2FactCount;
+    }
+
     const ranking = await this.dependencies.ppr.run({
       corpusId: request.corpusId,
       initialVector,
@@ -167,6 +196,7 @@ export class DefaultQueryService implements QueryService {
     let llmOutputTokens = 0;
     let templateFallbackTriggered = false;
     let scVotes: string[] | undefined;
+    let comparisonVerified: boolean | undefined;
 
     try {
       const prompt = isComparison
@@ -249,6 +279,17 @@ Reasoning and answer:`;
 
       scVotes = votes;
       responseText = DefaultQueryService.majorityVote(votes);
+
+      // Comparison verification
+      if (isComparison && this.flags.enableComparisonVerification && this.dependencies.comparisonVerifier) {
+        const rawResponse = results[0]?.text ?? '';
+        const verifyResult = await this.dependencies.comparisonVerifier.verify(
+          responseText, rawResponse, expandedRequest.text, context.promptContext,
+          { reasoningEffort: this.hp.reasoningEffort, verbosity: this.hp.verbosity },
+        );
+        responseText = verifyResult.response;
+        comparisonVerified = verifyResult.verified;
+      }
     } catch (error) {
       if (!shouldUseTemplateFallback(error)) {
         throw error;
@@ -259,6 +300,8 @@ Reasoning and answer:`;
       });
       templateFallbackTriggered = true;
     }
+
+    const totalLatencyMs = Date.now() - startTime;
 
     return {
       response: responseText,
@@ -274,6 +317,14 @@ Reasoning and answer:`;
         llmInputTokens,
         llmOutputTokens,
         scVotes,
+        injectedFactCount: initialVector.injectedCount,
+        aliasHintCount: context.metadata?.aliasHintCount,
+        thesaurusExpandedTerms: expansion.expandedTerms.length > 0 ? expansion.expandedTerms : undefined,
+        subQueryDecomposed: subQueryDecomposed || undefined,
+        hop1FactCount: hop1FactCount > 0 ? hop1FactCount : undefined,
+        hop2FactCount: hop2FactCount > 0 ? hop2FactCount : undefined,
+        comparisonVerified: comparisonVerified,
+        totalLatencyMs,
       },
     };
   }
