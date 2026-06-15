@@ -1,0 +1,9 @@
+{
+  "name": "spike-ladybug",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@ladybugdb/core": "^0.17.1"
+  }
+}

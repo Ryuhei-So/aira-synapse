@@ -1,7 +1,7 @@
 # MemGraphRAG v0.2.0 設計書 — LadybugDB ストレージ移行
 
 **Document ID**: DES-MEMGRAPHRAG-002
-**Version**: 1.5
+**Version**: 1.6
 **Status**: Draft
 **Created**: 2026-06-15
 **Traceability**: REQ-MEMGRAPHRAG-002 v1.0
@@ -1279,31 +1279,44 @@ SQLite バックエンドは以下の **全条件** を満たした時点で削�
 
 ### ADR-002: Multi-corpus HNSW ベクトル検索方式
 
-**ステータス**: proposed
+**ステータス**: decided (spike 完了)
 **日付**: 2026-06-15
 
 #### Context
 
 LadybugDB の `QUERY_VECTOR_INDEX` が `PROJECT_GRAPH` 名を受け付けるかは未検証。
-LadybugDB ドキュメントには `PROJECT_GRAPH` + `QUERY_VECTOR_INDEX(projName, ...)` の例があるが、
-vector index は物理テーブルに紐づくため、projected graph での検索が実際に動作するか要確認。
+
+#### Spike 結果 (T-00)
+
+**LadybugDB v0.17.1 での検証結果**:
+
+1. `PROJECT_GRAPH(['VN'], ['LINKS'])` → 作成可能だが、`QUERY_VECTOR_INDEX(projName, ...)` で
+   `"must contain exactly one node table"` エラー。REL TABLE を含むと動作しない。
+2. `PROJECT_GRAPH(['VN'], [])` → 作成可能だが、filter binding で parser error。
+3. `YIELD ... WHERE` 構文 → LadybugDB 0.17.1 では未サポート。
+4. **Over-fetch + application filter**: 動作するが recall が低い。
+
+**Over-fetch recall テスト結果** (90:10 skew, 1000 vectors, dim=32, top-K=10):
+
+| Over-fetch | Corpus B 取得数 (/100) | Top-K 充足 |
+|------------|----------------------|------------|
+| ×3 | ~4 | 不足 |
+| ×5 | ~8 | 不足 |
+| ×10 | ~11 | 充足 |
+| ×20 | ~23 | 充足 |
+| ×100 | 100 | 完全 |
 
 #### Decision
 
-Phase 4 実装開始前に **spike タスク** として以下を実行:
-1. `@ladybugdb/core` で 2 corpus のノードテーブルを作成
-2. HNSW インデックスを作成
-3. `PROJECT_GRAPH` で 1 corpus のみフィルタ
-4. `QUERY_VECTOR_INDEX(projName, idx, vec, k)` が期待通り動作するか検証
-
-結果に応じた fallback:
-- **動作する** → 設計通り cached PROJECT_GRAPH 方式を採用
-- **動作しない** → fallback A: 1 DB = 1 corpus（推奨）or fallback B: over-fetch + post-filter（recall 保証付き）
+- **Single corpus (推奨、主要ユースケース)**: グローバル HNSW を直接使用。フィルタ不要。
+- **Multi corpus**: **Fallback A (1 DB per corpus)** を採用。各コーパスが独立した `.lbug` ディレクトリを持つ。Over-fetch は recall が不十分 (90:10 skew で ×10 必要、それでも HNSW 近似による recall 劣化あり)。
+- Multi-corpus サポートは v0.2.0 スコープ外とし、将来バージョンで Fallback A を実装する。
 
 #### Consequences
 
-- spike でリスクを事前排除
-- fallback A（1 DB per corpus）は最もシンプルで確実
+- v0.2.0 は single-corpus モードのみサポート（現行の主要ユースケース）
+- `corpus_id` PK prefix は将来の multi-corpus 対応を見据えて維持
+- VectorIndex の multi-corpus コードパスは実装しない（YAGNI）
 
 ---
 
@@ -1327,3 +1340,4 @@ Phase 4 実装開始前に **spike タスク** として以下を実行:
 | 1.3 | 2026-06-15 | GitHub Copilot | rubber-duck v3: storageId mapping, EventEmitter invalidation, entity 除外, atomic edge, document_ids |
 | 1.4 | 2026-06-15 | GitHub Copilot | rubber-duck v4: ID mapping 全メソッド徹底, atomic tx, 全テーブル PK prefix, layer=ontology, DES-LDB-010 multi-hop, DES-LDB-011 FTS fact, ADR-002 spike |
 | 1.5 | 2026-06-15 | GitHub Copilot | rubber-duck v5: 共通 ID Mapping 規約, 全アダプター domainId() 適用, Fact FTS → passage mapping 統合, LexicalRetriever max(score) merge |
+| 1.6 | 2026-06-15 | GitHub Copilot | T-00 spike 完了: ADR-002 decided (NO-GO), multi-corpus は v0.2.0 スコープ外, API 修正 (prepare+execute パターン, CALL CREATE_VECTOR_INDEX) |

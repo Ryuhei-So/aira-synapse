@@ -187,21 +187,18 @@ Phase 2 のアダプター実装前に、ポートインターフェースの契
 
 **作業内容**:
 1. `LadybugVectorIndex implements IVectorIndex` 実装
-   - upsert(): MERGE + SET vector カラム (FLOAT[1536])
-   - search(): QUERY_VECTOR_INDEX → domainId 変換
+   - upsert(): prepare + execute で MERGE + SET vector カラム (FLOAT[1536])
+   - search(): CALL QUERY_VECTOR_INDEX → domainId 変換
    - deleteByDocument(): corpus_id + document_ids フィルタ
    - count(): COUNT(n) by corpus_id
-2. Single corpus: グローバル HNSW 直接検索
-3. Multi corpus: T-00 結果に基づくフォールバック戦略
-4. Projection cache + invalidation (graphMutation リスナー)
-5. Contract テスト
+2. **Single corpus only** (ADR-002: multi-corpus は v0.2.0 スコープ外)
+3. LadybugDB API: `conn.prepare()` + `conn.execute(ps, params)` パターン
+4. Contract テスト
 
 **完了条件**:
 - [ ] IVectorIndex の全メソッドが実装されている
 - [ ] search() が domainId を返す
 - [ ] 検索レイテンシが 100ms 以下 (800K vectors)
-- [ ] キャッシュ invalidation が graphMutation で動作する
-- [ ] close() 時に graphMutation リスナーが解除される
 - [ ] `tests/contracts/` の IVectorIndex 契約テストが全パス
 - [ ] HNSW インデックスが新規ベクトル挿入時に自動更新される
 
