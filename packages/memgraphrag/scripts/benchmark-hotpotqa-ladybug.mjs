@@ -30,9 +30,14 @@ import { LadybugGraphProjection } from '../dist/infrastructure/storage/ladybug/L
 import { DefaultQueryService } from '../dist/application/query/QueryService.js';
 import { VectorMemoryFilter } from '../dist/application/query/VectorMemoryFilter.js';
 import { SimpleNodeInitializer } from '../dist/application/query/SimpleNodeInitializer.js';
+import { DictionaryAwareNodeInitializer } from '../dist/application/query/DictionaryAwareNodeInitializer.js';
 import { SimplePPR } from '../dist/application/query/SimplePPR.js';
 import { SimpleContextBuilder } from '../dist/application/query/SimpleContextBuilder.js';
+import { AliasAwareContextBuilder } from '../dist/application/query/AliasAwareContextBuilder.js';
+import { SubQueryDecomposer } from '../dist/application/query/SubQueryDecomposer.js';
+import { ComparisonVerifier } from '../dist/application/query/ComparisonVerifier.js';
 import { ThesaurusExpansionPolicy } from '../dist/application/index.js';
+import { DEFAULT_QUERY_FLAGS, V15_BASELINE_QUERY_FLAGS } from '../dist/domain/config/featureFlags.js';
 
 // ─── Paths ───
 // Benchmark data lives at repo root, not package root
@@ -283,17 +288,58 @@ async function evaluateQueries() {
     verbosity: HP_VERBOSITY,
   };
 
+  // Feature flags (env-based override, defaults to all-on)
+  const V15_MODE = process.env.V15_BASELINE === 'true';
+  const featureFlags = V15_MODE ? V15_BASELINE_QUERY_FLAGS : {
+    enableDictionaryInjection: process.env.FLAG_DICT_INJECT !== 'false',
+    enableThesaurusExpansion: process.env.FLAG_THESAURUS !== 'false',
+    enableHypernymExpansion: process.env.FLAG_HYPERNYM === 'true',
+    enableAliasHints: process.env.FLAG_ALIAS !== 'false',
+    enableSubQueryDecomposition: process.env.FLAG_SUBQUERY !== 'false',
+    enableComparisonVerification: process.env.FLAG_COMPARISON !== 'false',
+  };
+
+  // Build components based on flags
+  const baseInitializer = new SimpleNodeInitializer(memoryStore);
+  const nodeInitializer = featureFlags.enableDictionaryInjection
+    ? new DictionaryAwareNodeInitializer(baseInitializer, dictionary, memoryStore)
+    : baseInitializer;
+
+  const baseContextBuilder = new SimpleContextBuilder(memoryStore);
+  const contextBuilder = featureFlags.enableAliasHints
+    ? new AliasAwareContextBuilder(baseContextBuilder, dictionary, thesaurus)
+    : baseContextBuilder;
+
+  const expansionPolicy = new ThesaurusExpansionPolicy(
+    thesaurus,
+    { synonymLimit: 3, hypernymLimit: featureFlags.enableHypernymExpansion ? 2 : 0 },
+    featureFlags.enableThesaurusExpansion ? dictionary : undefined,
+  );
+
+  const ppr = new SimplePPR(HP_HUB);
+
+  const subQueryDecomposer = featureFlags.enableSubQueryDecomposition
+    ? new SubQueryDecomposer(llm, baseInitializer, ppr, graphProjection)
+    : undefined;
+
+  const comparisonVerifier = featureFlags.enableComparisonVerification
+    ? new ComparisonVerifier(llm)
+    : undefined;
+
   // Build QueryService with LadybugDB graph + hybrid adapters
   const queryService = new DefaultQueryService({
     dictionary,
-    expansionPolicy: new ThesaurusExpansionPolicy(thesaurus),
+    expansionPolicy,
     memoryFilter: new VectorMemoryFilter(embedding, vectorIndex, memoryStore, null),
-    nodeInitializer: new SimpleNodeInitializer(memoryStore),
-    ppr: new SimplePPR(HP_HUB),
+    nodeInitializer,
+    ppr,
     projection: graphProjection,
-    contextBuilder: new SimpleContextBuilder(memoryStore),
+    contextBuilder,
     llm,
     hyperParams,
+    featureFlags,
+    subQueryDecomposer,
+    comparisonVerifier,
   });
 
   const questions = JSON.parse(readFileSync(QUESTIONS_FILE, 'utf-8'));
@@ -305,6 +351,7 @@ async function evaluateQueries() {
 
   console.log(`\n=== Evaluating ${questions.length} queries ===`);
   console.log(`  HyperParams: tp=${HP_TP} hub=${HP_HUB} K=${HP_TOPK} M=${HP_TOPM} ctx=${HP_CTX} effort=${HP_EFFORT} verbosity=${HP_VERBOSITY}`);
+  console.log(`  Flags: ${V15_MODE ? 'V15_BASELINE (all off)' : JSON.stringify(featureFlags)}`);
   console.log(`  Backend: LadybugDB (${LADYBUG_DB_PATH})`);
   console.log(`  Concurrency: ${CONCURRENCY}`);
 
@@ -389,6 +436,8 @@ async function evaluateQueries() {
     total,
     timeSeconds: parseInt(totalTime),
     byType,
+    featureFlags,
+    v15Baseline: V15_MODE,
     timestamp: new Date().toISOString(),
   };
 
