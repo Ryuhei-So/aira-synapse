@@ -24,7 +24,7 @@ updated_at: '2026-06-17'
 
 ### 1.1 研究者の日常と RAG の限界
 
-研究者は日々、数百本の論文を読み、知見を統合し、新たな仮説を生み出す。LLM を活用した RAG（Retrieval-Augmented Generation）はこのプロセスを加速できるが、**科学論文特有の課題** がある：
+研究者は日々、数百本の論文を読み、知見を統合し、新たな仮説を生み出す。LLM を活用した RAG（Retrieval-Augmented Generation）はこのプロセスを加速できるが、**科学論文特有の課題** がある。
 
 | 課題 | 具体例 | 通常の RAG の対応 |
 |------|--------|:----------------:|
@@ -63,7 +63,7 @@ Microsoft GraphRAG のパイプライン:
 | **ローカルクエリに弱い** | Map-Reduce は要約レベルの回答を生成。個別エンティティの正確な回答には不向き | HotpotQA Str-Acc **51.6%** |
 | **グラフ品質管理がない** | スキーマ安定化なし、矛盾検出なし。低品質トリプルが伝播 | 精度の天井が低い |
 
-MemGraphRAG 論文（Xiang et al., 2026）はこの問題を明確に指摘している：
+MemGraphRAG 論文（Xiang et al., 2026）はこの問題を明確に指摘している。
 
 > *"Methods typically employ community detection algorithms, such as Louvain or Leiden, to recursively aggregate entities into clusters. Despite its utility in summarizing high-level themes, this unsupervised approach faces limitations regarding precision, as inaccuracies in low-level entity relationships can propagate upward."*
 > （コミュニティ検出ベースの手法は、高次テーマの要約には有用だが、低レベルのエンティティ関係の不正確さが上位に伝播するという精度面での限界がある）
@@ -72,7 +72,7 @@ MemGraphRAG 論文（Xiang et al., 2026）はこの問題を明確に指摘し�
 
 ### 1.3 MemGraphRAG：メモリベースのアプローチ
 
-KDD 2026 論文 MemGraphRAG（Xiang et al.）は、Microsoft GraphRAG のコミュニティ検出ベースではなく、**三層グローバルメモリ** と **マルチエージェント協調** で GraphRAG のグラフ品質問題を解決する：
+KDD 2026 論文 MemGraphRAG（Xiang et al.）は、Microsoft GraphRAG のコミュニティ検出ベースではなく、**三層グローバルメモリ** と **マルチエージェント協調** で GraphRAG のグラフ品質問題を解決する。
 
 ```
 論文 PDF
@@ -233,32 +233,32 @@ PPR テレポートベクトル（辞書注入後）:
 ```
 ┌──────────────────────────────────────────────────────────┐
 │  AIRA (AI Research Assistant)                            │
-│  ┌───────────────┐                                       │
-│  │ ToolUniverse  │                                       │
+│  ┌─────────────────┐                                     │
+│  │ ToolUniverse    │                                     │
 │  │ Semantic Scholar│──▶ PDF ──▶ Dockling ──▶ Markdown    │
-│  │ arXiv          │                                      │
-│  │ J-STAGE        │  ← 日本語論文対応                     │
-│  │ CiNii Research │                                      │
-│  └───────┬───────┘                                       │
+│  │ arXiv           │                                     │
+│  │ J-STAGE         │  ← 日本語論文対応                    │
+│  │ CiNii Research  │                                     │
+│  └───────┬─────────┘                                     │
 │          │ MCP (Model Context Protocol)                  │
 ├──────────┼───────────────────────────────────────────────┤
 │  aira-synapse (MemGraphRAG)                              │
 │          ↓                                               │
-│  ┌──────────────┐  ┌───────────────┐  ┌──────────────┐  │
-│  │ Stage I      │  │ Stage II      │  │ Stage III    │  │
-│  │ 抽出         │→│ スキーマ正規化  │→│ 矛盾検出     │  │
-│  │ (LLM Agent)  │  │ (Symbolic)    │  │ (Symbolic)   │  │
-│  └──────────────┘  └───────────────┘  └──────────────┘  │
+│  ┌──────────────┐  ┌───────────────┐  ┌──────────────┐   │
+│  │ Stage I      │  │ Stage II      │  │ Stage III    │   │
+│  │ 抽出          │→│ スキーマ正規化  │→ │ 矛盾検出     │   │
+│  │ (LLM Agent)  │  │ (Symbolic)    │  │ (Symbolic)   │   │
+│  └──────────────┘  └───────────────┘  └──────────────┘   │
 │          ↓                                               │
 │  ┌──────────────────────────────────────────────────┐    │
 │  │ Stage IV: グラフ投影                              │    │
-│  │ SQLite (メタデータ) + LadybugDB (グラフ)         │    │
+│  │ SQLite (メタデータ) + LadybugDB (グラフ)           │    │
 │  │ 316,935 ノード / 682,240 エッジ                   │    │
 │  └──────────────────────────────────────────────────┘    │
 │          ↓                                               │
 │  ┌──────────────────────────────────────────────────┐    │
-│  │ クエリパイプライン                                │    │
-│  │ VectorFilter → NodeInit → PPR → Context → LLM   │    │
+│  │ クエリパイプライン                                 │    │
+│  │ VectorFilter → NodeInit → PPR → Context → LLM    │    │
 │  │ 平均 3.8 秒/クエリ                                │    │
 │  └──────────────────────────────────────────────────┘    │
 └──────────────────────────────────────────────────────────┘
@@ -266,7 +266,7 @@ PPR テレポートベクトル（辞書注入後）:
 
 ### 4.2 MCP サーバーとしての統合
 
-aira-synapse は 14 個の MCP ツールを提供し、AI エージェントからの直接操作を可能にする：
+aira-synapse は 14 個の MCP ツールを提供し、AI エージェントからの直接操作を可能にする。
 
 ```typescript
 // MCP ツール一覧
@@ -289,7 +289,7 @@ const tools = [
 
 科学技術論文の多くは英語だが、**日本語でしか得られない知見** は確実に存在する。材料科学、医薬品、食品科学など、日本が強みを持つ分野では J-STAGE や CiNii Research に掲載された日本語論文が重要な情報源となる。
 
-aira-synapse は GiNZA（ja_ginza_electra）を用いた日本語 NLP パイプラインを備える：
+aira-synapse は GiNZA（ja_ginza_electra）を用いた日本語 NLP パイプラインを備える。
 
 ```
 日本語論文 PDF
@@ -326,7 +326,7 @@ aira-synapse は GiNZA（ja_ginza_electra）を用いた日本語 NLP パイプ�
 
 ### 5.4 期待される効果
 
-日本語論文を統合することで、以下のようなクロスリンガルな質問応答が可能になる：
+日本語論文を統合することで、以下のようなクロスリンガルな質問応答が可能になる。
 
 ```
 Q: 「光触媒による水素生成で、最新の量子収率改善手法は？」
