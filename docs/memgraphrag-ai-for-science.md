@@ -60,7 +60,7 @@ GraphRAG はナレッジグラフを導入することでマルチホップ推�
 
 ### 1.2 既存 GraphRAG の課題 — Microsoft GraphRAG を例に
 
-GraphRAG の先駆者である **Microsoft GraphRAG**（Edge et al., 2024, "From Local to Global: A Graph RAG Approach to Query-Focused Summarization"）は、テキストからエンティティと関係を抽出し、**Leiden アルゴリズムによるコミュニティ検出** で階層的な要約を生成する。
+GraphRAG の先駆者である **[Microsoft GraphRAG](https://arxiv.org/abs/2404.16130)**（Edge et al., 2024, "From Local to Global: A Graph RAG Approach to Query-Focused Summarization"）は、テキストからエンティティと関係を抽出し、**Leiden アルゴリズムによるコミュニティ検出** で階層的な要約を生成する。
 
 ```
 Microsoft GraphRAG のパイプライン:
