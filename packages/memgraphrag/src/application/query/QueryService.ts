@@ -18,11 +18,14 @@ import type { QueryFeatureFlags } from '../../domain/config/featureFlags.js';
 import { DEFAULT_QUERY_FLAGS } from '../../domain/config/featureFlags.js';
 import { ThesaurusExpansionPolicy } from './ThesaurusExpansionPolicy.js';
 import { TemplateResponseGenerator } from './TemplateResponseGenerator.js';
-import { isComparisonQuery } from './comparisonDetector.js';
+import { isComparisonQuery, analyzeComparisonQuery } from './comparisonDetector.js';
+import type { ComparisonType } from './comparisonDetector.js';
 import { extractFinalAnswer } from './query-utils.js';
 import type { SubQueryDecomposer } from './SubQueryDecomposer.js';
 import type { ComparisonVerifier } from './ComparisonVerifier.js';
 import { DictionaryContextEnricher } from './DictionaryContextEnricher.js';
+import { NORMALIZATION_INSTRUCTIONS } from './prompts/normalizationInstructions.js';
+import { buildYesNoComparisonPrompt } from './prompts/comparisonYesNoPrompt.js';
 
 export interface CitationDto {
   readonly passageId: string;
@@ -189,6 +192,11 @@ export class DefaultQueryService implements QueryService {
     }, this.dependencies.projection);
 
     const isComparison = isComparisonQuery(expandedRequest.text);
+    // Phase 2: Fine-grained comparison analysis (DES-MG4-003)
+    const compAnalysis = this.flags.enableComparisonReasoning
+      ? analyzeComparisonQuery(expandedRequest.text)
+      : { type: 'none' as ComparisonType, entities: [] as string[], confidence: 0 };
+
     const context = await this.dependencies.contextBuilder.build(expandedRequest, ranking);
     const entities = toEntityHits(matches);
 
@@ -212,7 +220,17 @@ export class DefaultQueryService implements QueryService {
     let comparisonVerified: boolean | undefined;
 
     try {
-      const prompt = isComparison
+      // Phase 2: Answer normalization (DES-MG4-004)
+      const normInstructions = this.flags.enableAnswerNormalization
+        ? NORMALIZATION_INSTRUCTIONS
+        : '';
+
+      // Phase 2: Yes/No comparison reasoning (DES-MG4-003)
+      const useYesNoPrompt = this.flags.enableComparisonReasoning && compAnalysis.type === 'yesno';
+
+      const prompt = useYesNoPrompt
+        ? buildYesNoComparisonPrompt(expandedRequest.text, compAnalysis.entities, enrichedContext)
+        : isComparison
         ? `You are answering a comparison or yes/no question about two or more entities.
 
 Step-by-step:
@@ -220,7 +238,7 @@ Step-by-step:
 2. Find the relevant attribute or fact for each entity in the context
 3. Compare the attributes directly (dates, numbers, categories, or factual properties)
 4. Determine the answer
-
+${normInstructions}
 Rules:
 - Use ONLY the provided context
 - For "which" questions: answer with the entity name only
@@ -243,7 +261,7 @@ Step-by-step:
 3. Follow the chain: use what you learned to find the next piece of information
 4. Continue until you reach the final answer
 5. Before answering, re-read the question: confirm exactly WHAT is being asked (a person? a place? a title? an event?)
-
+${normInstructions}
 Rules:
 - Use ONLY the provided context
 - Use the full official name (do not abbreviate)
