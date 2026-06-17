@@ -296,14 +296,25 @@ async function evaluateQueries() {
 
   // Feature flags (env-based override, defaults to all-on)
   const V15_MODE = process.env.V15_BASELINE === 'true';
-  const featureFlags = V15_MODE ? V15_BASELINE_QUERY_FLAGS : {
-    enableDictionaryInjection: process.env.FLAG_DICT_INJECT !== 'false',
-    enableThesaurusExpansion: process.env.FLAG_THESAURUS !== 'false',
-    enableHypernymExpansion: process.env.FLAG_HYPERNYM === 'true',
-    enableAliasHints: process.env.FLAG_ALIAS !== 'false',
-    enableSubQueryDecomposition: process.env.FLAG_SUBQUERY !== 'false',
-    enableComparisonVerification: process.env.FLAG_COMPARISON !== 'false',
-  };
+  const V03_MODE = process.env.V03_ALL_ON === 'true';
+  const featureFlags = V15_MODE ? V15_BASELINE_QUERY_FLAGS
+    : V03_MODE ? {
+      enableDictionaryInjection: process.env.FLAG_DICT_INJECT !== 'false',
+      enableThesaurusExpansion: process.env.FLAG_THESAURUS !== 'false',
+      enableHypernymExpansion: process.env.FLAG_HYPERNYM === 'true',
+      enableAliasHints: process.env.FLAG_ALIAS !== 'false',
+      enableSubQueryDecomposition: process.env.FLAG_SUBQUERY !== 'false',
+      enableComparisonVerification: process.env.FLAG_COMPARISON !== 'false',
+    }
+    : {
+      // Default: use DEFAULT_QUERY_FLAGS with optional env overrides
+      enableDictionaryInjection: process.env.FLAG_DICT_INJECT === 'true',
+      enableThesaurusExpansion: process.env.FLAG_THESAURUS === 'true',
+      enableHypernymExpansion: process.env.FLAG_HYPERNYM === 'true',
+      enableAliasHints: process.env.FLAG_ALIAS === 'true',
+      enableSubQueryDecomposition: process.env.FLAG_SUBQUERY === 'true',
+      enableComparisonVerification: process.env.FLAG_COMPARISON === 'true',
+    };
 
   // Build components based on flags
   // Note: Dictionary injection is now context-based (inside QueryService), not teleport-vector-based
@@ -358,7 +369,7 @@ async function evaluateQueries() {
 
   console.log(`\n=== Evaluating ${questions.length} queries ===`);
   console.log(`  HyperParams: tp=${HP_TP} hub=${HP_HUB} K=${HP_TOPK} M=${HP_TOPM} ctx=${HP_CTX} effort=${HP_EFFORT} verbosity=${HP_VERBOSITY}`);
-  console.log(`  Flags: ${V15_MODE ? 'V15_BASELINE (all off)' : JSON.stringify(featureFlags)}`);
+  console.log(`  Flags: ${V15_MODE ? 'V15_BASELINE (all off)' : V03_MODE ? 'V03_ALL_ON' : 'DEFAULT (all off)'} ${JSON.stringify(featureFlags)}`);
   console.log(`  Backend: LadybugDB (${LADYBUG_DB_PATH})`);
   console.log(`  Concurrency: ${CONCURRENCY}`);
 
