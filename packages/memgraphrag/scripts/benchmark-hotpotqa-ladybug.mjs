@@ -36,6 +36,8 @@ import { SimpleContextBuilder } from '../dist/application/query/SimpleContextBui
 import { AliasAwareContextBuilder } from '../dist/application/query/AliasAwareContextBuilder.js';
 import { SubQueryDecomposer } from '../dist/application/query/SubQueryDecomposer.js';
 import { ComparisonVerifier } from '../dist/application/query/ComparisonVerifier.js';
+import { LLMQueryRewriter } from '../dist/application/query/LLMQueryRewriter.js';
+import { LLMPassageReranker } from '../dist/application/query/LLMPassageReranker.js';
 import { ThesaurusExpansionPolicy } from '../dist/application/index.js';
 import { DEFAULT_QUERY_FLAGS, V15_BASELINE_QUERY_FLAGS } from '../dist/domain/config/featureFlags.js';
 import { computeBenchmarkDelta, formatDeltaReport } from '../dist/domain/benchmark/KnownErrorTracker.js';
@@ -484,6 +486,11 @@ async function evaluateQueries() {
       enableAliasHints: process.env.FLAG_ALIAS === 'true',
       enableSubQueryDecomposition: process.env.FLAG_SUBQUERY === 'true',
       enableComparisonVerification: process.env.FLAG_COMPARISON === 'true',
+      // Phase 2 flags
+      enableQueryRewriting: process.env.FLAG_QUERY_REWRITE === 'true',
+      enablePassageReranking: process.env.FLAG_RERANK === 'true',
+      enableComparisonReasoning: process.env.FLAG_COMP_REASONING === 'true',
+      enableAnswerNormalization: process.env.FLAG_NORMALIZATION === 'true',
     };
 
   // Build components based on flags
@@ -512,6 +519,40 @@ async function evaluateQueries() {
     ? new ComparisonVerifier(llm)
     : undefined;
 
+  // Phase 2a: Query rewriter
+  // Adapter: wrap IMemoryStore as GlobalMemory (only getPassage needed)
+  const snapshot = await memoryStore.load(CORPUS_ID);
+  const passageMap = new Map(snapshot.passages.map(p => [p.passageId, p]));
+  const globalMemoryAdapter = {
+    corpusId: CORPUS_ID,
+    getPassage: async (id) => passageMap.get(id) ?? passageMap.get(id.replace('passage:', '')) ?? null,
+    // Stubs for unused methods
+    getSchema: async () => null,
+    getFact: async () => null,
+    listFactsBySchema: async () => [],
+    listPassagesByFact: async () => [],
+    listFactsByPassage: async () => [],
+    exportSnapshot: async () => snapshot,
+    importSnapshot: async () => {},
+    getStatistics: async () => ({ nodeCount: 0, edgeCount: 0, passageCount: snapshot.passages.length, factCount: 0 }),
+  };
+
+  const queryRewriter = featureFlags.enableQueryRewriting
+    ? new LLMQueryRewriter({
+        llm,
+        memoryFilter: new VectorMemoryFilter(embedding, vectorIndex, memoryStore, null),
+        nodeInitializer: baseInitializer,
+        ppr,
+        projection: graphProjection,
+        globalMemory: globalMemoryAdapter,
+      })
+    : undefined;
+
+  // Phase 2b: Passage reranker
+  const passageReranker = featureFlags.enablePassageReranking
+    ? new LLMPassageReranker(llm, globalMemoryAdapter)
+    : undefined;
+
   // Build QueryService with LadybugDB graph + hybrid adapters
   const queryService = new DefaultQueryService({
     dictionary,
@@ -526,6 +567,9 @@ async function evaluateQueries() {
     featureFlags,
     subQueryDecomposer,
     comparisonVerifier,
+    queryRewriter,
+    passageReranker,
+    globalMemory: globalMemoryAdapter,
   });
 
   const allQuestions = JSON.parse(readFileSync(QUESTIONS_FILE, 'utf-8'));
@@ -633,7 +677,16 @@ async function evaluateQueries() {
   let knownErrorDelta = null;
   if (existsSync(KNOWN_ERRORS_FILE)) {
     try {
-      const errorSet = JSON.parse(readFileSync(KNOWN_ERRORS_FILE, 'utf-8'));
+      const rawErrorSet = JSON.parse(readFileSync(KNOWN_ERRORS_FILE, 'utf-8'));
+      // Normalize snake_case keys from JSON to camelCase expected by TypeScript
+      const errorSet = {
+        version: rawErrorSet.version,
+        baselineAccuracy: rawErrorSet.baseline_accuracy ?? rawErrorSet.baselineAccuracy,
+        baselineCorrect: rawErrorSet.baseline_correct ?? rawErrorSet.baselineCorrect,
+        baselineErrors: rawErrorSet.baseline_errors ?? rawErrorSet.baselineErrors,
+        errors: rawErrorSet.errors,
+        correctIds: rawErrorSet.correct_ids ?? rawErrorSet.correctIds ?? [],
+      };
       const resultsMap = new Map();
       for (const r of results) {
         if (r && r.id) {
