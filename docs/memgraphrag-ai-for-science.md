@@ -55,7 +55,7 @@ Microsoft GraphRAG のパイプライン:
   回答
 ```
 
-**グローバルクエリ**（「このコーパスの主要テーマは？」）に対しては、コミュニティ要約を横断的に Map-Reduce することで包括的な回答を生成できる。しかし、**科学論文の Factoid QA** には 3 つの根本的な課題がある：
+**グローバルクエリ**（「このコーパスの主要テーマは？」）に対しては、コミュニティ要約を横断的に Map-Reduce することで包括的な回答を生成できる。しかし、**科学論文の Factoid QA** には 3 つの根本的な課題がある。
 
 | 課題 | 詳細 | 影響 |
 |------|------|------|
@@ -76,7 +76,7 @@ KDD 2026 論文 MemGraphRAG（Xiang et al.）は、Microsoft GraphRAG のコミ�
 
 ```
 論文 PDF
-  ↓ markitdown
+  ↓ Dockling (IBM)
 Markdown テキスト
   ↓ Stage I: 抽出エージェント
 三層メモリ（Ontology / Fact / Passage）
@@ -235,7 +235,7 @@ PPR テレポートベクトル（辞書注入後）:
 │  AIRA (AI Research Assistant)                            │
 │  ┌───────────────┐                                       │
 │  │ ToolUniverse  │                                       │
-│  │ Semantic Scholar│──▶ PDF ──▶ markitdown ──▶ Markdown  │
+│  │ Semantic Scholar│──▶ PDF ──▶ Dockling ──▶ Markdown    │
 │  │ arXiv          │                                      │
 │  │ J-STAGE        │  ← 日本語論文対応                     │
 │  │ CiNii Research │                                      │
@@ -293,7 +293,7 @@ aira-synapse は GiNZA（ja_ginza_electra）を用いた日本語 NLP パイプ�
 
 ```
 日本語論文 PDF
-  ↓ markitdown
+  ↓ Dockling (IBM)
 日本語 Markdown
   ↓ GiNZA (spaCy)
   ├── 形態素解析（Transformers ベース）
@@ -381,7 +381,7 @@ Q: 「光触媒による水素生成で、最新の量子収率改善手法は�
 | LLM | GPT-5.4-mini (OpenAI) | コスト効率 + reasoning_effort 制御 |
 | Embedding | text-embedding-3-large | 3,072 次元、多言語対応 |
 | 日本語 NLP | GiNZA (ja_ginza_electra) | spaCy 互換、Transformers ベース |
-| PDF 変換 | markitdown | Microsoft 製、高品質変換 |
+| PDF 変換 | Dockling | IBM 製、高品質 PDF→Markdown 変換 |
 | CLI | Commander.js | 8 コマンド |
 | MCP サーバー | @modelcontextprotocol/sdk | 14 ツール |
 | テスト | Vitest | 508 テスト |
@@ -465,6 +465,6 @@ npx memgraphrag query \
 - Microsoft Research. (2024). *LazyGraphRAG: Setting a new standard for quality and cost*. [Blog](https://www.microsoft.com/en-us/research/blog/lazygraphrag-setting-a-new-standard-for-quality-and-cost-for-local-graph-rag/)
 - [aira-synapse GitHub Repository](https://github.com/nahisaho/aira-synapse)
 - [LadybugDB (旧 Kuzu)](https://github.com/LadybugDB/ladybug)
-- [markitdown](https://github.com/microsoft/markitdown)
+- [Dockling (IBM)](https://github.com/dockling-project/dockling)
 - [GiNZA 日本語 NLP](https://megagonlabs.github.io/ginza/)
 - [前回の記事: MemGraphRAG クリーンルーム実装](https://qiita.com/hisaho/items/XXXXXXXX) <!-- 前回記事のリンクに差し替え -->

@@ -103,25 +103,25 @@ MemGraphRAG:
 4層クリーンアーキテクチャ（Domain / Application / Infrastructure / Interface）を採用し、依存性逆転原則を徹底する。
 
 ```
-┌─────────────────────────────────────────────────┐
-│  Interface Layer                                │
-│  ┌──────────┐  ┌──────────┐  ┌───────────────┐  │
-│  │ MCP (14) │  │ CLI (8)  │  │   Runtime/DI  │  │
-│  └────┬─────┘  └────┬─────┘  └───────┬───────┘  │
-├───────┼──────────────┼────────────────┼──────────┤
-│  Application Layer                              │
-│  ┌──────────┐  ┌──────────┐  ┌───────────────┐  │
-│  │ Indexing │  │  Query   │  │ Dict/Thesaurus│  │
-│  │ Stage    │  │ Service  │  │   Services    │  │
-│  │ I–IV     │  │ PPR+LLM  │  │               │  │
-│  └────┬─────┘  └────┬─────┘  └───────┬───────┘  │
-├───────┼──────────────┼────────────────┼──────────┤
-│  Domain Layer (Ports)                           │
+┌──────────────────────────────────────────────────┐
+│  Interface Layer                                 │
+│  ┌──────────┐  ┌──────────┐  ┌───────────────┐   │
+│  │ MCP (14) │  │ CLI (8)  │  │   Runtime/DI  │   │
+│  └────┬─────┘  └────┬─────┘  └───────┬───────┘   │
+├───────┼─────────────┼────────────────┼───────────┤
+│  Application Layer                               │ 
+│  ┌──────────┐  ┌──────────┐  ┌───────────────┐   │
+│  │ Indexing │  │  Query   │  │ Dict/Thesaurus│   │
+│  │ Stage    │  │ Service  │  │   Services    │   │
+│  │ I–IV     │  │ PPR+LLM  │  │               │   │
+│  └────┬─────┘  └────┬─────┘  └───────┬───────┘   │
+├───────┼─────────────┼────────────────┼───────────┤
+│  Domain Layer (Ports)                            │
 │  Memory │ Agent │ Dictionary │ Retrieval │ Store │
-├─────────────────────────────────────────────────┤
-│  Infrastructure Layer (Adapters)                │
-│  SQLite │ VectorIndex │ OpenAI │ NLP Sidecar    │
-└─────────────────────────────────────────────────┘
+├──────────────────────────────────────────────────┤
+│  Infrastructure Layer (Adapters)                 │
+│  SQLite │ VectorIndex │ OpenAI │ NLP Sidecar     │
+└──────────────────────────────────────────────────┘
 ```
 
 **設計上の重要な決定:**
@@ -182,7 +182,7 @@ GraphRAG 論文の多くは、ドメイン固有の専門用語の正確な識�
 aira-synapse は MCP（Model Context Protocol）サーバーとして動作し、AIRA エージェントから ToolUniverse 経由で取得した論文を直接インデックス化できる。
 
 ```
-AIRA ──(ToolUniverse)──▶ PDF ──(markitdown)──▶ Markdown ──(MCP)──▶ MemGraphRAG
+AIRA ──(ToolUniverse)──▶ PDF ──(Dockling)──▶ Markdown ──(MCP)──▶ MemGraphRAG
 ```
 
 14 個の MCP ツール（`index_document`, `query`, `corpus_stats`, `build_dictionary` 等）を提供し、エージェント間のシームレスな連携を実現する。
@@ -195,7 +195,7 @@ AIRA ──(ToolUniverse)──▶ PDF ──(markitdown)──▶ Markdown ─�
 |-----------|-----|
 | コーパス | GraphRAG 関連論文 100 本 |
 | ソース | Semantic Scholar API + arXiv PDF |
-| PDF→Markdown 変換 | PyMuPDF |
+| PDF→Markdown 変換 | Dockling (IBM) |
 | LLM | GPT-5.4-mini |
 | Embedding | text-embedding-3-large |
 | チャンクサイズ | 600 tokens (overlap 100) |
