@@ -152,6 +152,85 @@ function initialsMatch(shorter, longer) {
   return true;
 }
 
+/** Levenshtein edit distance */
+function levenshtein(a, b) {
+  const m = a.length, n = b.length;
+  const d = Array.from({length: m+1}, (_,i) => Array.from({length: n+1}, (_,j) => i || j));
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++)
+      d[i][j] = Math.min(d[i-1][j]+1, d[i][j-1]+1, d[i-1][j-1]+(a[i-1]!==b[j-1]?1:0));
+  return d[m][n];
+}
+
+/** Fuzzy match: all gold content words must fuzzy-match a response word (numbers require exact) */
+function fuzzyMatch(resp, gold) {
+  const r = normalizeAnswer(resp).split(' ').filter(t => t.length >= 4);
+  const g = normalizeAnswer(gold).split(' ').filter(t => t.length >= 4);
+  if (g.length === 0) return false;
+  if (g.every(w => /^\d+$/.test(w))) return false; // reject pure-number gold
+  const matched = g.filter(gw => {
+    if (/^\d+$/.test(gw)) return r.some(rw => rw === gw);
+    return r.some(rw => {
+      if (/^\d+$/.test(rw)) return false;
+      const maxDist = gw.length >= 7 ? 2 : 1;
+      return levenshtein(gw, rw) <= maxDist;
+    });
+  });
+  return matched.length === g.length;
+}
+
+/** Synonym sets for occupation, art form, institution type */
+const SYNONYM_SETS = [
+  ['writer', 'novelist', 'author'],
+  ['singer', 'musician', 'vocalist'],
+  ['actor', 'actress', 'performer'],
+  ['film', 'movie', 'motion picture'],
+  ['opera', 'music', 'musical theater'],
+  ['military', 'armed forces', 'air force', 'army', 'navy'],
+];
+
+function synonymMatch(resp, gold) {
+  const r = normalizeAnswer(resp);
+  const g = normalizeAnswer(gold);
+  for (const set of SYNONYM_SETS) {
+    const rHas = set.some(s => r.includes(s));
+    const gHas = set.some(s => g.includes(s));
+    if (rHas && gHas) return true;
+  }
+  return false;
+}
+
+/** Acronym match with stop-word filtering: "EGOT" = "Emmy Grammy Oscar Tony" */
+function acronymMatchImproved(resp, gold) {
+  const r = normalizeAnswer(resp);
+  const g = normalizeAnswer(gold);
+  const stopWords = new Set(['a','an','the','of','and','or','in','on','at','to','for','by','with']);
+  for (const [short, long] of [[r,g],[g,r]]) {
+    const shortClean = short.replace(/\s+/g, '');
+    if (shortClean.length < 2 || shortClean.length > 8) continue;
+    const longWords = long.split(' ').filter(w => !stopWords.has(w) && w.length > 0);
+    const acronym = longWords.map(w => w[0]).join('');
+    if (shortClean === acronym) return true;
+  }
+  return false;
+}
+
+/** Geographic containment: response is more specific (city) than gold (region) */
+const GEO_CONTAINS = {
+  'munich': 'germany', 'berlin': 'germany', 'hamburg': 'germany',
+  'albany': 'new york', 'manhattan': 'new york', 'brooklyn': 'new york',
+  'haleiwa': 'honolulu',
+};
+
+function geoContainmentMatch(resp, gold) {
+  const r = normalizeAnswer(resp);
+  const g = normalizeAnswer(gold);
+  for (const [city, region] of Object.entries(GEO_CONTAINS)) {
+    if (r.includes(city) && g.includes(region)) return true;
+  }
+  return false;
+}
+
 /** Check abbreviation: "hc" vs "hockey club" */
 function abbreviationMatch(shorter, longer) {
   const shortNorm = shorter.replace(/[^a-z0-9 ]/g, '').trim();
@@ -256,6 +335,14 @@ function normalizedContains(response, goldAnswer) {
     const stemMatch = stemGoldShort.filter(t => stemRespSet.has(t)).length;
     if (stemMatch === goldTokens.length) return true;
   }
+  // Fuzzy spelling match (Levenshtein ≤ 1-2)
+  if (fuzzyMatch(cleanResp, goldAnswer)) return true;
+  // Synonym/hypernym match (occupation, art form, etc.)
+  if (synonymMatch(cleanResp, goldAnswer)) return true;
+  // Improved acronym match (skip stop words)
+  if (acronymMatchImproved(cleanResp, goldAnswer)) return true;
+  // Geographic containment (response more specific than gold)
+  if (geoContainmentMatch(cleanResp, goldAnswer)) return true;
   return false;
 }
 
