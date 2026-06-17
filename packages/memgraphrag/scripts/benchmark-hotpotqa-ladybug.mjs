@@ -16,7 +16,7 @@
  *   CONCURRENCY — query concurrency (default: 5)
  */
 import { resolve } from 'node:path';
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { loadMemGraphRagConfig, resolveConfigFromEnv, resolveApiKey } from '../dist/infrastructure/config/index.js';
 import {
   SQLiteGraphStore, SQLiteMemoryStore, SQLiteLexiconStore,
@@ -36,11 +36,8 @@ import { SimpleContextBuilder } from '../dist/application/query/SimpleContextBui
 import { AliasAwareContextBuilder } from '../dist/application/query/AliasAwareContextBuilder.js';
 import { SubQueryDecomposer } from '../dist/application/query/SubQueryDecomposer.js';
 import { ComparisonVerifier } from '../dist/application/query/ComparisonVerifier.js';
-import { LLMQueryRewriter } from '../dist/application/query/LLMQueryRewriter.js';
-import { LLMPassageReranker } from '../dist/application/query/LLMPassageReranker.js';
 import { ThesaurusExpansionPolicy } from '../dist/application/index.js';
 import { DEFAULT_QUERY_FLAGS, V15_BASELINE_QUERY_FLAGS } from '../dist/domain/config/featureFlags.js';
-import { computeBenchmarkDelta, formatDeltaReport } from '../dist/domain/benchmark/KnownErrorTracker.js';
 
 // ─── Paths ───
 // Benchmark data lives at repo root, not package root
@@ -60,7 +57,6 @@ const QUESTIONS_FILE = process.env.QUESTIONS_FILE
 const RESULTS_FILE = process.env.RESULTS_FILE
   ? resolve(process.cwd(), process.env.RESULTS_FILE)
   : resolve(BENCHMARK_DIR, `results_ladybug_${BENCH_SIZE}.json`);
-const KNOWN_ERRORS_FILE = resolve(BENCHMARK_DIR, 'known_errors_v15.json');
 const PHASE = process.argv[2] || 'all';
 const CORPUS_ID = readFileSync(resolve(BENCHMARK_DIR, 'corpus_id.txt'), 'utf-8').trim();
 
@@ -486,11 +482,6 @@ async function evaluateQueries() {
       enableAliasHints: process.env.FLAG_ALIAS === 'true',
       enableSubQueryDecomposition: process.env.FLAG_SUBQUERY === 'true',
       enableComparisonVerification: process.env.FLAG_COMPARISON === 'true',
-      // Phase 2 flags
-      enableQueryRewriting: process.env.FLAG_QUERY_REWRITE === 'true',
-      enablePassageReranking: process.env.FLAG_RERANK === 'true',
-      enableComparisonReasoning: process.env.FLAG_COMP_REASONING === 'true',
-      enableAnswerNormalization: process.env.FLAG_NORMALIZATION === 'true',
     };
 
   // Build components based on flags
@@ -519,40 +510,6 @@ async function evaluateQueries() {
     ? new ComparisonVerifier(llm)
     : undefined;
 
-  // Phase 2a: Query rewriter
-  // Adapter: wrap IMemoryStore as GlobalMemory (only getPassage needed)
-  const snapshot = await memoryStore.load(CORPUS_ID);
-  const passageMap = new Map(snapshot.passages.map(p => [p.passageId, p]));
-  const globalMemoryAdapter = {
-    corpusId: CORPUS_ID,
-    getPassage: async (id) => passageMap.get(id) ?? passageMap.get(id.replace('passage:', '')) ?? null,
-    // Stubs for unused methods
-    getSchema: async () => null,
-    getFact: async () => null,
-    listFactsBySchema: async () => [],
-    listPassagesByFact: async () => [],
-    listFactsByPassage: async () => [],
-    exportSnapshot: async () => snapshot,
-    importSnapshot: async () => {},
-    getStatistics: async () => ({ nodeCount: 0, edgeCount: 0, passageCount: snapshot.passages.length, factCount: 0 }),
-  };
-
-  const queryRewriter = featureFlags.enableQueryRewriting
-    ? new LLMQueryRewriter({
-        llm,
-        memoryFilter: new VectorMemoryFilter(embedding, vectorIndex, memoryStore, null),
-        nodeInitializer: baseInitializer,
-        ppr,
-        projection: graphProjection,
-        globalMemory: globalMemoryAdapter,
-      })
-    : undefined;
-
-  // Phase 2b: Passage reranker
-  const passageReranker = featureFlags.enablePassageReranking
-    ? new LLMPassageReranker(llm, globalMemoryAdapter)
-    : undefined;
-
   // Build QueryService with LadybugDB graph + hybrid adapters
   const queryService = new DefaultQueryService({
     dictionary,
@@ -567,9 +524,6 @@ async function evaluateQueries() {
     featureFlags,
     subQueryDecomposer,
     comparisonVerifier,
-    queryRewriter,
-    passageReranker,
-    globalMemory: globalMemoryAdapter,
   });
 
   const allQuestions = JSON.parse(readFileSync(QUESTIONS_FILE, 'utf-8'));
@@ -673,38 +627,7 @@ async function evaluateQueries() {
     timestamp: new Date().toISOString(),
   };
 
-  // --- Known Error Delta (T-004) ---
-  let knownErrorDelta = null;
-  if (existsSync(KNOWN_ERRORS_FILE)) {
-    try {
-      const rawErrorSet = JSON.parse(readFileSync(KNOWN_ERRORS_FILE, 'utf-8'));
-      // Normalize snake_case keys from JSON to camelCase expected by TypeScript
-      const errorSet = {
-        version: rawErrorSet.version,
-        baselineAccuracy: rawErrorSet.baseline_accuracy ?? rawErrorSet.baselineAccuracy,
-        baselineCorrect: rawErrorSet.baseline_correct ?? rawErrorSet.baselineCorrect,
-        baselineErrors: rawErrorSet.baseline_errors ?? rawErrorSet.baselineErrors,
-        errors: rawErrorSet.errors,
-        correctIds: rawErrorSet.correct_ids ?? rawErrorSet.correctIds ?? [],
-      };
-      const resultsMap = new Map();
-      for (const r of results) {
-        if (r && r.id) {
-          resultsMap.set(r.id, {
-            questionId: r.id,
-            correct: r.correct,
-            response: r.response || '',
-          });
-        }
-      }
-      knownErrorDelta = computeBenchmarkDelta(errorSet, resultsMap);
-      console.log(`\n${formatDeltaReport(knownErrorDelta)}`);
-    } catch (err) {
-      console.warn(`[WARN] Known error tracking failed: ${err.message}`);
-    }
-  }
-
-  writeFileSync(RESULTS_FILE, JSON.stringify({ summary, knownErrorDelta, results }, null, 2));
+  writeFileSync(RESULTS_FILE, JSON.stringify({ summary, results }, null, 2));
   console.log(`\nResults saved to: ${RESULTS_FILE}`);
 
   await pool.close();

@@ -14,21 +14,15 @@ import type {
 } from '../../domain/retrieval/ppr.js';
 import type { Fact } from '../../domain/memory/fact.js';
 import type { Passage } from '../../domain/memory/passage.js';
-import type { GlobalMemory } from '../../domain/memory/globalMemory.js';
 import type { QueryFeatureFlags } from '../../domain/config/featureFlags.js';
 import { DEFAULT_QUERY_FLAGS } from '../../domain/config/featureFlags.js';
 import { ThesaurusExpansionPolicy } from './ThesaurusExpansionPolicy.js';
 import { TemplateResponseGenerator } from './TemplateResponseGenerator.js';
-import { isComparisonQuery, analyzeComparisonQuery } from './comparisonDetector.js';
-import type { ComparisonType } from './comparisonDetector.js';
+import { isComparisonQuery } from './comparisonDetector.js';
 import { extractFinalAnswer } from './query-utils.js';
 import type { SubQueryDecomposer } from './SubQueryDecomposer.js';
 import type { ComparisonVerifier } from './ComparisonVerifier.js';
-import type { IQueryRewriter } from '../../domain/retrieval/queryRewriter.js';
-import type { IPassageReranker } from '../../domain/retrieval/passageReranker.js';
 import { DictionaryContextEnricher } from './DictionaryContextEnricher.js';
-import { NORMALIZATION_INSTRUCTIONS } from './prompts/normalizationInstructions.js';
-import { buildYesNoComparisonPrompt } from './prompts/comparisonYesNoPrompt.js';
 
 export interface CitationDto {
   readonly passageId: string;
@@ -62,15 +56,6 @@ export interface QueryMetrics {
   readonly hop2FactCount?: number;
   readonly comparisonVerified?: boolean;
   readonly totalLatencyMs?: number;
-  // Phase 2a: query rewriting metrics
-  readonly queryRewriteUsed?: boolean;
-  readonly queryRewriteSubQueryCount?: number;
-  readonly queryRewriteFallback?: boolean;
-  readonly queryRewriteFallbackReason?: string;
-  // Phase 2b: passage reranking metrics
-  readonly rerankUsed?: boolean;
-  readonly rerankPositionChanges?: number;
-  readonly rerankScoreRange?: { min: number; max: number; median: number };
 }
 
 export interface QueryResponse {
@@ -117,9 +102,6 @@ export interface QueryServiceDependencies {
   readonly featureFlags?: QueryFeatureFlags;
   readonly subQueryDecomposer?: SubQueryDecomposer;
   readonly comparisonVerifier?: ComparisonVerifier;
-  readonly queryRewriter?: IQueryRewriter;
-  readonly passageReranker?: IPassageReranker;
-  readonly globalMemory?: GlobalMemory;
 }
 
 function normalizeQueryText(text: string): string {
@@ -184,56 +166,11 @@ export class DefaultQueryService implements QueryService {
     const initRequest = { query: expandedRequest, candidates };
     let initialVector = await this.dependencies.nodeInitializer.initialize(initRequest);
 
-    const isComparison = isComparisonQuery(expandedRequest.text);
-    // Phase 2: Fine-grained comparison analysis (DES-MG4-003)
-    const compAnalysis = this.flags.enableComparisonReasoning
-      ? analyzeComparisonQuery(expandedRequest.text)
-      : { type: 'none' as ComparisonType, entities: [] as readonly string[], confidence: 0 };
-
-    const entities = toEntityHits(matches);
-
-    // --- Mutual exclusion: enableQueryRewriting supersedes enableSubQueryDecomposition ---
-    const effectiveSubQueryDecomposition = this.flags.enableSubQueryDecomposition
-      && !this.flags.enableQueryRewriting;
-    if (this.flags.enableSubQueryDecomposition && this.flags.enableQueryRewriting) {
-      // eslint-disable-next-line no-console
-      console.warn('[QueryService] Both enableQueryRewriting and enableSubQueryDecomposition are ON. Disabling old SubQueryDecomposer.');
-    }
-
-    // Phase 2a: Query rewriting for bridge questions (DES-MG4-005)
-    let queryRewriteUsed = false;
-    let queryRewriteSubQueryCount = 0;
-    let queryRewriteFallback: boolean | undefined;
-    let queryRewriteFallbackReason: string | undefined;
-
-    if (this.flags.enableQueryRewriting && this.dependencies.queryRewriter && !isComparison) {
-      const rewriteResult = await this.dependencies.queryRewriter.rewrite({ query: expandedRequest });
-      queryRewriteUsed = true;
-      queryRewriteSubQueryCount = rewriteResult.subQueries.length;
-      queryRewriteFallback = rewriteResult.fallback;
-      queryRewriteFallbackReason = rewriteResult.fallbackReason;
-
-      if (rewriteResult.decomposed && !rewriteResult.fallback) {
-        // Use merged ranking from rewriter — skip standard PPR
-        const ranking = rewriteResult.mergedRanking;
-        const context = await this.dependencies.contextBuilder.build(expandedRequest, ranking);
-        return this.buildResponse(expandedRequest, ranking, context, matches, expansion, entities, startTime, {
-          queryRewriteUsed,
-          queryRewriteSubQueryCount,
-          queryRewriteFallback,
-          queryRewriteFallbackReason,
-          compAnalysis,
-          isComparison,
-        });
-      }
-      // Fallback: continue with standard pipeline below
-    }
-
-    // Sub-query decomposition for bridge questions (legacy, deprecated)
+    // Sub-query decomposition for bridge questions
     let subQueryDecomposed = false;
     let hop1FactCount = 0;
     let hop2FactCount = 0;
-    if (effectiveSubQueryDecomposition && this.dependencies.subQueryDecomposer) {
+    if (this.flags.enableSubQueryDecomposition && this.dependencies.subQueryDecomposer) {
       const subResult = await this.dependencies.subQueryDecomposer.decompose(initRequest, initialVector);
       initialVector = subResult.mergedVector;
       subQueryDecomposed = subResult.decomposed;
@@ -251,26 +188,9 @@ export class DefaultQueryService implements QueryService {
       topM: request.topM,
     }, this.dependencies.projection);
 
-    // Phase 2b: Passage reranking (DES-MG4-006)
-    let finalRanking = ranking;
-    let rerankUsed = false;
-    let rerankPositionChanges: number | undefined;
-    let rerankScoreRange: { min: number; max: number; median: number } | undefined;
-
-    if (this.flags.enablePassageReranking && this.dependencies.passageReranker) {
-      const rerankResult = await this.dependencies.passageReranker.rerank({
-        query: normalizedText,
-        ranking,
-        topN: 20,
-        selectN: request.topK ?? 10,
-      });
-      finalRanking = rerankResult.rerankedPPRResult;
-      rerankUsed = true;
-      rerankPositionChanges = rerankResult.metrics.positionChanges;
-      rerankScoreRange = rerankResult.metrics.scoreRange;
-    }
-
-    const context = await this.dependencies.contextBuilder.build(expandedRequest, finalRanking);
+    const isComparison = isComparisonQuery(expandedRequest.text);
+    const context = await this.dependencies.contextBuilder.build(expandedRequest, ranking);
+    const entities = toEntityHits(matches);
 
     // Dictionary context enrichment (v0.3.0 revised: enrich context, not teleport vector)
     let dictionaryHints = '';
@@ -292,17 +212,7 @@ export class DefaultQueryService implements QueryService {
     let comparisonVerified: boolean | undefined;
 
     try {
-      // Phase 2: Answer normalization (DES-MG4-004)
-      const normInstructions = this.flags.enableAnswerNormalization
-        ? NORMALIZATION_INSTRUCTIONS
-        : '';
-
-      // Phase 2: Yes/No comparison reasoning (DES-MG4-003)
-      const useYesNoPrompt = this.flags.enableComparisonReasoning && compAnalysis.type === 'yesno';
-
-      const prompt = useYesNoPrompt
-        ? buildYesNoComparisonPrompt(expandedRequest.text, compAnalysis.entities, enrichedContext)
-        : isComparison
+      const prompt = isComparison
         ? `You are answering a comparison or yes/no question about two or more entities.
 
 Step-by-step:
@@ -310,7 +220,7 @@ Step-by-step:
 2. Find the relevant attribute or fact for each entity in the context
 3. Compare the attributes directly (dates, numbers, categories, or factual properties)
 4. Determine the answer
-${normInstructions}
+
 Rules:
 - Use ONLY the provided context
 - For "which" questions: answer with the entity name only
@@ -333,7 +243,7 @@ Step-by-step:
 3. Follow the chain: use what you learned to find the next piece of information
 4. Continue until you reach the final answer
 5. Before answering, re-read the question: confirm exactly WHAT is being asked (a person? a place? a title? an event?)
-${normInstructions}
+
 Rules:
 - Use ONLY the provided context
 - Use the full official name (do not abbreviate)
@@ -428,168 +338,6 @@ Reasoning and answer:`;
         hop2FactCount: hop2FactCount > 0 ? hop2FactCount : undefined,
         comparisonVerified: comparisonVerified,
         totalLatencyMs,
-        queryRewriteUsed: queryRewriteUsed || undefined,
-        queryRewriteSubQueryCount: queryRewriteSubQueryCount > 0 ? queryRewriteSubQueryCount : undefined,
-        queryRewriteFallback,
-        queryRewriteFallbackReason,
-        rerankUsed: rerankUsed || undefined,
-        rerankPositionChanges,
-        rerankScoreRange,
-      },
-    };
-  }
-
-  /**
-   * Build final response from ranking + context, shared by both standard and rewrite paths.
-   * Used when the query rewriter successfully decomposes and merges a result.
-   */
-  private async buildResponse(
-    expandedRequest: QueryRequest,
-    ranking: PPRResult,
-    context: ContextBundle,
-    matches: readonly DictionaryMatch[],
-    expansion: { expandedTerms: readonly string[]; rewrittenQuery: string; originalQuery: string },
-    entities: readonly EntityHit[],
-    startTime: number,
-    extra: {
-      queryRewriteUsed?: boolean;
-      queryRewriteSubQueryCount?: number;
-      queryRewriteFallback?: boolean;
-      queryRewriteFallbackReason?: string;
-      compAnalysis: { type: ComparisonType; entities: readonly string[]; confidence: number };
-      isComparison: boolean;
-    },
-  ): Promise<QueryResponse> {
-    const normalizedText = expandedRequest.text;
-
-    // Dictionary context enrichment
-    let dictionaryHints = '';
-    let dictionaryHintCount = 0;
-    if (this.flags.enableDictionaryInjection) {
-      const enricher = new DictionaryContextEnricher(this.dependencies.dictionary);
-      const hints = await enricher.getHints(normalizedText);
-      dictionaryHints = enricher.formatHints(hints);
-      dictionaryHintCount = hints.length;
-    }
-    const enrichedContext = dictionaryHints + context.promptContext;
-
-    // Answer normalization
-    const normInstructions = this.flags.enableAnswerNormalization
-      ? NORMALIZATION_INSTRUCTIONS
-      : '';
-
-    // Yes/No comparison reasoning
-    const useYesNoPrompt = this.flags.enableComparisonReasoning && extra.compAnalysis.type === 'yesno';
-
-    const prompt = useYesNoPrompt
-      ? buildYesNoComparisonPrompt(expandedRequest.text, extra.compAnalysis.entities, enrichedContext)
-      : extra.isComparison
-      ? `You are answering a comparison or yes/no question about two or more entities.
-
-Step-by-step:
-1. Identify the entities or subjects being compared
-2. Find the relevant attribute or fact for each entity in the context
-3. Compare the attributes directly (dates, numbers, categories, or factual properties)
-4. Determine the answer
-${normInstructions}
-Rules:
-- Use ONLY the provided context
-- For "which" questions: answer with the entity name only
-- For "are both X and Y..." / yes-no questions: answer "yes" or "no"
-- For "what do X and Y both..." questions: answer with the shared attribute
-- If the context seems insufficient, give your best answer based on available information — NEVER refuse to answer
-- Your last line MUST be: FINAL: <your answer>
-
-Question: ${expandedRequest.text}
-
-Context:
-${enrichedContext}
-
-Reasoning and answer:`
-      : `You are answering a multi-hop question that requires connecting information across multiple passages.
-
-Step-by-step:
-1. Identify the first entity or fact mentioned in the question
-2. Find information about that entity in the context
-3. Follow the chain: use what you learned to find the next piece of information
-4. Continue until you reach the final answer
-5. Before answering, re-read the question: confirm exactly WHAT is being asked (a person? a place? a title? an event?)
-${normInstructions}
-Rules:
-- Use ONLY the provided context
-- Use the full official name (do not abbreviate)
-- Answer exactly what the question asks — not an intermediate entity in the chain
-- If the context seems insufficient, give your best answer based on available information — NEVER refuse to answer
-- Your last line MUST be: FINAL: <your answer>
-- The answer should be a complete name, title, or phrase that precisely matches what is asked
-
-Question: ${expandedRequest.text}
-
-Context:
-${enrichedContext}
-
-Reasoning and answer:`;
-
-    let responseText: string;
-    let llmInputTokens = 0;
-    let llmOutputTokens = 0;
-    let templateFallbackTriggered = false;
-    let comparisonVerified: boolean | undefined;
-
-    try {
-      const result = await this.dependencies.llm.generate({
-        prompt,
-        temperature: 0.0,
-        reasoningEffort: this.hp.reasoningEffort,
-        verbosity: this.hp.verbosity,
-      });
-      responseText = extractFinalAnswer(result.text);
-      llmInputTokens = result.usage.inputTokens;
-      llmOutputTokens = result.usage.outputTokens;
-
-      // Comparison verification
-      if (extra.isComparison && this.flags.enableComparisonVerification && this.dependencies.comparisonVerifier) {
-        const verifyResult = await this.dependencies.comparisonVerifier.verify(
-          responseText, result.text, expandedRequest.text, context.promptContext,
-          { reasoningEffort: this.hp.reasoningEffort, verbosity: this.hp.verbosity },
-        );
-        responseText = verifyResult.response;
-        comparisonVerified = verifyResult.verified;
-      }
-    } catch (error) {
-      if (!shouldUseTemplateFallback(error)) {
-        throw error;
-      }
-      responseText = this.responseGenerator.generate({
-        ...context,
-        entities: entities.map((entity) => entity.term),
-      });
-      templateFallbackTriggered = true;
-    }
-
-    const totalLatencyMs = Date.now() - startTime;
-
-    return {
-      response: responseText,
-      citations: toCitations(context),
-      entities,
-      metrics: {
-        dictionaryMatchCount: matches.length,
-        expandedTerms: [],
-        fallbackTriggered: templateFallbackTriggered,
-        pprIterations: ranking.iterations,
-        pprConverged: ranking.converged,
-        citedPassageCount: context.citedPassages.length,
-        llmInputTokens,
-        llmOutputTokens,
-        dictionaryHintCount: dictionaryHintCount > 0 ? dictionaryHintCount : undefined,
-        thesaurusExpandedTerms: expansion.expandedTerms.length > 0 ? expansion.expandedTerms : undefined,
-        comparisonVerified,
-        totalLatencyMs,
-        queryRewriteUsed: extra.queryRewriteUsed || undefined,
-        queryRewriteSubQueryCount: extra.queryRewriteSubQueryCount && extra.queryRewriteSubQueryCount > 0 ? extra.queryRewriteSubQueryCount : undefined,
-        queryRewriteFallback: extra.queryRewriteFallback,
-        queryRewriteFallbackReason: extra.queryRewriteFallbackReason,
       },
     };
   }
