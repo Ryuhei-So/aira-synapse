@@ -85,9 +85,22 @@ export const V03_ALL_ON_QUERY_FLAGS: Readonly<QueryFeatureFlags> = {
 };
 
 /**
- * Phase 2 promoted configuration — populated after ablation confirms improvement.
- * Initially all OFF; set based on Phase 1/2 benchmark results.
+ * Phase 2 promoted configuration — based on ablation testing results.
+ *
+ * Ablation summary (500q HotpotQA, v15 baseline = 90.0%):
+ * - enableComparisonReasoning: comparison +4% (94/100), but bridge -2.7% → net -1.4%
+ * - enableAnswerNormalization: -1.0% overall (bridge degradation)
+ * - Both combined: -1.0% overall
+ *
+ * Conclusion: LLM answer variance (GPT-5 non-determinism) causes more regression
+ * on bridge questions than the improvement on comparison. Phase 2a/2b features
+ * (query rewriting, passage reranking) remain experimental pending further tuning.
+ *
+ * All flags OFF for production safety. Enable selectively for experimentation.
  */
 export const PROMOTED_PHASE2_FLAGS: Partial<QueryFeatureFlags> = {
-  // Will be populated after ablation testing
+  enableComparisonReasoning: false,   // +4% comparison, but -2.7% bridge → net negative
+  enableAnswerNormalization: false,   // proven -1% regression
+  enableQueryRewriting: false,        // untested at scale (T-015 pending)
+  enablePassageReranking: false,      // untested at scale (T-018 pending)
 };
