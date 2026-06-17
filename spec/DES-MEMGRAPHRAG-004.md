@@ -3,13 +3,13 @@
 | フィールド | 値 |
 |-----------|---|
 | **ID** | DES-MEMGRAPHRAG-004 |
-| **バージョン** | 1.1 |
+| **バージョン** | 1.2 |
 | **ステータス** | Draft |
 | **作成日** | 2026-06-18 |
 | **更新日** | 2026-06-18 |
 | **対応要件** | REQ-MEMGRAPHRAG-004 v1.2 |
 | **パッケージ** | `@nahisaho/memgraphrag` |
-| **レビュー** | Rubber-duck review ×1 反映済み（v1.0 → v1.1） |
+| **レビュー** | Rubber-duck review ×2 反映済み（v1.0 → v1.1 → v1.2） |
 
 ## 1. 設計概要
 
@@ -386,7 +386,54 @@ interface QueryRewriterDependencies {
   readonly nodeInitializer: INodeInitializer;
   readonly ppr: IPPR;
   readonly projection: IGraphProjection;
+  readonly globalMemory: GlobalMemory;    // パッセージテキスト解決用
   readonly timeoutMs?: number;  // default: 5000
+}
+```
+
+**パッセージテキスト解決:**
+
+LLM にパッセージ内容を渡す必要がある箇所（中間回答抽出）では、`GlobalMemory.getPassage(nodeId)` で `Passage.text` を取得する。
+
+```typescript
+private async extractIntermediate(subQuery: string, ranking: PPRResult): Promise<string | null> {
+  // PPR top-5 パッセージのテキストを取得
+  const topNodes = ranking.rankedPassages.slice(0, 5);
+  const passages = await Promise.all(
+    topNodes.map(n => this.deps.globalMemory.getPassage(n.nodeId))
+  );
+  const context = passages
+    .filter((p): p is Passage => p !== null)
+    .map(p => p.text)
+    .join('\n\n');
+
+  if (!context) return null;
+
+  try {
+    const result = await this.deps.llm.generate({
+      prompt: buildIntermediateAnswerPrompt(subQuery, context),
+      reasoningEffort: 'low',
+      verbosity: 'low',
+    });
+    const answer = result.text.trim();
+    return answer.length > 0 ? answer : null;
+  } catch {
+    return null;  // LLM エラー → フォールバック
+  }
+}
+```
+
+```typescript
+// application/query/prompts/intermediateAnswerPrompt.ts (新規)
+
+export function buildIntermediateAnswerPrompt(subQuery: string, context: string): string {
+  return `Answer this question using ONLY the context below.
+Give a short factual answer (1-5 words). No explanation.
+
+Question: ${subQuery}
+Context: ${context}
+
+Answer:`;
 }
 
 class LLMQueryRewriter implements IQueryRewriter {
@@ -462,37 +509,84 @@ class LLMQueryRewriter implements IQueryRewriter {
     return { decomposed: false, subQueries: [], intermediateAnswers: [], mergedRanking: ranking, fallback: true, fallbackReason: reason };
   }
 
-  private mergeRankings(r1: PPRResult, r2: PPRResult): PPRResult {
-    // rankedPassages: r2 を優先しつつ、r1 のユニークなものを追加
-    const seen = new Set(r2.rankedPassages.map(n => n.nodeId));
-    const merged = [...r2.rankedPassages];
-    for (const node of r1.rankedPassages) {
-      if (!seen.has(node.nodeId)) {
-        merged.push(node);
-        seen.add(node.nodeId);
+  private mergeRankings(r1: PPRResult, r2: PPRResult, topK: number): PPRResult {
+    // スコア正規化: 各ランキングのスコアを [0,1] に正規化
+    const normalize = (nodes: readonly RankedNode[]): Map<string, number> => {
+      const maxScore = nodes.length > 0 ? nodes[0].score : 1;
+      const map = new Map<string, number>();
+      for (const n of nodes) {
+        map.set(n.nodeId, maxScore > 0 ? n.score / maxScore : 0);
+      }
+      return map;
+    };
+
+    const scores1 = normalize(r1.rankedPassages);
+    const scores2 = normalize(r2.rankedPassages);
+
+    // 全ノードIDを収集し、結合スコアを計算
+    // hop1 (step1) の証拠を保持するため、両方のスコアを加重結合
+    // step2 を優先（0.6）しつつ step1 も保持（0.4）
+    const allIds = new Set([...scores1.keys(), ...scores2.keys()]);
+    const combined: { nodeId: string; score: number; layer: MemoryLayer }[] = [];
+    for (const id of allIds) {
+      const s1 = scores1.get(id) ?? 0;
+      const s2 = scores2.get(id) ?? 0;
+      // 両方に出現 → ブースト（1.2x）
+      const boost = (s1 > 0 && s2 > 0) ? 1.2 : 1.0;
+      const combinedScore = (s1 * 0.4 + s2 * 0.6) * boost;
+      const node = [...r2.rankedPassages, ...r1.rankedPassages].find(n => n.nodeId === id);
+      if (node) {
+        combined.push({ nodeId: id, score: combinedScore, layer: node.layer });
       }
     }
+
+    // スコア降順ソート、topK でキャップ
+    combined.sort((a, b) => b.score - a.score);
+    const capped = combined.slice(0, topK);
+
     return {
-      rankedPassages: merged,
-      rankedEntities: [...r2.rankedEntities],  // step2 のエンティティを採用
+      rankedPassages: capped,
+      rankedEntities: r2.rankedEntities,  // step2 のエンティティを採用
       iterations: r1.iterations + r2.iterations,
       converged: r1.converged && r2.converged,
       l1Delta: Math.max(r1.l1Delta, r2.l1Delta),
     };
   }
-}
+```
+
+**mergeRankings 呼び出し（topK を渡す）:**
+
+```typescript
+const mergedRanking = this.mergeRankings(
+  step1Ranking,
+  step2Ranking,
+  request.query.topK ?? 10
+);
+```
 ```
 
 **DefaultQueryService との統合（明確な分岐）:**
 
 ```typescript
-// QueryService.ts の query() メソッド — 既存パイプラインとの明確な分岐
+// QueryService.ts の query() メソッド — 実行順序を明確化
 
+// Step 1: 正規化・展開（既存、変更なし）
+const normalizedText = normalizeQueryText(request.text);
+const expansion = this.flags.enableThesaurusExpansion ? ... : { ... };
+const expandedRequest = { ...request, text: expansion.rewrittenQuery };
+
+// Step 2: 比較クエリ分析（Phase 2 対応で早期実行に移動）
+const compAnalysis = this.flags.enableComparisonReasoning
+  ? analyzeComparisonQuery(normalizedText)
+  : { type: 'none' as const, entities: [], confidence: 0 };
+const isComparison = compAnalysis.type !== 'none' || isComparisonQuery(normalizedText);
+
+// Step 3: 検索パイプライン（排他分岐）
 let ranking: PPRResult;
 let queryRewriteMetrics = { decomposed: false, fallback: false, fallbackReason: undefined };
 
-// Phase 2a: クエリリライト（既存パイプラインを完全に置き換え）
 if (this.flags.enableQueryRewriting && this.dependencies.queryRewriter && !isComparison) {
+  // Phase 2a: クエリリライト（既存パイプラインを完全に置き換え）
   const rewriteResult = await this.dependencies.queryRewriter.rewrite({ query: expandedRequest });
   ranking = rewriteResult.mergedRanking;
   queryRewriteMetrics = {
@@ -502,20 +596,31 @@ if (this.flags.enableQueryRewriting && this.dependencies.queryRewriter && !isCom
   };
 } else {
   // 既存パイプライン（変更なし）
+  const candidates = await this.dependencies.memoryFilter.filter(expandedRequest);
   const initRequest = { query: expandedRequest, candidates };
   let initialVector = await this.dependencies.nodeInitializer.initialize(initRequest);
-  // ... existing SubQueryDecomposer logic (deprecated) ...
+  // ... existing SubQueryDecomposer logic (deprecated, mutually exclusive) ...
   ranking = await this.dependencies.ppr.run({ ... }, this.dependencies.projection);
 }
 
-// ここから先は共通パス: reranking → contextBuilder → LLM
+// Step 4: 再ランキング（オプション、Phase 2b）
+let finalRanking = ranking;
+if (this.flags.enablePassageReranking && this.dependencies.passageReranker) {
+  const rerankResult = await this.dependencies.passageReranker.rerank({
+    query: normalizedText, ranking, topN: 20, selectN: 10,
+  });
+  finalRanking = rerankResult.rerankedPPRResult;
+}
+
+// Step 5: コンテキスト構築 → LLM 回答生成（共通パス）
+const context = await this.dependencies.contextBuilder.build(expandedRequest, finalRanking);
+// ... prompt selection (yesno/comparison/bridge) → LLM generate ...
 ```
 
-**排他制御（blocking issue #4 対応）:**
+**排他制御（v0.3.0 SubQueryDecomposer との共存防止）:**
 
 ```typescript
 // DefaultQueryService constructor
-
 if (this.flags.enableQueryRewriting && this.flags.enableSubQueryDecomposition) {
   console.warn('[QueryService] enableQueryRewriting and enableSubQueryDecomposition are mutually exclusive. Disabling old SubQueryDecomposition.');
   this.flags = { ...this.flags, enableSubQueryDecomposition: false };
@@ -566,19 +671,48 @@ private async safeDecompose(query: string): Promise<SubQuery[] | null> {
     const parsed = JSON.parse(result.text);
     const subQueries = parsed.sub_queries;
 
-    // バリデーション
-    if (!Array.isArray(subQueries) || subQueries.length === 0 || subQueries.length > 3) {
+    // バリデーション: exactly 2 subqueries required
+    if (!Array.isArray(subQueries) || subQueries.length !== 2) {
       return null;
     }
-    for (const sq of subQueries) {
-      if (!sq.step || !sq.query || typeof sq.query !== 'string' || sq.query.trim() === '') {
-        return null;
-      }
+    // Step 1 validation
+    if (subQueries[0].step !== 1 || !subQueries[0].query?.trim()) {
+      return null;
+    }
+    // Step 2 validation: must depend on step 1, must contain {step1} placeholder
+    if (subQueries[1].step !== 2 || subQueries[1].dependsOn !== 1 || !subQueries[1].query?.trim()) {
+      return null;
+    }
+    if (!subQueries[1].query.includes('{step1}')) {
+      return null;  // placeholder 必須
     }
     return subQueries;
   } catch {
     return null;  // JSON パースエラー、タイムアウト、LLM エラー等 → 全てフォールバック
   }
+}
+```
+
+**rewrite() 全段フォールバック:**
+
+`rewrite()` メソッド全体を try/catch で囲み、`extractIntermediate` の失敗、step 2 PPR の失敗等、全ての下流エラーでフォールバックを返す:
+
+```typescript
+async rewrite(request: RewriteRequest): Promise<RewriteResult> {
+  try {
+    return await this._rewriteInternal(request);
+  } catch {
+    // 全段フォールバック: 通常の1回PPRを実行して返す
+    return this.fallbackResult(request, 'unexpected_error');
+  }
+}
+
+private async _rewriteInternal(request: RewriteRequest): Promise<RewriteResult> {
+  // 1. safeDecompose (returns null on failure)
+  // 2. step 1 PPR + extractIntermediate (returns null on failure)
+  // 3. step 2 PPR + merge
+  // Each null return triggers fallbackResult()
+  ...
 }
 ```
 
@@ -624,30 +758,43 @@ interface IPassageReranker {
 // application/query/LLMPassageReranker.ts (新規)
 
 class LLMPassageReranker implements IPassageReranker {
-  constructor(private readonly llm: ILLMProvider) {}
+  constructor(
+    private readonly llm: ILLMProvider,
+    private readonly globalMemory: GlobalMemory,  // パッセージテキスト解決用
+  ) {}
 
   async rerank(request: RerankRequest): Promise<RerankResult> {
     const startTime = Date.now();
     const topPassages = request.ranking.rankedPassages.slice(0, request.topN);
     
+    // パッセージテキストを取得（GlobalMemory 経由）
+    const passageTexts = await Promise.all(
+      topPassages.map(async (node) => {
+        const passage = await this.globalMemory.getPassage(node.nodeId);
+        return passage?.text?.slice(0, 200) ?? `[passage ${node.nodeId}]`;
+      })
+    );
+
     // 1バッチ呼び出しで全パッセージをスコアリング
-    // (パッセージテキストは別途取得が必要 — contextBuilder 内部で解決済みの ID を使用)
-    const prompt = this.buildRerankPrompt(request.query, topPassages);
-    const response = await this.llm.generate({
-      prompt,
-      responseFormat: 'json',
-      reasoningEffort: 'low',
-      verbosity: 'low',
-    });
+    const prompt = this.buildRerankPrompt(request.query, passageTexts);
+    let response;
+    try {
+      response = await this.llm.generate({
+        prompt,
+        responseFormat: 'json',
+        reasoningEffort: 'low',
+        verbosity: 'low',
+      });
+    } catch {
+      // LLM エラー時はフォールバック
+      return this.fallbackResult(request, startTime);
+    }
     
     const scores = this.parseScores(response.text, topPassages.length);
     
-    // スコアエラー時はフォールバック（元の PPRResult をそのまま返す）
+    // スコアパースエラー・長さ不一致時はフォールバック（元の PPRResult をそのまま返す）
     if (!scores) {
-      return {
-        rerankedPPRResult: request.ranking,
-        metrics: { positionChanges: 0, scoreRange: { min: 0, max: 0, median: 0 }, latencyMs: Date.now() - startTime, tokensUsed: 0 },
-      };
+      return this.fallbackResult(request, startTime);
     }
 
     // スコア順にソート、上位 selectN + 残りの元順序を維持
@@ -655,23 +802,58 @@ class LLMPassageReranker implements IPassageReranker {
     scored.sort((a, b) => b.score - a.score);
     const reranked = scored.slice(0, request.selectN).map(s => s.node);
     const remaining = request.ranking.rankedPassages.slice(request.topN);
+    const positionChanges = scored.filter((s, i) => s.node.nodeId !== topPassages[i].nodeId).length;
 
     return {
       rerankedPPRResult: {
         ...request.ranking,
         rankedPassages: [...reranked, ...remaining],
       },
-      metrics: { ... },
+      metrics: {
+        positionChanges,
+        scoreRange: this.computeScoreRange(scores),
+        latencyMs: Date.now() - startTime,
+        tokensUsed: response.usage.inputTokens + response.usage.outputTokens,
+      },
     };
   }
 
-  private buildRerankPrompt(query: string, passages: readonly RankedNode[]): string {
-    // Note: passage text resolution is handled by looking up node IDs
-    // This uses a passage-text resolver injected at construction time
-    return `Rate the relevance of each passage to the query (0-10).
+  private fallbackResult(request: RerankRequest, startTime: number): RerankResult {
+    return {
+      rerankedPPRResult: request.ranking,
+      metrics: { positionChanges: 0, scoreRange: { min: 0, max: 0, median: 0 }, latencyMs: Date.now() - startTime, tokensUsed: 0 },
+    };
+  }
+
+  private buildRerankPrompt(query: string, passageTexts: readonly string[]): string {
+    const passageList = passageTexts.map((text, i) => `[${i}] ${text}`).join('\n');
+    return `Rate the relevance of each passage to the query on a scale of 0-10.
+
 Query: ${query}
-Passages: [indexed by nodeId]
-Output: {"scores": [score_0, score_1, ...]}`;
+
+Passages:
+${passageList}
+
+Output JSON only: {"scores": [score_for_0, score_for_1, ...]}`;
+  }
+
+  private parseScores(text: string, expectedLength: number): number[] | null {
+    try {
+      const parsed = JSON.parse(text);
+      if (!Array.isArray(parsed.scores) || parsed.scores.length !== expectedLength) return null;
+      return parsed.scores.map((s: unknown) => typeof s === 'number' ? s : 0);
+    } catch {
+      return null;
+    }
+  }
+
+  private computeScoreRange(scores: number[]): { min: number; max: number; median: number } {
+    const sorted = [...scores].sort((a, b) => a - b);
+    return {
+      min: sorted[0] ?? 0,
+      max: sorted[sorted.length - 1] ?? 0,
+      median: sorted[Math.floor(sorted.length / 2)] ?? 0,
+    };
   }
 }
 ```
@@ -832,6 +1014,7 @@ export interface QueryServiceDependencies {
   // --- Phase 2 additions ---
   readonly queryRewriter?: IQueryRewriter;               // Phase 2a
   readonly passageReranker?: IPassageReranker;           // Phase 2b
+  readonly globalMemory?: GlobalMemory;                  // パッセージテキスト解決（Phase 2a/2b で必要）
 }
 ```
 
@@ -948,7 +1131,20 @@ SubQueryDecomposer を deprecated とし、新規の IQueryRewriter（段階実�
 - 新旧のフラグが共存するが、排他制御で同時有効を防止
 - 将来的にはリファクタリングで旧コードを削除
 
-## 13. v1.0 → v1.1 変更点（Rubber-duck review #1 反映）
+## 13. 変更履歴
+
+### v1.1 → v1.2 変更点（Rubber-duck review #2 反映）
+
+| 指摘 | 対応 |
+|------|------|
+| LLM にパッセージテキストを渡す手段がない | GlobalMemory.getPassage() を QueryRewriter/Reranker に注入。extractIntermediate() と buildRerankPrompt() でテキスト取得 |
+| safeDecompose が 1-3 件許可だが rewrite が subQueries[1] 前提 | exactly 2 必須、step=1/2, dependsOn=1, {step1} プレースホルダー必須のバリデーション |
+| mergeRankings が不完全（hop1 埋没、topK 未キャップ） | スコア正規化 + 加重結合(0.4/0.6) + 重複ブースト(1.2x) + topK キャップ |
+| isComparison の計算順序が不明確 | Step 1-5 の実行順序を明示。comparison 分析を Step 2 に配置 |
+| Reranker の LLM/JSON エラー処理 | fallbackResult() で全エラーケースを処理、parseScores() で長さ不一致チェック |
+| rewrite() 全段フォールバック不足 | try/catch で _rewriteInternal() 全体を囲み、unexpected_error でもフォールバック |
+
+### v1.0 → v1.1 変更点（Rubber-duck review #1 反映）
 
 | 指摘 | 対応 |
 |------|------|
