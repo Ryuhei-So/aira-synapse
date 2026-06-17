@@ -14,6 +14,7 @@ import type {
 } from '../../domain/retrieval/ppr.js';
 import type { Fact } from '../../domain/memory/fact.js';
 import type { Passage } from '../../domain/memory/passage.js';
+import type { GlobalMemory } from '../../domain/memory/globalMemory.js';
 import type { QueryFeatureFlags } from '../../domain/config/featureFlags.js';
 import { DEFAULT_QUERY_FLAGS } from '../../domain/config/featureFlags.js';
 import { ThesaurusExpansionPolicy } from './ThesaurusExpansionPolicy.js';
@@ -112,6 +113,7 @@ export interface QueryServiceDependencies {
   readonly subQueryDecomposer?: SubQueryDecomposer;
   readonly comparisonVerifier?: ComparisonVerifier;
   readonly queryRewriter?: IQueryRewriter;
+  readonly globalMemory?: GlobalMemory;
 }
 
 function normalizeQueryText(text: string): string {
