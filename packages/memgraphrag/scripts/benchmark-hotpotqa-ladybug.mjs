@@ -16,7 +16,7 @@
  *   CONCURRENCY — query concurrency (default: 5)
  */
 import { resolve } from 'node:path';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { loadMemGraphRagConfig, resolveConfigFromEnv, resolveApiKey } from '../dist/infrastructure/config/index.js';
 import {
   SQLiteGraphStore, SQLiteMemoryStore, SQLiteLexiconStore,
@@ -38,6 +38,7 @@ import { SubQueryDecomposer } from '../dist/application/query/SubQueryDecomposer
 import { ComparisonVerifier } from '../dist/application/query/ComparisonVerifier.js';
 import { ThesaurusExpansionPolicy } from '../dist/application/index.js';
 import { DEFAULT_QUERY_FLAGS, V15_BASELINE_QUERY_FLAGS } from '../dist/domain/config/featureFlags.js';
+import { computeBenchmarkDelta, formatDeltaReport } from '../dist/domain/benchmark/KnownErrorTracker.js';
 
 // ─── Paths ───
 // Benchmark data lives at repo root, not package root
@@ -57,6 +58,7 @@ const QUESTIONS_FILE = process.env.QUESTIONS_FILE
 const RESULTS_FILE = process.env.RESULTS_FILE
   ? resolve(process.cwd(), process.env.RESULTS_FILE)
   : resolve(BENCHMARK_DIR, `results_ladybug_${BENCH_SIZE}.json`);
+const KNOWN_ERRORS_FILE = resolve(BENCHMARK_DIR, 'known_errors_v15.json');
 const PHASE = process.argv[2] || 'all';
 const CORPUS_ID = readFileSync(resolve(BENCHMARK_DIR, 'corpus_id.txt'), 'utf-8').trim();
 
@@ -627,7 +629,29 @@ async function evaluateQueries() {
     timestamp: new Date().toISOString(),
   };
 
-  writeFileSync(RESULTS_FILE, JSON.stringify({ summary, results }, null, 2));
+  // --- Known Error Delta (T-004) ---
+  let knownErrorDelta = null;
+  if (existsSync(KNOWN_ERRORS_FILE)) {
+    try {
+      const errorSet = JSON.parse(readFileSync(KNOWN_ERRORS_FILE, 'utf-8'));
+      const resultsMap = new Map();
+      for (const r of results) {
+        if (r && r.id) {
+          resultsMap.set(r.id, {
+            questionId: r.id,
+            correct: r.correct,
+            response: r.response || '',
+          });
+        }
+      }
+      knownErrorDelta = computeBenchmarkDelta(errorSet, resultsMap);
+      console.log(`\n${formatDeltaReport(knownErrorDelta)}`);
+    } catch (err) {
+      console.warn(`[WARN] Known error tracking failed: ${err.message}`);
+    }
+  }
+
+  writeFileSync(RESULTS_FILE, JSON.stringify({ summary, knownErrorDelta, results }, null, 2));
   console.log(`\nResults saved to: ${RESULTS_FILE}`);
 
   await pool.close();
