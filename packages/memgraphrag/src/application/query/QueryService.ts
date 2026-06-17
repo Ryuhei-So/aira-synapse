@@ -25,6 +25,7 @@ import { extractFinalAnswer } from './query-utils.js';
 import type { SubQueryDecomposer } from './SubQueryDecomposer.js';
 import type { ComparisonVerifier } from './ComparisonVerifier.js';
 import type { IQueryRewriter } from '../../domain/retrieval/queryRewriter.js';
+import type { IPassageReranker } from '../../domain/retrieval/passageReranker.js';
 import { DictionaryContextEnricher } from './DictionaryContextEnricher.js';
 import { NORMALIZATION_INSTRUCTIONS } from './prompts/normalizationInstructions.js';
 import { buildYesNoComparisonPrompt } from './prompts/comparisonYesNoPrompt.js';
@@ -66,6 +67,10 @@ export interface QueryMetrics {
   readonly queryRewriteSubQueryCount?: number;
   readonly queryRewriteFallback?: boolean;
   readonly queryRewriteFallbackReason?: string;
+  // Phase 2b: passage reranking metrics
+  readonly rerankUsed?: boolean;
+  readonly rerankPositionChanges?: number;
+  readonly rerankScoreRange?: { min: number; max: number; median: number };
 }
 
 export interface QueryResponse {
@@ -113,6 +118,7 @@ export interface QueryServiceDependencies {
   readonly subQueryDecomposer?: SubQueryDecomposer;
   readonly comparisonVerifier?: ComparisonVerifier;
   readonly queryRewriter?: IQueryRewriter;
+  readonly passageReranker?: IPassageReranker;
   readonly globalMemory?: GlobalMemory;
 }
 
@@ -245,7 +251,26 @@ export class DefaultQueryService implements QueryService {
       topM: request.topM,
     }, this.dependencies.projection);
 
-    const context = await this.dependencies.contextBuilder.build(expandedRequest, ranking);
+    // Phase 2b: Passage reranking (DES-MG4-006)
+    let finalRanking = ranking;
+    let rerankUsed = false;
+    let rerankPositionChanges: number | undefined;
+    let rerankScoreRange: { min: number; max: number; median: number } | undefined;
+
+    if (this.flags.enablePassageReranking && this.dependencies.passageReranker) {
+      const rerankResult = await this.dependencies.passageReranker.rerank({
+        query: normalizedText,
+        ranking,
+        topN: 20,
+        selectN: request.topK ?? 10,
+      });
+      finalRanking = rerankResult.rerankedPPRResult;
+      rerankUsed = true;
+      rerankPositionChanges = rerankResult.metrics.positionChanges;
+      rerankScoreRange = rerankResult.metrics.scoreRange;
+    }
+
+    const context = await this.dependencies.contextBuilder.build(expandedRequest, finalRanking);
 
     // Dictionary context enrichment (v0.3.0 revised: enrich context, not teleport vector)
     let dictionaryHints = '';
@@ -407,6 +432,9 @@ Reasoning and answer:`;
         queryRewriteSubQueryCount: queryRewriteSubQueryCount > 0 ? queryRewriteSubQueryCount : undefined,
         queryRewriteFallback,
         queryRewriteFallbackReason,
+        rerankUsed: rerankUsed || undefined,
+        rerankPositionChanges,
+        rerankScoreRange,
       },
     };
   }
