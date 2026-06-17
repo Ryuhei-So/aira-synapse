@@ -35,9 +35,44 @@ updated_at: '2026-06-17'
 
 GraphRAG はナレッジグラフを導入することでマルチホップ推論を可能にするが、既存の実装（MS-GraphRAG, LazyGraphRAG 等）には **グラフ品質の問題** が残る。
 
-### 1.2 MemGraphRAG：メモリベースのアプローチ
+### 1.2 既存 GraphRAG の課題 — Microsoft GraphRAG を例に
 
-KDD 2026 論文 MemGraphRAG（Xiang et al.）は、**三層グローバルメモリ** と **マルチエージェント協調** で GraphRAG のグラフ品質問題を解決する：
+GraphRAG の先駆者である **Microsoft GraphRAG**（Edge et al., 2024, "From Local to Global: A Graph RAG Approach to Query-Focused Summarization"）は、テキストからエンティティと関係を抽出し、**Leiden アルゴリズムによるコミュニティ検出** で階層的な要約を生成する。
+
+```
+Microsoft GraphRAG のパイプライン:
+
+  文書群
+    ↓ Chunking
+  テキストチャンク
+    ↓ LLM によるエンティティ・関係抽出
+  エンティティ-関係グラフ
+    ↓ Leiden コミュニティ検出（階層的クラスタリング）
+  コミュニティ階層（Level 0, 1, 2, ...）
+    ↓ 各コミュニティの LLM 要約を事前計算
+  コミュニティ要約群
+    ↓ クエリ時: Map-Reduce で要約を統合
+  回答
+```
+
+**グローバルクエリ**（「このコーパスの主要テーマは？」）に対しては、コミュニティ要約を横断的に Map-Reduce することで包括的な回答を生成できる。しかし、**科学論文の Factoid QA** には 3 つの根本的な課題がある：
+
+| 課題 | 詳細 | 影響 |
+|------|------|------|
+| **インデックスコストが高い** | 全チャンクの LLM 要約 + 全コミュニティの LLM 要約を事前計算。100 文書で数時間 | コーパス拡大が困難 |
+| **ローカルクエリに弱い** | Map-Reduce は要約レベルの回答を生成。個別エンティティの正確な回答には不向き | HotpotQA Str-Acc **51.6%** |
+| **グラフ品質管理がない** | スキーマ安定化なし、矛盾検出なし。低品質トリプルが伝播 | 精度の天井が低い |
+
+MemGraphRAG 論文（Xiang et al., 2026）はこの問題を明確に指摘している：
+
+> *"Methods typically employ community detection algorithms, such as Louvain or Leiden, to recursively aggregate entities into clusters. Despite its utility in summarizing high-level themes, this unsupervised approach faces limitations regarding precision, as inaccuracies in low-level entity relationships can propagate upward."*
+> （コミュニティ検出ベースの手法は、高次テーマの要約には有用だが、低レベルのエンティティ関係の不正確さが上位に伝播するという精度面での限界がある）
+
+つまり、**コミュニティベースの要約は、下層のエンティティ関係が正確でなければ上層の要約も不正確になる** という構造的な弱点を持つ。これが HotpotQA で 51.6% という低スコアの原因である。
+
+### 1.3 MemGraphRAG：メモリベースのアプローチ
+
+KDD 2026 論文 MemGraphRAG（Xiang et al.）は、Microsoft GraphRAG のコミュニティ検出ベースではなく、**三層グローバルメモリ** と **マルチエージェント協調** で GraphRAG のグラフ品質問題を解決する：
 
 ```
 論文 PDF
