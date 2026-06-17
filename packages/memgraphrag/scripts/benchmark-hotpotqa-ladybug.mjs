@@ -103,15 +103,83 @@ function normalizeAnswer(s) {
   return s.toLowerCase().replace(/\b(a|an|the)\b/g, ' ').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
 }
 function simpleStem(word) {
-  return word.replace(/ies$/, 'y').replace(/ves$/, 'f').replace(/(s|ed|ing|ly)$/, '').replace(/ied$/, 'y');
+  return word
+    .replace(/ies$/, 'y')
+    .replace(/ves$/, 'f')
+    .replace(/(ance|ence|ment|tion|sion)s?$/, '')
+    .replace(/(er|or|ist|ism)s?$/, '')
+    .replace(/(s|ed|ing|ly)$/, '')
+    .replace(/ied$/, 'y');
 }
 function normalizeWithNumbers(s) {
   let norm = normalizeAnswer(s);
+  // Handle compound forms first: "twenty-eight" / "twenty eight"
+  const compoundRe = /\b(twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)\s*(one|two|three|four|five|six|seven|eight|nine)\b/g;
+  norm = norm.replace(compoundRe, (_, tens, ones) => {
+    const TENS = {'twenty':'20','thirty':'30','forty':'40','fifty':'50','sixty':'60','seventy':'70','eighty':'80','ninety':'90'};
+    const ONES = {'one':'1','two':'2','three':'3','four':'4','five':'5','six':'6','seven':'7','eight':'8','nine':'9'};
+    return String(Number(TENS[tens]) + Number(ONES[ones]));
+  });
+  // Then replace remaining single number words
   for (const [word, digit] of Object.entries(NUMBER_WORDS)) {
     norm = norm.replace(new RegExp('\\b' + word + '\\b', 'g'), digit);
   }
-  norm = norm.replace(/(\d+)\s+(\d+)/g, (_, tens, ones) => String(Number(tens) + Number(ones)));
   return norm;
+}
+
+/** Check if initials match full name: "j. cole" vs "jermaine lamarr cole" */
+function initialsMatch(shorter, longer) {
+  const shortTokens = shorter.replace(/[^a-z0-9 ]/g, '').split(/\s+/).filter(t => t.length > 0);
+  const longTokens = longer.replace(/[^a-z0-9 ]/g, '').split(/\s+/).filter(t => t.length > 0);
+  if (shortTokens.length < 2 || longTokens.length < 2) return false;
+  // Last token must match
+  const shortLast = shortTokens[shortTokens.length - 1];
+  const longLast = longTokens[longTokens.length - 1];
+  if (shortLast !== longLast) return false;
+  // Check initials for preceding tokens
+  const shortPrefixes = shortTokens.slice(0, -1);
+  const longPrefixes = longTokens.slice(0, -1);
+  if (shortPrefixes.length > longPrefixes.length) return false;
+  for (let i = 0; i < shortPrefixes.length; i++) {
+    const sp = shortPrefixes[i];
+    // sp could be an initial (1 char) or abbreviation
+    if (sp.length <= 2) {
+      if (!longPrefixes[i]?.startsWith(sp[0])) return false;
+    } else {
+      if (longPrefixes[i] !== sp && !longPrefixes[i]?.startsWith(sp)) return false;
+    }
+  }
+  return true;
+}
+
+/** Check abbreviation: "hc" vs "hockey club" */
+function abbreviationMatch(shorter, longer) {
+  const shortNorm = shorter.replace(/[^a-z0-9 ]/g, '').trim();
+  const longNorm = longer.replace(/[^a-z0-9 ]/g, '').trim();
+  const longTokens = longNorm.split(/\s+/);
+  // Check if shorter is an acronym of longer
+  const acronym = longTokens.map(t => t[0]).join('');
+  if (shortNorm.replace(/\s+/g, '') === acronym) return true;
+  // Check if one side has an acronym prefix: "hc davos" vs "hockey club davos"
+  const shortTokens = shortNorm.split(/\s+/);
+  if (shortTokens.length >= 2 && longTokens.length >= shortTokens.length) {
+    const suffix = shortTokens.slice(-1)[0];
+    const longSuffix = longTokens.slice(-1)[0];
+    if (suffix === longSuffix) {
+      const prefix = shortTokens.slice(0, -1).join('');
+      const longPrefixAcronym = longTokens.slice(0, -1).map(t => t[0]).join('');
+      if (prefix === longPrefixAcronym) return true;
+    }
+  }
+  return false;
+}
+
+/** Pure numeric comparison after stripping units */
+function numericMatch(resp, gold) {
+  const respNum = resp.replace(/[^0-9]/g, '');
+  const goldNum = gold.replace(/[^0-9]/g, '');
+  if (respNum && goldNum && respNum === goldNum && respNum.length >= 1) return true;
+  return false;
 }
 function normalizedContains(response, goldAnswer) {
   if (!response || !goldAnswer) return false;
@@ -174,6 +242,19 @@ function normalizedContains(response, goldAnswer) {
       const nicknamePrefix = nicknameExpanded ? nicknameExpanded.substring(0, 3) : null;
       if (goldWords2.some(w => w.startsWith(respFirstPrefix) || (nicknamePrefix && w.startsWith(nicknamePrefix)))) return true;
     }
+  }
+  // Initials matching: "j. cole" vs "jermaine lamarr cole", "a.p. møller" vs "arnold peter møller"
+  if (initialsMatch(normResp, normGold) || initialsMatch(normGold, normResp)) return true;
+  // Abbreviation matching: "hc davos" vs "hockey club davos"
+  if (abbreviationMatch(normResp, normGold) || abbreviationMatch(normGold, normResp)) return true;
+  // Pure numeric match after stripping units: "twenty-eight seasons" vs "28"
+  if (numericMatch(numResp, numGold)) return true;
+  // Stemmed token overlap for short gold answers (1-2 words)
+  if (goldTokens.length >= 1 && goldTokens.length <= 2) {
+    const stemGoldShort = goldTokens.map(simpleStem);
+    const stemRespSet = new Set(normResp.split(' ').map(simpleStem));
+    const stemMatch = stemGoldShort.filter(t => stemRespSet.has(t)).length;
+    if (stemMatch === goldTokens.length) return true;
   }
   return false;
 }
