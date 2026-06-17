@@ -22,6 +22,7 @@ import { isComparisonQuery } from './comparisonDetector.js';
 import { extractFinalAnswer } from './query-utils.js';
 import type { SubQueryDecomposer } from './SubQueryDecomposer.js';
 import type { ComparisonVerifier } from './ComparisonVerifier.js';
+import { DictionaryContextEnricher } from './DictionaryContextEnricher.js';
 
 export interface CitationDto {
   readonly passageId: string;
@@ -47,7 +48,7 @@ export interface QueryMetrics {
   readonly llmOutputTokens: number;
   readonly scVotes?: readonly string[];
   // v0.3.0 additions
-  readonly injectedFactCount?: number;
+  readonly dictionaryHintCount?: number;
   readonly aliasHintCount?: number;
   readonly thesaurusExpandedTerms?: readonly string[];
   readonly subQueryDecomposed?: boolean;
@@ -191,6 +192,18 @@ export class DefaultQueryService implements QueryService {
     const context = await this.dependencies.contextBuilder.build(expandedRequest, ranking);
     const entities = toEntityHits(matches);
 
+    // Dictionary context enrichment (v0.3.0 revised: enrich context, not teleport vector)
+    let dictionaryHints = '';
+    let dictionaryHintCount = 0;
+    if (this.flags.enableDictionaryInjection) {
+      const enricher = new DictionaryContextEnricher(this.dependencies.dictionary);
+      const hints = await enricher.getHints(normalizedText);
+      dictionaryHints = enricher.formatHints(hints);
+      dictionaryHintCount = hints.length;
+    }
+
+    const enrichedContext = dictionaryHints + context.promptContext;
+
     let responseText: string;
     let llmInputTokens = 0;
     let llmOutputTokens = 0;
@@ -219,7 +232,7 @@ Rules:
 Question: ${expandedRequest.text}
 
 Context:
-${context.promptContext}
+${enrichedContext}
 
 Reasoning and answer:`
         : `You are answering a multi-hop question that requires connecting information across multiple passages.
@@ -242,7 +255,7 @@ Rules:
 Question: ${expandedRequest.text}
 
 Context:
-${context.promptContext}
+${enrichedContext}
 
 Reasoning and answer:`;
 
@@ -317,7 +330,7 @@ Reasoning and answer:`;
         llmInputTokens,
         llmOutputTokens,
         scVotes,
-        injectedFactCount: initialVector.injectedCount,
+        dictionaryHintCount: dictionaryHintCount > 0 ? dictionaryHintCount : undefined,
         aliasHintCount: context.metadata?.aliasHintCount,
         thesaurusExpandedTerms: expansion.expandedTerms.length > 0 ? expansion.expandedTerms : undefined,
         subQueryDecomposed: subQueryDecomposed || undefined,

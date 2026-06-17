@@ -16,13 +16,13 @@ import type { IMemoryStore } from '../../domain/storage/index.js';
 import type { LanguageCode } from '../../domain/memory/types.js';
 
 /** Max dictionary-injected facts per matched entity */
-const MAX_PER_ENTITY = 10;
+const MAX_PER_ENTITY = parseInt(process.env.DICT_MAX_PER_ENTITY || '3');
 /** Max total dictionary-injected facts across all entities */
-const MAX_TOTAL = 30;
+const MAX_TOTAL = parseInt(process.env.DICT_MAX_TOTAL || '10');
 /** Score multiplier for dictionary-injected facts (fraction of maxBaseScore) */
-const INJECTION_SCORE_RATIO = 0.3;
+const INJECTION_SCORE_RATIO = parseFloat(process.env.DICT_SCORE_RATIO || '0.1');
 /** Minimum confidence threshold for dictionary entries */
-const MIN_CONFIDENCE = 0.5;
+const MIN_CONFIDENCE = parseFloat(process.env.DICT_MIN_CONFIDENCE || '0.7');
 
 export class DictionaryAwareNodeInitializer implements INodeInitializer {
   constructor(

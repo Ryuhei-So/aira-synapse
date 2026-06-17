@@ -21,13 +21,19 @@ export interface IndexingFeatureFlags {
   readonly enableDictionaryIndexing: boolean;
 }
 
+/**
+ * Default query flags — v15 baseline (all v0.3.0 features OFF).
+ * Ablation testing showed v0.3.0 features cause regression:
+ *   v15 baseline: 88.4% vs v0.3.0 all-on: 85.0% (-3.4%)
+ * Features are preserved for future tuning but disabled by default.
+ */
 export const DEFAULT_QUERY_FLAGS: Readonly<QueryFeatureFlags> = {
-  enableDictionaryInjection: true,
-  enableThesaurusExpansion: true,
+  enableDictionaryInjection: false,
+  enableThesaurusExpansion: false,
   enableHypernymExpansion: false,
-  enableAliasHints: true,
-  enableSubQueryDecomposition: true,
-  enableComparisonVerification: true,
+  enableAliasHints: false,
+  enableSubQueryDecomposition: false,
+  enableComparisonVerification: false,
 };
 
 export const DEFAULT_EVAL_FLAGS: Readonly<EvalFeatureFlags> = {
@@ -46,4 +52,14 @@ export const V15_BASELINE_QUERY_FLAGS: Readonly<QueryFeatureFlags> = {
   enableAliasHints: false,
   enableSubQueryDecomposition: false,
   enableComparisonVerification: false,
+};
+
+/** All v0.3.0 query flags enabled — for ablation and future tuning. */
+export const V03_ALL_ON_QUERY_FLAGS: Readonly<QueryFeatureFlags> = {
+  enableDictionaryInjection: true,
+  enableThesaurusExpansion: true,
+  enableHypernymExpansion: false,
+  enableAliasHints: true,
+  enableSubQueryDecomposition: true,
+  enableComparisonVerification: true,
 };

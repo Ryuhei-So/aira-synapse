@@ -43,14 +43,20 @@ import { DEFAULT_QUERY_FLAGS, V15_BASELINE_QUERY_FLAGS } from '../dist/domain/co
 // Benchmark data lives at repo root, not package root
 const REPO_ROOT = resolve(process.cwd(), '../..');
 const BENCHMARK_DIR = resolve(REPO_ROOT, 'data/benchmark/hotpotqa');
-const LADYBUG_DB_PATH = resolve(BENCHMARK_DIR, 'hotpotqa.lbug');
-const SQLITE_PATH = resolve(BENCHMARK_DIR, 'hotpotqa.sqlite');
+const LADYBUG_DB_PATH = process.env.LADYBUG_DB_PATH
+  ? resolve(process.cwd(), process.env.LADYBUG_DB_PATH)
+  : resolve(BENCHMARK_DIR, 'hotpotqa.lbug');
+const SQLITE_PATH = process.env.SQLITE_PATH
+  ? resolve(process.cwd(), process.env.SQLITE_PATH)
+  : resolve(BENCHMARK_DIR, 'hotpotqa.sqlite');
 const VECTORS_DIR = resolve(BENCHMARK_DIR, 'vectors');
 const BENCH_SIZE = process.env.BENCH_SIZE || '500';
 const QUESTIONS_FILE = process.env.QUESTIONS_FILE
   ? resolve(process.cwd(), process.env.QUESTIONS_FILE)
   : resolve(BENCHMARK_DIR, `benchmark_${BENCH_SIZE}.json`);
-const RESULTS_FILE = resolve(BENCHMARK_DIR, `results_ladybug_${BENCH_SIZE}.json`);
+const RESULTS_FILE = process.env.RESULTS_FILE
+  ? resolve(process.cwd(), process.env.RESULTS_FILE)
+  : resolve(BENCHMARK_DIR, `results_ladybug_${BENCH_SIZE}.json`);
 const PHASE = process.argv[2] || 'all';
 const CORPUS_ID = readFileSync(resolve(BENCHMARK_DIR, 'corpus_id.txt'), 'utf-8').trim();
 
@@ -300,10 +306,9 @@ async function evaluateQueries() {
   };
 
   // Build components based on flags
+  // Note: Dictionary injection is now context-based (inside QueryService), not teleport-vector-based
   const baseInitializer = new SimpleNodeInitializer(memoryStore);
-  const nodeInitializer = featureFlags.enableDictionaryInjection
-    ? new DictionaryAwareNodeInitializer(baseInitializer, dictionary, memoryStore)
-    : baseInitializer;
+  const nodeInitializer = baseInitializer;
 
   const baseContextBuilder = new SimpleContextBuilder(memoryStore);
   const contextBuilder = featureFlags.enableAliasHints
@@ -342,7 +347,9 @@ async function evaluateQueries() {
     comparisonVerifier,
   });
 
-  const questions = JSON.parse(readFileSync(QUESTIONS_FILE, 'utf-8'));
+  const allQuestions = JSON.parse(readFileSync(QUESTIONS_FILE, 'utf-8'));
+  const NUM_Q = parseInt(process.env.NUM_QUESTIONS || '0');
+  const questions = NUM_Q > 0 ? allQuestions.slice(0, NUM_Q) : allQuestions;
   const results = new Array(questions.length);
   let correct = 0;
   let total = 0;

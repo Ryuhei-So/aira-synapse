@@ -140,7 +140,7 @@ describe('DictionaryAwareNodeInitializer', () => {
     expect(sum).toBeCloseTo(1.0, 5);
   });
 
-  it('respects MAX_PER_ENTITY cap of 10', async () => {
+  it('respects MAX_PER_ENTITY cap', async () => {
     const base = makeBaseVector({ 'fact:f0': 0.5 });
     const entry = makeEntry();
     const facts = Array.from({ length: 15 }, (_, i) =>
@@ -158,6 +158,7 @@ describe('DictionaryAwareNodeInitializer', () => {
       candidates: { ontology: [], facts: [], passages: [], expandedTerms: [], fallbackRequired: false },
     });
 
-    expect(result.injectedCount).toBe(10);
+    // Default MAX_PER_ENTITY=3, so only 3 injected
+    expect(result.injectedCount).toBe(3);
   });
 });
