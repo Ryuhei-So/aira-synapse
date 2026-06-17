@@ -3,13 +3,13 @@
 | フィールド | 値 |
 |-----------|---|
 | **ID** | DES-MEMGRAPHRAG-004 |
-| **バージョン** | 1.2 |
+| **バージョン** | 1.3 |
 | **ステータス** | Draft |
 | **作成日** | 2026-06-18 |
 | **更新日** | 2026-06-18 |
 | **対応要件** | REQ-MEMGRAPHRAG-004 v1.2 |
 | **パッケージ** | `@nahisaho/memgraphrag` |
-| **レビュー** | Rubber-duck review ×2 反映済み（v1.0 → v1.1 → v1.2） |
+| **レビュー** | Rubber-duck review ×3 反映済み（v1.0 → v1.1 → v1.2 → v1.3） |
 
 ## 1. 設計概要
 
@@ -482,7 +482,7 @@ class LLMQueryRewriter implements IQueryRewriter {
     }, this.deps.projection);
 
     // 5. 両ステップの rankedPassages を統合（スコア加重平均でマージ）
-    const mergedRanking = this.mergeRankings(step1Ranking, step2Ranking);
+    const mergedRanking = this.mergeRankings(step1Ranking, step2Ranking, request.query.topK ?? 10);
 
     return {
       decomposed: true,
@@ -680,12 +680,16 @@ private async safeDecompose(query: string): Promise<SubQuery[] | null> {
       return null;
     }
     // Step 2 validation: must depend on step 1, must contain {step1} placeholder
-    if (subQueries[1].step !== 2 || subQueries[1].dependsOn !== 1 || !subQueries[1].query?.trim()) {
+    // Note: LLM outputs `depends_on` (snake_case) per prompt; normalize to SubQuery interface
+    const rawStep2 = subQueries[1];
+    if (rawStep2.step !== 2 || (rawStep2.depends_on ?? rawStep2.dependsOn) !== 1 || !rawStep2.query?.trim()) {
       return null;
     }
-    if (!subQueries[1].query.includes('{step1}')) {
+    if (!rawStep2.query.includes('{step1}')) {
       return null;  // placeholder 必須
     }
+    // Normalize to TypeScript interface (camelCase)
+    subQueries[1] = { ...rawStep2, dependsOn: rawStep2.depends_on ?? rawStep2.dependsOn };
     return subQueries;
   } catch {
     return null;  // JSON パースエラー、タイムアウト、LLM エラー等 → 全てフォールバック
@@ -797,17 +801,18 @@ class LLMPassageReranker implements IPassageReranker {
       return this.fallbackResult(request, startTime);
     }
 
-    // スコア順にソート、上位 selectN + 残りの元順序を維持
+    // スコア順にソート、上位 selectN を選択、残りも全て保持（順序のみ変更、パッセージは削除しない）
     const scored = topPassages.map((node, i) => ({ node, score: scores[i] }));
     scored.sort((a, b) => b.score - a.score);
     const reranked = scored.slice(0, request.selectN).map(s => s.node);
-    const remaining = request.ranking.rankedPassages.slice(request.topN);
+    const unselectedTopN = scored.slice(request.selectN).map(s => s.node);  // 再ランク対象の下位も保持
+    const remaining = request.ranking.rankedPassages.slice(request.topN);   // 再ランク対象外
     const positionChanges = scored.filter((s, i) => s.node.nodeId !== topPassages[i].nodeId).length;
 
     return {
       rerankedPPRResult: {
         ...request.ranking,
-        rankedPassages: [...reranked, ...remaining],
+        rankedPassages: [...reranked, ...unselectedTopN, ...remaining],
       },
       metrics: {
         positionChanges,
@@ -1132,6 +1137,14 @@ SubQueryDecomposer を deprecated とし、新規の IQueryRewriter（段階実�
 - 将来的にはリファクタリングで旧コードを削除
 
 ## 13. 変更履歴
+
+### v1.2 → v1.3 変更点（Rubber-duck review #3 反映）
+
+| 指摘 | 対応 |
+|------|------|
+| `depends_on` (snake_case) vs `dependsOn` (camelCase) の不一致 | バリデーションで両方受け付け、camelCase に正規化 |
+| mergeRankings 呼び出しに topK 引数が欠落 | `request.query.topK ?? 10` を渡すように修正 |
+| Reranker が selectN 以降のパッセージを破棄 | unselectedTopN を保持し全パッセージを維持（順序のみ変更） |
 
 ### v1.1 → v1.2 変更点（Rubber-duck review #2 反映）
 
