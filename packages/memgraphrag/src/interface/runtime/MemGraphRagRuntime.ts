@@ -331,6 +331,7 @@ class RuntimeImpl implements MemGraphRagRuntime {
         nlpExtractor,
         enableDictionaryIndexing: true,
         dictionary: sharedLexiconStore as ITermDictionary,
+        dictionaryFactory: (cid: string) => new SQLiteLexiconStore(this.db!, cid) as ITermDictionary,
       });
     const jobRunner = new AsyncJobRunner(
       this.db,

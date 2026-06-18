@@ -29,6 +29,8 @@ export interface FullPipelineOptions {
   readonly enableConflictResolution?: boolean;
   readonly enableDictionaryIndexing?: boolean;
   readonly dictionary?: import('../../domain/dictionary/termDictionary.js').ITermDictionary;
+  /** Factory to create a corpus-scoped ITermDictionary. Used by Stage V to satisfy FK constraints. */
+  readonly dictionaryFactory?: (corpusId: string) => import('../../domain/dictionary/termDictionary.js').ITermDictionary;
 }
 
 export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
@@ -157,8 +159,12 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
 
     // Stage V: Lexicon construction (dictionary + thesaurus from extracted facts)
     if (this.options.enableDictionaryIndexing !== false && this.options.dictionary) {
+      // Use corpus-scoped dictionary if factory is available, otherwise fall back to shared
+      const scopedDictionary = this.options.dictionaryFactory
+        ? this.options.dictionaryFactory(corpusId)
+        : this.options.dictionary;
       const lexiconBuilder = new LexiconBuilder(
-        this.options.dictionary,
+        scopedDictionary,
         this.options.db,
         corpusId,
       );

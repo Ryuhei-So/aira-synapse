@@ -21,7 +21,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { loadMemGraphRagConfig, resolveConfigFromEnv, resolveApiKey } from '../dist/infrastructure/config/index.js';
 import {
-  SQLiteMemoryStore, SQLiteLexiconStore,
+  SQLiteGraphStore, SQLiteMemoryStore, SQLiteLexiconStore,
   OpenAILLMProvider, OpenAIEmbeddingProvider,
   CachedMemoryStore, CachedGraphProjection, CachedFileVectorIndex,
   openDatabase,
@@ -149,7 +149,7 @@ async function evaluateQueries() {
   const queryService = new DefaultQueryService({
     dictionary,
     expansionPolicy,
-    memoryFilter: new VectorMemoryFilter(embedding, vectorIndex, memoryStore, null),
+    memoryFilter: new VectorMemoryFilter(embedding, vectorIndex, memoryStore, lbGraphStore),
     nodeInitializer,
     ppr,
     projection: graphProjection,
