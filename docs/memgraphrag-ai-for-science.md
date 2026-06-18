@@ -1,17 +1,3 @@
----
-title: '論文を読むAIの精度を90%に引き上げた — AI for Scienceのための知識グラフRAGシステム構築記'
-tags:
-  - GraphRAG
-  - RAG
-  - AIforScience
-  - KnowledgeGraph
-  - TypeScript
-private: false
-updated_at: '2026-06-17'
----
-
-# 論文を読むAIの精度を90%に引き上げた — AI for Science のための知識グラフRAGシステム構築記
-
 # 概要
 
 - **HotpotQA ベンチマーク 90.0%** を達成（論文の公式実装 71.6% を +18.4% 上回る）
@@ -20,7 +6,8 @@ updated_at: '2026-06-17'
 - 日本語論文にも対応する多言語パイプラインを設計中
 - 専門用語辞書・シソーラスの「正しい使い方」を Ablation テストで解明
 
-:::note warn こんな研究者に読んでほしい
+:::note info 
+#### こんな研究者に読んでほしい
 - 論文が増えすぎて、**関連研究の全体像が把握できない**
 - LLM に聞いても**根拠論文が曖昧**で、ハルシネーションが怖い
 - 複数論文にまたがる**関係性や矛盾**を手作業で整理している
@@ -50,7 +37,7 @@ LLM を活用した RAG（Retrieval-Augmented Generation）はこのプロセス
 
 
 :::note info 
-RAG（Retrieval-Augmented Generation）とは
+#### RAG（Retrieval-Augmented Generation）とは
 RAG は、LLM（大規模言語モデル）の回答精度を向上させるための手法です。仕組みはシンプルで、ユーザーの質問に関連する文書をデータベースから検索し、その文書をコンテキストとして LLM に渡して回答を生成します。
 
 ```
@@ -91,6 +78,7 @@ Microsoft GraphRAG のパイプライン:
 **グローバルクエリ**（「このコーパスの主要テーマは？」）に対しては、コミュニティ要約を横断的に Map-Reduce することで包括的な回答を生成できる。しかし、**科学論文の Factoid QA** には 3 つの根本的な課題がある。
 
 :::note info Factoid QA とは
+#### Facoid QA
 Factoid QA（事実型質問応答）とは、「誰が？」「いつ？」「どこで？」のように、**具体的な事実（固有名詞・数値・日付など）を1つ回答する**タイプの質問応答タスクです。
 
 - ✅ Factoid QA: 「東京タワーの高さは？」→「333m」
@@ -113,7 +101,7 @@ MemGraphRAG 論文（Xiang et al., 2026）はこの問題を明確に指摘し�
 つまり、**コミュニティベースの要約は、下層のエンティティ関係が正確でなければ上層の要約も不正確になる** という構造的な弱点を持つ。これが HotpotQA で 51.6% という低スコアの原因である。
 
 :::note info 
-## HotpotQA とは
+#### HotpotQA とは
 [HotpotQA](https://hotpotqa.github.io/)（Yang et al., 2018）は、**マルチホップ推論**の能力を測定するための質問応答ベンチマークです。Wikipedia の複数記事にまたがる情報を**2段階以上の推論で結びつけて**初めて正解できる問題で構成されています。
 
 **例**: 「『ダークナイト』の監督が生まれた国の首都は？」
@@ -245,9 +233,9 @@ HotpotQA 500 問での各システムの精度比較を示す。aira-synapse は
   60 ┤         ●── 59.2% (v4)
   55 ┤  ●── 55.8% (v1)
   50 ┤
-     └──────────────────────────────────────────▶ イテレーション
-      v1  v2  v3  v4          ...           v15
-      └──SQLite──┘            └──LadybugDB──┘
+     └───────────────────────────────────────────────────────────────▶ イテレーション
+      v1  v2  v3  v4             ...           v15
+      └──SQLite──┘                └──LadybugDB──┘
 ```
 
 ## 3.3 3つの転換点
@@ -364,15 +352,15 @@ PPR テレポートベクトル（辞書注入後）:
 ## 5.1 論文取得からナレッジグラフ構築までのパイプライン
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│  AIRA (AI Research Assistant)                            │
-│  ┌─────────────────┐                                     │
-│  │ ToolUniverse    │                                     │
-│  │ Semantic Scholar│──▶ PDF ──▶ Dockling ──▶ Markdown    │
-│  │ arXiv           │                                     │
-│  │ J-STAGE         │  ← 日本語論文対応                    │
-│  │ CiNii Research  │                                     │
-│  └───────┬─────────┘                                     │
+┌───────────────────────────────────────────────────────────┐
+│  AIRA (AI Research Assistant)                          　 │
+│  ┌─────────────────┐                                      │
+│  │ ToolUniverse    │                                   　 │
+│  │ Semantic Scholar│──▶ PDF ──▶ Dockling ──▶ Markdown  │
+│  │ arXiv           │                                      │
+│  │ J-STAGE         │  ← 日本語論文対応                     │
+│  │ CiNii Research  │                                      │
+│  └───────┬─────────┘                                    　│
 │          │ MCP (Model Context Protocol)                  │
 ├──────────┼───────────────────────────────────────────────┤
 │  aira-synapse (MemGraphRAG)                              │
@@ -385,7 +373,7 @@ PPR テレポートベクトル（辞書注入後）:
 │          ↓                                               │
 │  ┌──────────────────────────────────────────────────┐    │
 │  │ Stage IV: グラフ投影                              │    │
-│  │ SQLite (メタデータ) + LadybugDB (グラフ)           │    │
+│  │ SQLite (メタデータ) + LadybugDB (グラフ)          │    │
 │  │ 316,935 ノード / 682,240 エッジ                   │    │
 │  └──────────────────────────────────────────────────┘    │
 │          ↓                                               │
@@ -581,7 +569,6 @@ npx memgraphrag query \
 **開発中（v0.4.0〜）:**
 - 日本語論文パイプライン（GiNZA + 専門用語辞書）
 - 専門分野辞書の自動構築
-- J-STAGE / CiNii Research からの論文自動取得
 - Wake-Sleep メモリ統合（オフラインでのグラフ圧縮・再構成）
 - AIRA との完全統合：論文収集 → インデックス → クエリ → レポート生成
 :::
@@ -628,4 +615,4 @@ Issue、PR、質問はすべて歓迎。特に以下の分野での実証実験�
 - [LadybugDB (旧 Kuzu)](https://github.com/LadybugDB/ladybug)
 - [Dockling (IBM)](https://github.com/dockling-project/dockling)
 - [GiNZA 日本語 NLP](https://megagonlabs.github.io/ginza/)
-- [前回の記事: MemGraphRAG クリーンルーム実装](https://qiita.com/hisaho/items/XXXXXXXX) <!-- 前回記事のリンクに差し替え -->
+
