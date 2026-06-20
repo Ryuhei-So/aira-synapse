@@ -337,6 +337,7 @@ async function evaluateQueries(runtime, corpusId) {
   const embedding = new OpenAIEmbeddingProvider({
     apiKey,
     model: config.providers.embedding.model,
+    dimensions: config.providers.embedding.dimensions,
   });
 
   const questions = JSON.parse(readFileSync(QUESTIONS_FILE, 'utf-8'));

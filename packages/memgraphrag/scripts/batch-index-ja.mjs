@@ -1,7 +1,7 @@
 /**
  * Batch API Indexer for JA HotpotQA Corpus
  *
- * Uses OpenAI Batch API (50% cost reduction) with gpt-4.1-mini.
+ * Uses OpenAI Batch API (50% cost reduction). Model is read from config.
  *
  * Workflow:
  *   1. Prepare: chunk all docs → generate JSONL batch file
@@ -30,9 +30,9 @@ const JA_DIR = resolve(REPO_ROOT, 'data/benchmark/hotpotqa-ja');
 const CORPUS_DIR = resolve(JA_DIR, 'corpus');
 const BATCH_DIR = resolve(JA_DIR, 'batch');
 
-const MODEL = 'gpt-4.1-mini';
-const MAX_TOKENS = 2000;
-const TEMPERATURE = 0.1;
+const MODEL = config.providers.llm.model;
+const MAX_TOKENS = config.providers.llm.maxTokens || 2000;
+const TEMPERATURE = config.providers.llm.temperature ?? 0.1;
 
 // Load API key
 const configPath = resolve(import.meta.dirname, '..', 'config/hotpotqa-ja.memgraphrag.yml');
@@ -320,8 +320,8 @@ async function ingest() {
   // Embedding provider
   const embeddingProvider = new OpenAIEmbeddingProvider({
     apiKey: API_KEY,
-    model: 'text-embedding-3-large',
-    dimensions: 3072,
+    model: config.providers.embedding.model,
+    dimensions: config.providers.embedding.dimensions || 3072,
   });
 
   // Corpus ID

@@ -126,7 +126,7 @@ async function evaluateQueries() {
   const vectorIndex = new CachedFileVectorIndex(VECTORS_DIR);
 
   const llm = new OpenAILLMProvider({ apiKey, model: config.providers.llm.model });
-  const embedding = new OpenAIEmbeddingProvider({ apiKey, model: config.providers.embedding.model });
+  const embedding = new OpenAIEmbeddingProvider({ apiKey, model: config.providers.embedding.model, dimensions: config.providers.embedding.dimensions });
 
   const HP_HUB = parseInt(process.env.HP_HUB || '50');
   const HP_TP = parseFloat(process.env.HP_TP || '0.5');
