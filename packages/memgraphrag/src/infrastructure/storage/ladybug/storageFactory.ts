@@ -1,12 +1,12 @@
 /**
  * Infrastructure Layer — Storage adapter factory for backend selection.
- * DES-LDB-008: Runtime DI integration — creates SQLite or LadybugDB adapters.
+ * DES-LDB-008: Runtime DI integration — creates SQLite, LadybugDB, or Neo4j adapters.
  */
 
 import type { IGraphStore, IVectorIndex, IMemoryStore } from '../../../domain/storage/graphStore.js';
 import type { IGraphProjection, ILexicalRetriever } from '../../../domain/retrieval/ppr.js';
 
-export type StorageBackend = 'sqlite' | 'ladybug';
+export type StorageBackend = 'sqlite' | 'ladybug' | 'neo4j';
 
 export interface StorageAdapters {
   readonly graphStore: IGraphStore;
@@ -26,10 +26,18 @@ export interface SQLiteStorageOptions {
   readonly vectorIndexDir: string;
 }
 
+export interface Neo4jStorageOptions {
+  readonly uri: string;
+  readonly username: string;
+  readonly password: string;
+  readonly database?: string;
+}
+
 export interface StorageOptions {
   readonly backend: StorageBackend;
   readonly ladybug?: LadybugStorageOptions;
   readonly sqlite?: SQLiteStorageOptions;
+  readonly neo4j?: Neo4jStorageOptions;
 }
 
 /**
@@ -65,6 +73,38 @@ export async function createLadybugAdapters(
 }
 
 /**
+ * Create Neo4j-backed storage adapters.
+ */
+export async function createNeo4jAdapters(
+  opts: Neo4jStorageOptions,
+): Promise<StorageAdapters> {
+  const { Neo4jConnectionPool } = await import('../neo4j/Neo4jConnection.js');
+  const { Neo4jGraphStore } = await import('../neo4j/Neo4jGraphStore.js');
+  const { Neo4jVectorIndex } = await import('../neo4j/Neo4jVectorIndex.js');
+  const { Neo4jMemoryStore } = await import('../neo4j/Neo4jMemoryStore.js');
+  const { Neo4jGraphProjection } = await import('../neo4j/Neo4jGraphProjection.js');
+  const { Neo4jLexicalRetriever } = await import('../neo4j/Neo4jLexicalRetriever.js');
+
+  const pool = new Neo4jConnectionPool(opts);
+  await pool.init();
+
+  const graphStore = new Neo4jGraphStore(pool);
+  const vectorIndex = new Neo4jVectorIndex(pool);
+  const memoryStore = new Neo4jMemoryStore(pool);
+  const graphProjection = new Neo4jGraphProjection(graphStore);
+  const lexicalRetriever = new Neo4jLexicalRetriever(pool);
+
+  return {
+    graphStore,
+    vectorIndex,
+    memoryStore,
+    graphProjection,
+    lexicalRetriever,
+    close: () => pool.close(),
+  };
+}
+
+/**
  * Create storage adapters based on the selected backend.
  * Defaults to SQLite if no backend specified.
  */
@@ -78,6 +118,13 @@ export async function createStorageAdapters(
       throw new Error('LadybugDB storage options required when backend is "ladybug"');
     }
     return createLadybugAdapters(opts.ladybug);
+  }
+
+  if (backend === 'neo4j') {
+    if (!opts.neo4j) {
+      throw new Error('Neo4j storage options required when backend is "neo4j"');
+    }
+    return createNeo4jAdapters(opts.neo4j);
   }
 
   // SQLite backend (default) — import lazily to avoid requiring better-sqlite3
@@ -121,8 +168,8 @@ export async function createStorageAdapters(
 export function resolveBackend(configBackend?: string): StorageBackend {
   const envBackend = process.env.MEMGRAPHRAG_BACKEND;
   const raw = envBackend ?? configBackend ?? 'sqlite';
-  if (raw !== 'sqlite' && raw !== 'ladybug') {
-    throw new Error(`Invalid storage backend: "${raw}". Must be "sqlite" or "ladybug".`);
+  if (raw !== 'sqlite' && raw !== 'ladybug' && raw !== 'neo4j') {
+    throw new Error(`Invalid storage backend: "${raw}". Must be "sqlite", "ladybug", or "neo4j".`);
   }
   return raw;
 }

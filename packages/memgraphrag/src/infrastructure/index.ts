@@ -28,3 +28,10 @@ export { StructuredLogger, type LogLevel, type LogContext, type StructuredLogEnt
 export { AuditLogger, type AuditRecord } from './logging/AuditLogger.js';
 export { SecretMasker, redactSecrets } from './security/SecretMasker.js';
 export { SchemaVersionManager } from './storage/SchemaVersionManager.js';
+// Neo4j adapters
+export { Neo4jConnectionPool, type Neo4jConnectionOptions, type INeo4jConnectionPool } from './storage/neo4j/Neo4jConnection.js';
+export { Neo4jGraphStore } from './storage/neo4j/Neo4jGraphStore.js';
+export { Neo4jVectorIndex } from './storage/neo4j/Neo4jVectorIndex.js';
+export { Neo4jMemoryStore } from './storage/neo4j/Neo4jMemoryStore.js';
+export { Neo4jGraphProjection } from './storage/neo4j/Neo4jGraphProjection.js';
+export { Neo4jLexicalRetriever } from './storage/neo4j/Neo4jLexicalRetriever.js';

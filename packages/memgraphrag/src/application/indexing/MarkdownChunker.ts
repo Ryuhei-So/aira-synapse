@@ -1,6 +1,59 @@
 import type { DocumentMetadata } from '../../domain/memory/passage.js';
 import type { ExtractionChunk } from '../../domain/agent/index.js';
 import type { LanguageCode } from '../../domain/memory/types.js';
+import { detectLanguage } from '../../domain/language/index.js';
+import { JapaneseLanguageStrategy } from '../../domain/language/index.js';
+import { EnglishLanguageStrategy } from '../../domain/language/index.js';
+
+const jaStrategy = new JapaneseLanguageStrategy();
+const enStrategy = new EnglishLanguageStrategy();
+
+/** Estimate token count for a text based on language */
+export function estimateTokens(text: string): number {
+  const lang = detectLanguage(text);
+  return lang === 'ja' ? jaStrategy.estimateTokens(text) : enStrategy.estimateTokens(text);
+}
+
+/** Max tokens per chunk — JA uses smaller chunks for denser extraction */
+const MAX_TOKENS_JA = 500;
+const MAX_TOKENS_EN = 800;
+
+/**
+ * Split text into paragraphs with overlap for fallback chunking.
+ */
+export function fallbackParagraphSplit(
+  text: string,
+  maxTokens: number,
+  overlapSentences = 1,
+): string[] {
+  const paragraphs = text.split(/\n{2,}/).filter((p) => p.trim().length > 0);
+  const chunks: string[] = [];
+  let current: string[] = [];
+  let currentTokens = 0;
+
+  for (const para of paragraphs) {
+    const paraTokens = estimateTokens(para);
+    if (currentTokens + paraTokens > maxTokens && current.length > 0) {
+      chunks.push(current.join('\n\n'));
+      // Overlap: keep last paragraph
+      const overlap = current.slice(-overlapSentences);
+      current = [...overlap];
+      currentTokens = overlap.reduce((sum, p) => sum + estimateTokens(p), 0);
+    }
+    current.push(para);
+    currentTokens += paraTokens;
+  }
+  if (current.length > 0) {
+    chunks.push(current.join('\n\n'));
+  }
+  return chunks;
+}
+
+/** Normalize chunk text using language-aware strategy */
+function normalizeChunkText(text: string): string {
+  const lang = detectLanguage(text);
+  return lang === 'ja' ? jaStrategy.normalizeText(text) : text.toLowerCase();
+}
 
 export interface MarkdownChunkFeatures {
   readonly hasCodeBlock: boolean;
@@ -47,13 +100,31 @@ export function chunkMarkdownDocument(request: ChunkDocumentRequest): readonly M
     return [];
   }
 
+  const lang = detectLanguage(request.markdown);
+  const maxTokens = lang === 'ja' ? MAX_TOKENS_JA : MAX_TOKENS_EN;
+
   const matches = [...request.markdown.matchAll(/^(#{1,6})\s+(.*)$/gm)];
   if (matches.length === 0) {
     const text = request.markdown.trim();
+    const tokens = estimateTokens(text);
+    // Fallback: split by paragraphs if too large
+    if (tokens > maxTokens) {
+      const parts = fallbackParagraphSplit(text, maxTokens);
+      return parts.map((part, idx) => ({
+        chunkId: `${request.documentId}:${idx}`,
+        text: part,
+        normalizedText: normalizeChunkText(part),
+        sectionPath: [],
+        chunkIndex: idx,
+        offsetStart: 0,
+        offsetEnd: part.length,
+        features: detectFeatures(part, []),
+      }));
+    }
     return [{
       chunkId: `${request.documentId}:0`,
       text,
-      normalizedText: text.toLowerCase(),
+      normalizedText: normalizeChunkText(text),
       sectionPath: [],
       chunkIndex: 0,
       offsetStart: 0,
@@ -62,7 +133,7 @@ export function chunkMarkdownDocument(request: ChunkDocumentRequest): readonly M
     }];
   }
 
-  const chunks: MarkdownChunk[] = [];
+  const rawChunks: MarkdownChunk[] = [];
   const sectionStack: string[] = [];
 
   for (let index = 0; index < matches.length; index += 1) {
@@ -83,19 +154,49 @@ export function chunkMarkdownDocument(request: ChunkDocumentRequest): readonly M
       continue;
     }
 
-    chunks.push({
-      chunkId: `${request.documentId}:${chunks.length}`,
+    rawChunks.push({
+      chunkId: `${request.documentId}:${rawChunks.length}`,
       text,
-      normalizedText: text.toLowerCase(),
+      normalizedText: normalizeChunkText(text),
       sectionPath: [...sectionStack],
-      chunkIndex: chunks.length,
+      chunkIndex: rawChunks.length,
       offsetStart: start,
       offsetEnd: nextStart,
       features: detectFeatures(text, sectionStack),
     });
   }
 
-  return chunks;
+  // Split oversized chunks for JA (EN keeps heading-based chunks)
+  if (lang === 'ja') {
+    const result: MarkdownChunk[] = [];
+    for (const chunk of rawChunks) {
+      const tokens = estimateTokens(chunk.text);
+      if (tokens > maxTokens) {
+        const parts = fallbackParagraphSplit(chunk.text, maxTokens);
+        for (const part of parts) {
+          result.push({
+            chunkId: `${request.documentId}:${result.length}`,
+            text: part,
+            normalizedText: normalizeChunkText(part),
+            sectionPath: chunk.sectionPath,
+            chunkIndex: result.length,
+            offsetStart: chunk.offsetStart,
+            offsetEnd: chunk.offsetEnd,
+            features: detectFeatures(part, chunk.sectionPath),
+          });
+        }
+      } else {
+        result.push({
+          ...chunk,
+          chunkId: `${request.documentId}:${result.length}`,
+          chunkIndex: result.length,
+        });
+      }
+    }
+    return result;
+  }
+
+  return rawChunks;
 }
 
 export function toExtractionChunk(

@@ -20,8 +20,8 @@ import {
   OpenAILLMProvider, OpenAIEmbeddingProvider,
   CachedMemoryStore, CachedGraphProjection, CachedFileVectorIndex,
   openDatabase,
+  Neo4jConnectionPool, Neo4jGraphStore, Neo4jGraphProjection,
 } from '../dist/infrastructure/index.js';
-import { SQLiteGraphProjection } from '../dist/application/query/SQLiteGraphProjection.js';
 import { DefaultQueryService } from '../dist/application/query/QueryService.js';
 import { VectorMemoryFilter } from '../dist/application/query/VectorMemoryFilter.js';
 import { SimpleNodeInitializer } from '../dist/application/query/SimpleNodeInitializer.js';
@@ -315,8 +315,16 @@ async function evaluateQueries(runtime, corpusId) {
   const vectorsDir = resolve(process.cwd(), 'data/benchmark/hotpotqa/vectors');
   const db = openDatabase(sqlitePath);
 
-  const graphStore = new SQLiteGraphStore(db);
-  const graphProjection = new CachedGraphProjection(new SQLiteGraphProjection(graphStore));
+  // Neo4j for graph operations
+  const neo4jPool = new Neo4jConnectionPool({
+    uri: process.env.NEO4J_URI || 'bolt://localhost:7687',
+    username: process.env.NEO4J_USER || 'neo4j',
+    password: process.env.NEO4J_PASS || 'memgraphrag',
+    database: process.env.NEO4J_DB || 'neo4j',
+  });
+  await neo4jPool.init();
+  const graphStore = new Neo4jGraphStore(neo4jPool);
+  const graphProjection = new CachedGraphProjection(new Neo4jGraphProjection(graphStore));
   const memoryStore = new CachedMemoryStore(new SQLiteMemoryStore(db));
   const vectorIndex = new CachedFileVectorIndex(vectorsDir);
   const dictionary = new SQLiteLexiconStore(db, corpusId);
@@ -365,7 +373,7 @@ async function evaluateQueries(runtime, corpusId) {
 
   console.log(`\n=== Evaluating ${questions.length} queries ===`);
   console.log(`  HyperParams: tp=${HP_TP} hub=${HP_HUB} K=${HP_TOPK} M=${HP_TOPM} ctx=${HP_CTX} effort=${HP_EFFORT} verbosity=${HP_VERBOSITY}`);
-  console.log(`  Backend: SQLite + CachedFileVectorIndex + CachedGraphProjection + CachedMemoryStore`);
+  console.log(`  Backend: Neo4j + CachedFileVectorIndex + CachedGraphProjection + CachedMemoryStore`);
 
   const results = new Array(questions.length);
   let correct = 0;

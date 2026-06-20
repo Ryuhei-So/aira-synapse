@@ -25,10 +25,8 @@ import {
   OpenAILLMProvider, OpenAIEmbeddingProvider,
   CachedMemoryStore, CachedGraphProjection, CachedFileVectorIndex,
   openDatabase,
+  Neo4jConnectionPool, Neo4jGraphStore, Neo4jGraphProjection,
 } from '../dist/infrastructure/index.js';
-import { LadybugConnectionPool } from '../dist/infrastructure/storage/ladybug/LadybugConnection.js';
-import { LadybugGraphStore } from '../dist/infrastructure/storage/ladybug/LadybugGraphStore.js';
-import { LadybugGraphProjection } from '../dist/infrastructure/storage/ladybug/LadybugGraphProjection.js';
 import { DefaultQueryService } from '../dist/application/query/QueryService.js';
 import { VectorMemoryFilter } from '../dist/application/query/VectorMemoryFilter.js';
 import { SimpleNodeInitializer } from '../dist/application/query/SimpleNodeInitializer.js';
@@ -41,7 +39,10 @@ import { normalizeJapanese, normalizedContainsJa } from './ja-eval-normalizer.mj
 // ─── Paths ───
 const REPO_ROOT = resolve(process.cwd(), '../..');
 const BENCHMARK_DIR = resolve(REPO_ROOT, 'data/benchmark/hotpotqa-ja');
-const LADYBUG_DB_PATH = resolve(BENCHMARK_DIR, 'hotpotqa-ja.lbug');
+const NEO4J_URI = process.env.NEO4J_URI || 'bolt://localhost:7687';
+const NEO4J_USER = process.env.NEO4J_USER || 'neo4j';
+const NEO4J_PASS = process.env.NEO4J_PASS || 'memgraphrag';
+const NEO4J_DB = process.env.NEO4J_DB || 'neo4j';
 const SQLITE_PATH = resolve(BENCHMARK_DIR, 'hotpotqa-ja.sqlite');
 const VECTORS_DIR = resolve(BENCHMARK_DIR, 'vectors');
 const BENCH_SIZE = process.env.BENCH_SIZE || '500';
@@ -96,7 +97,7 @@ async function evaluateQueries() {
     ? readFileSync(resolve(BENCHMARK_DIR, 'corpus_id.txt'), 'utf-8').trim()
     : 'hotpotqa-ja';
 
-  console.log('=== HotpotQA Japanese Benchmark — LadybugDB ===');
+  console.log('=== HotpotQA Japanese Benchmark — Neo4j ===');
   console.log(`Corpus: ${CORPUS_ID}`);
   console.log(`Questions: ${QUESTIONS_FILE}`);
 
@@ -105,11 +106,16 @@ async function evaluateQueries() {
   const config = resolveConfigFromEnv(baseConfig);
   const apiKey = resolveApiKey(config.providers.apiKeyFile);
 
-  // LadybugDB for graph operations
-  const pool = new LadybugConnectionPool(LADYBUG_DB_PATH);
+  // Neo4j for graph operations
+  const pool = new Neo4jConnectionPool({
+    uri: NEO4J_URI,
+    username: NEO4J_USER,
+    password: NEO4J_PASS,
+    database: NEO4J_DB,
+  });
   await pool.init();
-  const lbGraphStore = new LadybugGraphStore(pool);
-  const graphProjection = new CachedGraphProjection(new LadybugGraphProjection(lbGraphStore));
+  const neo4jGraphStore = new Neo4jGraphStore(pool);
+  const graphProjection = new CachedGraphProjection(new Neo4jGraphProjection(neo4jGraphStore));
 
   // SQLite for memory and lexicon
   const db = openDatabase(SQLITE_PATH);
@@ -149,7 +155,7 @@ async function evaluateQueries() {
   const queryService = new DefaultQueryService({
     dictionary,
     expansionPolicy,
-    memoryFilter: new VectorMemoryFilter(embedding, vectorIndex, memoryStore, lbGraphStore),
+    memoryFilter: new VectorMemoryFilter(embedding, vectorIndex, memoryStore, neo4jGraphStore),
     nodeInitializer,
     ppr,
     projection: graphProjection,

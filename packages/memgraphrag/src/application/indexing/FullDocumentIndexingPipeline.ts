@@ -141,13 +141,18 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
       }
     }
 
-    // Save facts and passages to memory
-    const snapshot = await this.options.memoryStore.load(corpusId);
+    // Save facts and passages to memory (incremental — avoid full snapshot reload)
     const passages = records.map((r) => r.sourcePassage);
+    const snapshot = await this.options.memoryStore.load(corpusId);
+    // Only save schemas (which need full state for canonicalization) + new data
+    // Using upsert semantics: existing passages/facts won't be deleted
     await this.options.memoryStore.save({
-      ...snapshot,
-      facts: [...snapshot.facts, ...allFacts],
-      passages: [...snapshot.passages, ...passages],
+      corpusId,
+      schemas: snapshot.schemas,
+      facts: allFacts,
+      passages,
+      exportedAt: new Date().toISOString(),
+      schemaVersion: snapshot.schemaVersion ?? 1,
     });
 
     // Stage IV: Project graph and upsert vectors

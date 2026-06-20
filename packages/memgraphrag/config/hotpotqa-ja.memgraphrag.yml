@@ -45,8 +45,14 @@ providers:
   api_key_file: ./config/openai_api_key
 
 storage:
+  backend: neo4j
   sqlite_path: ../../data/benchmark/hotpotqa-ja/hotpotqa-ja.sqlite
   vector_index_dir: ../../data/benchmark/hotpotqa-ja/vectors
+  neo4j:
+    uri: bolt://localhost:7687
+    username: neo4j
+    password: memgraphrag
+    database: neo4j
   wal_mode: true
   auto_migrate: true
 

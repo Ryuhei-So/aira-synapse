@@ -76,11 +76,20 @@ export interface ProvidersConfig {
 }
 
 /** Storage */
+export interface Neo4jConfig {
+  readonly uri: string;
+  readonly username: string;
+  readonly password: string;
+  readonly database?: string;
+}
+
 export interface StorageConfig {
+  readonly backend?: 'sqlite' | 'ladybug' | 'neo4j';
   readonly sqlitePath: string;
   readonly vectorIndexDir: string;
   readonly walMode: boolean;
   readonly autoMigrate: boolean;
+  readonly neo4j?: Neo4jConfig;
 }
 
 /** Security */

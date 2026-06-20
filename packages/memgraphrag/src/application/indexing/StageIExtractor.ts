@@ -119,12 +119,12 @@ export class StageIExtractor {
   public async extractChunks(
     corpusId: string,
     input: IndexDocumentInput,
+    concurrency: number = 5,
   ): Promise<readonly CompositeExtractionRecord[]> {
     const chunks = this.chunkDocument(corpusId, input);
     const quality = this.validateMarkdownQuality(this.preprocessMarkdown(input.markdown));
 
-    const records: CompositeExtractionRecord[] = [];
-    for (const chunk of chunks) {
+    const processChunk = async (chunk: ExtractionChunk): Promise<CompositeExtractionRecord> => {
       const [nlp, extracted] = await Promise.all([
         this.nlpExtractor.extract({ text: chunk.normalizedText, language: chunk.language }),
         this.extractionAgent.extract(chunk),
@@ -141,7 +141,7 @@ export class StageIExtractor {
         ...quality.flags,
       ]);
 
-      records.push({
+      return {
         chunk,
         candidateSchemas: extracted.candidateSchemas,
         candidateFacts: extracted.candidateFacts,
@@ -151,7 +151,15 @@ export class StageIExtractor {
           entityMentions: rawEntities,
           qualityFlags,
         },
-      });
+      };
+    };
+
+    // Process chunks with bounded concurrency
+    const records: CompositeExtractionRecord[] = [];
+    for (let i = 0; i < chunks.length; i += concurrency) {
+      const batch = chunks.slice(i, i + concurrency);
+      const batchResults = await Promise.all(batch.map(processChunk));
+      records.push(...batchResults);
     }
 
     return records;

@@ -66,7 +66,7 @@ const SCHEMA_DDL = [
     corpus_id STRING,
     entry_id STRING,
     namespace STRING,
-    vec FLOAT[1536],
+    vec FLOAT[3072],
     meta_json STRING,
     document_ids STRING
   )`,
