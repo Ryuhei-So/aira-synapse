@@ -69,6 +69,12 @@ export class OpenAIEmbeddingProvider implements IEmbeddingProvider {
     }
 
     if (missingTexts.length > 0) {
+      // Truncate inputs that may exceed model token limit (8191 for text-embedding-3-*)
+      const MAX_INPUT_CHARS = 7000;
+      const truncatedTexts = missingTexts.map(t =>
+        t.length > MAX_INPUT_CHARS ? t.slice(0, MAX_INPUT_CHARS) : t
+      );
+
       const maxRetries = 3;
       let lastError: Error | undefined;
       for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -81,13 +87,14 @@ export class OpenAIEmbeddingProvider implements IEmbeddingProvider {
             },
             body: JSON.stringify({
               model,
-              input: missingTexts,
+              input: truncatedTexts,
               ...(this.dimensions ? { dimensions: this.dimensions } : {}),
             }),
           });
 
           if (!response.ok) {
-            throw new Error(`OpenAI embeddings request failed with status ${response.status}`);
+            const errorBody = await response.text().catch(() => '');
+            throw new Error(`OpenAI embeddings request failed with status ${response.status}: ${errorBody}`);
           }
 
           const body = (await response.json()) as EmbeddingApiResponse;

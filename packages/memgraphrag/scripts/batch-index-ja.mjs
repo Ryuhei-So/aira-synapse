@@ -30,15 +30,15 @@ const JA_DIR = resolve(REPO_ROOT, 'data/benchmark/hotpotqa-ja');
 const CORPUS_DIR = resolve(JA_DIR, 'corpus');
 const BATCH_DIR = resolve(JA_DIR, 'batch');
 
-const MODEL = config.providers.llm.model;
-const MAX_TOKENS = config.providers.llm.maxTokens || 2000;
-const TEMPERATURE = config.providers.llm.temperature ?? 0.1;
-
-// Load API key
+// Load config and API key
 const configPath = resolve(import.meta.dirname, '..', 'config/hotpotqa-ja.memgraphrag.yml');
 const baseConfig = loadMemGraphRagConfig(configPath);
 const config = resolveConfigFromEnv(baseConfig);
 const API_KEY = resolveApiKey(config.providers.apiKeyFile);
+
+const MODEL = config.providers.llm.model;
+const MAX_TOKENS = config.providers.llm.maxTokens || 2000;
+const TEMPERATURE = config.providers.llm.temperature ?? 0.1;
 
 // JA extraction prompt (same as LLMExtractionAgent)
 const EXTRACTION_PROMPT_JA = `あなたは知識グラフ抽出エージェントです。与えられたテキストから、できるだけ多くの構造化知識を抽出してください。
@@ -560,14 +560,23 @@ async function ingest() {
     }
   }
 
-  const EMBED_BATCH = 64;
+  const EMBED_BATCH = 32;
+  const MAX_EMBED_CHARS = 4000; // Conservative: Japanese can be ~2 tokens/char
   let embeddedCount = 0;
-  for (let i = 0; i < allPassageNodes.length; i += EMBED_BATCH) {
-    const batch = allPassageNodes.slice(i, i + EMBED_BATCH);
+  // Filter out empty labels and truncate overly long ones
+  const validNodes = allPassageNodes
+    .filter(n => n.label && n.label.trim().length > 0)
+    .map(n => ({
+      ...n,
+      label: n.label.length > MAX_EMBED_CHARS ? n.label.slice(0, MAX_EMBED_CHARS) : n.label,
+    }));
+  console.log(`  Total passage nodes: ${allPassageNodes.length}, valid for embedding: ${validNodes.length}`);
+  for (let i = 0; i < validNodes.length; i += EMBED_BATCH) {
+    const batch = validNodes.slice(i, i + EMBED_BATCH);
     await upsertVectors(vectorIndex, embeddingProvider, batch);
     embeddedCount += batch.length;
-    if (embeddedCount % 500 === 0 || i + EMBED_BATCH >= allPassageNodes.length) {
-      console.log(`  Embedded ${embeddedCount}/${allPassageNodes.length}`);
+    if (embeddedCount % 500 === 0 || i + EMBED_BATCH >= validNodes.length) {
+      console.log(`  Embedded ${embeddedCount}/${validNodes.length}`);
     }
   }
 

@@ -86,7 +86,7 @@ export interface Neo4jConfig {
 }
 
 export interface StorageConfig {
-  readonly backend?: 'sqlite' | 'ladybug' | 'neo4j';
+  readonly backend?: 'sqlite' | 'ladybug' | 'neo4j' | 'aira-graphdb';
   readonly sqlitePath: string;
   readonly vectorIndexDir: string;
   readonly walMode: boolean;

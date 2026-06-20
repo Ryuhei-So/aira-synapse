@@ -80,6 +80,45 @@ describe('TASK-MG-040: MemGraphRagRuntime', () => {
     await runtime.shutdown();
   });
 
+  it('routes graph operations to native aira-graphdb backend', async () => {
+    const baseDir = resolve(artifactRoot, 'native-backend');
+    const runtime = createMemGraphRagRuntime(createConfig('native-backend', {
+      storage: {
+        backend: 'aira-graphdb',
+        sqlitePath: resolve(baseDir, 'memgraphrag.sqlite'),
+        vectorIndexDir: resolve(baseDir, 'vectors'),
+        walMode: true,
+        autoMigrate: true,
+      },
+    }));
+    await runtime.start();
+
+    const graphStore = runtime.getService<{
+      upsertNodes(nodes: readonly Array<{
+        nodeId: string;
+        corpusId: string;
+        layer: 'schema' | 'fact' | 'passage';
+        ref: Record<string, unknown>;
+        label: string;
+      }>): Promise<void>;
+      getNode(corpusId: string, nodeId: string): Promise<{ nodeId: string } | null>;
+    }>(SERVICE_TOKENS.GRAPH_STORE);
+
+    await graphStore.upsertNodes([{
+      nodeId: 'schema:s1',
+      corpusId: 'c-native',
+      layer: 'schema',
+      ref: { schemaId: 's1', canonicalName: 'Entity' },
+      label: 'Entity',
+    }]);
+
+    await expect(graphStore.getNode('c-native', 'schema:s1')).resolves.toEqual(
+      expect.objectContaining({ nodeId: 'schema:s1' }),
+    );
+
+    await runtime.shutdown();
+  });
+
   it('uses degraded providers in local-only mode', async () => {
     const runtime = createMemGraphRagRuntime(createConfig('local-only', { localOnly: true }));
     await runtime.start();

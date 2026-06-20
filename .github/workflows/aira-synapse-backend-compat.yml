@@ -1,0 +1,143 @@
+name: aira-synapse-backend-compat
+
+on:
+  pull_request:
+    paths:
+      - 'packages/memgraphrag/**'
+      - '.github/workflows/aira-synapse-backend-compat.yml'
+  merge_group:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/memgraphrag/**'
+      - '.github/workflows/aira-synapse-backend-compat.yml'
+
+jobs:
+  storage-port-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run test --workspace=packages/memgraphrag -- tests/contracts/aira_synapse_storage_ports_contract.spec.ts
+
+  storage-port-compat:
+    runs-on: ubuntu-latest
+    needs: storage-port-contract
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - uses: dtolnay/rust-toolchain@stable
+      - run: npm ci
+      - run: npm run test --workspace=packages/memgraphrag -- tests/integration/storage-port-compat/aira_graphdb.storage-port-compat.test.ts
+
+  backend-compat:
+    runs-on: ubuntu-latest
+    needs: storage-port-compat
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - uses: dtolnay/rust-toolchain@stable
+      - run: npm ci
+      - name: Run backend compatibility tests
+        id: backend_compat_tests
+        run: |
+          set +e
+          npm run test --workspace=packages/memgraphrag -- tests/integration/backend-compat/vector_lexical_compat.integration.test.ts
+          status=$?
+          if [ "$status" -eq 0 ]; then
+            node packages/memgraphrag/scripts/backend-compat-report.mjs \
+              --status pass \
+              --backend aira-graphdb \
+              --out artifacts/backend-compat-report-untrusted.json
+          else
+            node packages/memgraphrag/scripts/backend-compat-report.mjs \
+              --status fail \
+              --backend aira-graphdb \
+              --errorCode INVALID_ARGUMENT \
+              --failedTests backend-compat:routing-and-fallback \
+              --out artifacts/backend-compat-report-untrusted.json
+          fi
+          exit "$status"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backend-compat-untrusted
+          path: artifacts/backend-compat-report-untrusted.json
+
+  backend-compat-strict:
+    runs-on: ubuntu-latest
+    needs: backend-compat
+    if: github.event_name == 'merge_group'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - uses: dtolnay/rust-toolchain@stable
+      - run: npm ci
+      - name: Validate strict token gate
+        env:
+          AIRA_GRAPHDB_CONTRACTS_READ_TOKEN: ${{ secrets.AIRA_GRAPHDB_CONTRACTS_READ_TOKEN }}
+        run: |
+          if [ -z "$AIRA_GRAPHDB_CONTRACTS_READ_TOKEN" ]; then
+            echo "permission_missing:contracts_read"
+            exit 1
+          fi
+      - name: Run strict backend compatibility tests
+        run: |
+          npm run test --workspace=packages/memgraphrag -- tests/integration/backend-compat/vector_lexical_compat.integration.test.ts
+          node packages/memgraphrag/scripts/backend-compat-report.mjs \
+            --status pass \
+            --backend aira-graphdb \
+            --out artifacts/backend-compat-report-strict.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backend-compat-strict
+          path: artifacts/backend-compat-report-strict.json
+
+  branch-protection-audit:
+    runs-on: ubuntu-latest
+    needs: backend-compat
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci
+      - name: Run branch protection audit (untrusted/read-only mode)
+        run: node packages/memgraphrag/scripts/branch-protection-audit.mjs --mode untrusted
+      - uses: actions/upload-artifact@v4
+        with:
+          name: branch-protection-audit-untrusted
+          path: artifacts/branch-protection-audit-untrusted.json
+
+  branch-protection-audit-strict:
+    runs-on: ubuntu-latest
+    needs: backend-compat-strict
+    if: github.event_name == 'merge_group'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci
+      - name: Run branch protection audit (trusted strict mode)
+        env:
+          AIRA_SYNAPSE_ADMIN_TOKEN: ${{ secrets.AIRA_SYNAPSE_ADMIN_TOKEN }}
+        run: node packages/memgraphrag/scripts/branch-protection-audit.mjs --mode strict
+      - uses: actions/upload-artifact@v4
+        with:
+          name: branch-protection-audit-strict
+          path: artifacts/branch-protection-audit-strict.json

@@ -325,11 +325,16 @@ providers:
 
 ```yaml
 storage:
+  backend: sqlite                     # sqlite | ladybug | neo4j | aira-graphdb
   sqlite_path: ./data/memgraphrag/memgraphrag.sqlite
   vector_index_dir: ./data/memgraphrag/vectors
   wal_mode: true                      # WAL for concurrent reads
   auto_migrate: true                  # auto-run schema migrations on startup
 ```
+
+When `backend: aira-graphdb` is selected, runtime metadata still uses `sqlite_path`,
+and graph/vector/memory data is persisted via native Rust sidecar to
+`<sqlite_path>.aira-graphdb.json`.
 
 ### Security & Logging
 
@@ -356,6 +361,7 @@ Environment variables override YAML config values.
 | `MEMGRAPHRAG_LOCAL_ONLY` | `local_only` in config |
 | `MEMGRAPHRAG_NLP_BACKEND` | `providers.nlp.backend` in config |
 | `MEMGRAPHRAG_LOG_LEVEL` | `logging.level` in config |
+| `MEMGRAPHRAG_BACKEND` | storage backend selection (`sqlite` / `ladybug` / `neo4j` / `aira-graphdb`) |
 
 ## 🏗️ Project Structure
 

@@ -31,10 +31,14 @@ import { SQLiteGraphProjection } from '../../application/query/SQLiteGraphProjec
 import { SimpleContextBuilder } from '../../application/query/SimpleContextBuilder.js';
 import type {
   IEmbeddingProvider,
+  IGraphProjection,
+  IGraphStore,
   ILLMProvider,
+  IMemoryStore,
   INLPExtractor,
   ITermDictionary,
   IThesaurus,
+  IVectorIndex,
   QueryRequest,
 } from '../../domain/index.js';
 import {
@@ -53,6 +57,7 @@ import {
 } from '../../infrastructure/index.js';
 import type { MemGraphRagConfig } from '../../infrastructure/config/index.js';
 import { resolveApiKey } from '../../infrastructure/config/index.js';
+import { createAiraGraphDbAdapters, resolveBackend, type StorageAdapters } from '../../infrastructure/storage/ladybug/storageFactory.js';
 
 export interface MemGraphRagRuntime {
   start(): Promise<void>;
@@ -154,8 +159,8 @@ class MinimalDocumentIndexingPipeline implements DocumentIndexingPipeline {
 class CorpusManagerFacade implements CorpusManagerLike {
   public constructor(
     private readonly db: Database.Database,
-    private readonly graphStore: SQLiteGraphStore,
-    private readonly vectorIndex: FileVectorIndex,
+    private readonly graphStore: IGraphStore,
+    private readonly vectorIndex: IVectorIndex,
   ) {}
 
   private createManager(corpusId = RUNTIME_CORPUS_ID): DefaultCorpusManager {
@@ -243,9 +248,10 @@ class QueryServiceFacade implements QueryService {
     private readonly db: Database.Database,
     private readonly llm: ILLMProvider,
     private readonly embeddingProvider: IEmbeddingProvider,
-    private readonly vectorIndex: FileVectorIndex,
-    private readonly memoryStore: SQLiteMemoryStore,
-    private readonly graphStore: SQLiteGraphStore,
+    private readonly vectorIndex: IVectorIndex,
+    private readonly memoryStore: IMemoryStore,
+    private readonly graphStore: IGraphStore,
+    private readonly graphProjection: IGraphProjection,
   ) {}
 
   public async query(request: QueryRequest, hyperParams?: import('../../application/query/QueryService.js').QueryHyperParams): Promise<QueryResponse> {
@@ -258,7 +264,7 @@ class QueryServiceFacade implements QueryService {
       memoryFilter: new VectorMemoryFilter(this.embeddingProvider, this.vectorIndex, this.memoryStore, this.graphStore),
       nodeInitializer: new SimpleNodeInitializer(this.memoryStore),
       ppr: new SimplePPR(hp?.hubDegreeThreshold),
-      projection: new SQLiteGraphProjection(this.graphStore),
+      projection: this.graphProjection,
       contextBuilder: new SimpleContextBuilder(this.memoryStore),
       llm: this.llm,
       hyperParams: hp,
@@ -270,6 +276,7 @@ class QueryServiceFacade implements QueryService {
 class RuntimeImpl implements MemGraphRagRuntime {
   private readonly services = new Map<symbol, unknown>();
   private db?: Database.Database;
+  private storageClose: (() => Promise<void>) | undefined;
   private started = false;
 
   public constructor(private readonly config: MemGraphRagConfig) {}
@@ -281,17 +288,39 @@ class RuntimeImpl implements MemGraphRagRuntime {
 
     const sqlitePath = resolve(process.cwd(), this.config.storage.sqlitePath);
     const vectorIndexDir = resolve(process.cwd(), this.config.storage.vectorIndexDir);
+    const backend = resolveBackend(this.config.storage.backend);
     mkdirSync(dirname(sqlitePath), { recursive: true });
-    mkdirSync(vectorIndexDir, { recursive: true });
+    if (backend === 'sqlite') {
+      mkdirSync(vectorIndexDir, { recursive: true });
+    }
 
     this.db = openDatabase(sqlitePath);
     if (this.config.storage.autoMigrate) {
       runMigrations(this.db);
     }
 
-    const graphStore = new SQLiteGraphStore(this.db);
-    const vectorIndex = new FileVectorIndex(vectorIndexDir);
-    const memoryStore = new SQLiteMemoryStore(this.db);
+    let graphStore: IGraphStore;
+    let vectorIndex: IVectorIndex;
+    let memoryStore: IMemoryStore;
+    let graphProjection: IGraphProjection;
+
+    if (backend === 'aira-graphdb') {
+      const storageAdapters: StorageAdapters = await createAiraGraphDbAdapters({
+        dbPath: `${sqlitePath}.aira-graphdb.json`,
+      });
+      graphStore = storageAdapters.graphStore;
+      vectorIndex = storageAdapters.vectorIndex;
+      memoryStore = storageAdapters.memoryStore;
+      graphProjection = storageAdapters.graphProjection;
+      this.storageClose = storageAdapters.close;
+    } else {
+      const sqliteGraphStore = new SQLiteGraphStore(this.db);
+      graphStore = sqliteGraphStore;
+      vectorIndex = new FileVectorIndex(vectorIndexDir);
+      memoryStore = new SQLiteMemoryStore(this.db);
+      graphProjection = new SQLiteGraphProjection(sqliteGraphStore);
+      this.storageClose = undefined;
+    }
     const sharedLexiconStore = new SQLiteLexiconStore(this.db, RUNTIME_CORPUS_ID);
 
     const apiKey = resolveApiKey(this.config.providers.apiKeyFile);
@@ -342,7 +371,7 @@ class RuntimeImpl implements MemGraphRagRuntime {
     const corpusManager = new CorpusManagerFacade(this.db, graphStore, vectorIndex);
     const dictionaryService = new DictionaryServiceFacade(this.db, this.config);
     const thesaurusService = new ThesaurusServiceFacade(this.db);
-    const queryService = new QueryServiceFacade(this.db, llmProvider, embeddingProvider, vectorIndex, memoryStore, graphStore);
+    const queryService = new QueryServiceFacade(this.db, llmProvider, embeddingProvider, vectorIndex, memoryStore, graphStore, graphProjection);
 
     this.services.set(SERVICE_TOKENS.GRAPH_STORE, graphStore);
     this.services.set(SERVICE_TOKENS.VECTOR_INDEX, vectorIndex);
@@ -378,6 +407,11 @@ class RuntimeImpl implements MemGraphRagRuntime {
       | undefined;
     if (nlpExtractor?.shutdown) {
       await nlpExtractor.shutdown();
+    }
+
+    if (this.storageClose) {
+      await this.storageClose();
+      this.storageClose = undefined;
     }
 
     this.db?.close();

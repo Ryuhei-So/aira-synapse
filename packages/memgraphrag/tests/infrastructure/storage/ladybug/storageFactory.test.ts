@@ -27,11 +27,17 @@ describe('storageFactory', () => {
     it('uses config value', () => {
       delete process.env.MEMGRAPHRAG_BACKEND;
       expect(resolveBackend('ladybug')).toBe('ladybug');
+      expect(resolveBackend('aira-graphdb')).toBe('aira-graphdb');
     });
 
     it('env var overrides config', () => {
       process.env.MEMGRAPHRAG_BACKEND = 'ladybug';
       expect(resolveBackend('sqlite')).toBe('ladybug');
+    });
+
+    it('accepts aira-graphdb in env', () => {
+      process.env.MEMGRAPHRAG_BACKEND = 'aira-graphdb';
+      expect(resolveBackend('sqlite')).toBe('aira-graphdb');
     });
 
     it('rejects invalid backend', () => {

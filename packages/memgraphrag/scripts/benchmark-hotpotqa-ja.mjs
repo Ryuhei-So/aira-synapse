@@ -175,7 +175,7 @@ async function evaluateQueries() {
   const results = new Array(questions.length);
   let correct = 0, total = 0;
   const startTime = Date.now();
-  const CONCURRENCY = parseInt(process.env.CONCURRENCY || '5');
+  const CONCURRENCY = parseInt(process.env.CONCURRENCY || '20');
 
   console.log(`\n=== Evaluating ${questions.length} Japanese queries (${skipped} skipped for no JA coverage) ===`);
   console.log(`  HyperParams: tp=${HP_TP} hub=${HP_HUB} K=${HP_TOPK} M=${HP_TOPM} ctx=${HP_CTX}`);

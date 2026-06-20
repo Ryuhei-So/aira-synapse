@@ -119,3 +119,12 @@ export {
 } from './query/QueryService.js';
 export { DegradedModePolicy, type CapabilityHealthResults, type RuntimeCapabilities, type FeatureGates, type RuntimePolicyConfig } from './runtime/DegradedModePolicy.js';
 export { MetricsCollector, type MetricSnapshot } from './observability/MetricsCollector.js';
+export {
+  VectorLexicalCompatEvaluator,
+  AgdbCompatValidationError,
+  type AgdbValidationErrorCode,
+  type CompatRequest,
+  type VectorCompatMatch,
+  type LexicalCompatMatch,
+  type VectorCompatibilityResult,
+} from './query/VectorLexicalCompatEvaluator.js';

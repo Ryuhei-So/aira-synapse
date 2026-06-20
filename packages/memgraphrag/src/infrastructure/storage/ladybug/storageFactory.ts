@@ -6,7 +6,7 @@
 import type { IGraphStore, IVectorIndex, IMemoryStore } from '../../../domain/storage/graphStore.js';
 import type { IGraphProjection, ILexicalRetriever } from '../../../domain/retrieval/ppr.js';
 
-export type StorageBackend = 'sqlite' | 'ladybug' | 'neo4j';
+export type StorageBackend = 'sqlite' | 'ladybug' | 'neo4j' | 'aira-graphdb';
 
 export interface StorageAdapters {
   readonly graphStore: IGraphStore;
@@ -35,11 +35,16 @@ export interface Neo4jStorageOptions {
   readonly vectorDimensions?: number;
 }
 
+export interface AiraGraphDbStorageOptions {
+  readonly dbPath: string;
+}
+
 export interface StorageOptions {
   readonly backend: StorageBackend;
   readonly ladybug?: LadybugStorageOptions;
   readonly sqlite?: SQLiteStorageOptions;
   readonly neo4j?: Neo4jStorageOptions;
+  readonly airaGraphDb?: AiraGraphDbStorageOptions;
 }
 
 /**
@@ -129,10 +134,29 @@ export async function createStorageAdapters(
     return createNeo4jAdapters(opts.neo4j);
   }
 
+  if (backend === 'aira-graphdb') {
+    const airaGraphDbOptions = opts.airaGraphDb
+      ?? (opts.sqlite
+        ? { dbPath: opts.sqlite.sqlitePath }
+        : undefined);
+    if (!airaGraphDbOptions) {
+      throw new Error('Aira GraphDB storage options required when backend is "aira-graphdb"');
+    }
+    return createAiraGraphDbAdapters(airaGraphDbOptions);
+  }
+
   // SQLite backend (default) — import lazily to avoid requiring better-sqlite3
   if (!opts.sqlite) {
     throw new Error('SQLite storage options required when backend is "sqlite"');
   }
+
+  return createSQLiteAdapters(opts.sqlite);
+}
+
+async function createSQLiteAdapters(
+  sqlite: SQLiteStorageOptions,
+): Promise<StorageAdapters> {
+  // SQLite backend (default) — import lazily to avoid requiring better-sqlite3
 
   const { SQLiteGraphStore } = await import('../SQLiteGraphStore.js');
   const { FileVectorIndex } = await import('../FileVectorIndex.js');
@@ -145,11 +169,11 @@ export async function createStorageAdapters(
   );
   const { openDatabase, runMigrations } = await import('../migrate.js');
 
-  const db = openDatabase(opts.sqlite.sqlitePath);
+  const db = openDatabase(sqlite.sqlitePath);
   runMigrations(db);
 
   const graphStore = new SQLiteGraphStore(db);
-  const vectorIndex = new FileVectorIndex(opts.sqlite.vectorIndexDir);
+  const vectorIndex = new FileVectorIndex(sqlite.vectorIndexDir);
   const memoryStore = new SQLiteMemoryStore(db);
   const graphProjection = new SQLiteGraphProjection(graphStore);
   const lexicalRetriever = new Bm25LexicalRetriever();
@@ -164,14 +188,47 @@ export async function createStorageAdapters(
   };
 }
 
+export async function createAiraGraphDbAdapters(
+  opts: AiraGraphDbStorageOptions,
+): Promise<StorageAdapters> {
+  const { AiraGraphDbNativeClient } = await import('../aira-graphdb/NativeClient.js');
+  const {
+    AiraGraphDbGraphStore,
+    AiraGraphDbVectorIndex,
+    AiraGraphDbMemoryStore,
+    AiraGraphDbGraphProjection,
+    AiraGraphDbLexicalRetriever,
+  } = await import('../aira-graphdb/AiraGraphDbAdapters.js');
+
+  const client = new AiraGraphDbNativeClient(opts.dbPath);
+  const graphStore = new AiraGraphDbGraphStore(client);
+  const vectorIndex = new AiraGraphDbVectorIndex(client);
+  const memoryStore = new AiraGraphDbMemoryStore(client);
+  const graphProjection = new AiraGraphDbGraphProjection(client);
+  const lexicalRetriever = new AiraGraphDbLexicalRetriever(client);
+
+  return {
+    graphStore,
+    vectorIndex,
+    memoryStore,
+    graphProjection,
+    lexicalRetriever,
+    close: async () => {
+      await client.close();
+    },
+  };
+}
+
 /**
  * Resolve storage backend from environment variable or config.
  */
 export function resolveBackend(configBackend?: string): StorageBackend {
   const envBackend = process.env.MEMGRAPHRAG_BACKEND;
   const raw = envBackend ?? configBackend ?? 'sqlite';
-  if (raw !== 'sqlite' && raw !== 'ladybug' && raw !== 'neo4j') {
-    throw new Error(`Invalid storage backend: "${raw}". Must be "sqlite", "ladybug", or "neo4j".`);
+  if (raw !== 'sqlite' && raw !== 'ladybug' && raw !== 'neo4j' && raw !== 'aira-graphdb') {
+    throw new Error(
+      `Invalid storage backend: "${raw}". Must be "sqlite", "ladybug", "neo4j", or "aira-graphdb".`,
+    );
   }
   return raw;
 }
