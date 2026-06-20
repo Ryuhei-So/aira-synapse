@@ -15,6 +15,7 @@ export interface Neo4jConnectionOptions {
   readonly username: string;  // neo4j
   readonly password: string;
   readonly database?: string; // default: neo4j
+  readonly vectorDimensions?: number; // default: 3072
 }
 
 export interface INeo4jConnectionPool {
@@ -59,14 +60,15 @@ const SCHEMA_CYPHER = [
   'CREATE INDEX passage_doc IF NOT EXISTS FOR (n:PassageNode) ON (n.corpus_id, n.document_id)',
 ] as const;
 
-// Vector index (Neo4j 5.11+)
-const VECTOR_INDEX_CYPHER =
-  `CREATE VECTOR INDEX vector_idx IF NOT EXISTS
+// Vector index creation uses configured dimensions (default 3072)
+function buildVectorIndexCypher(dimensions: number): string {
+  return `CREATE VECTOR INDEX vector_idx IF NOT EXISTS
    FOR (n:VectorEntry) ON (n.vec)
    OPTIONS {indexConfig: {
-     \`vector.dimensions\`: 3072,
+     \`vector.dimensions\`: ${dimensions},
      \`vector.similarity_function\`: 'cosine'
    }}`;
+}
 
 // Full-text indexes
 const FTS_INDEX_CYPHER = [
@@ -81,9 +83,11 @@ export class Neo4jConnectionPool implements INeo4jConnectionPool {
   private readonly events = new EventEmitter();
   private initialized = false;
   private readonly database: string;
+  private readonly vectorDimensions: number;
 
   constructor(private readonly opts: Neo4jConnectionOptions) {
     this.database = opts.database ?? 'neo4j';
+    this.vectorDimensions = opts.vectorDimensions ?? 3072;
   }
 
   async init(): Promise<void> {
@@ -105,7 +109,7 @@ export class Neo4jConnectionPool implements INeo4jConnectionPool {
       }
       // Vector index
       try {
-        await session.run(VECTOR_INDEX_CYPHER);
+        await session.run(buildVectorIndexCypher(this.vectorDimensions));
       } catch {
         // May already exist or vector not supported
       }
@@ -173,7 +177,7 @@ export class Neo4jConnectionPool implements INeo4jConnectionPool {
     // Drop + recreate only if search results are stale.
     try {
       await this.execute('DROP INDEX vector_idx IF EXISTS');
-      await this.execute(VECTOR_INDEX_CYPHER);
+      await this.execute(buildVectorIndexCypher(this.vectorDimensions));
     } catch {
       // Ignore errors
     }

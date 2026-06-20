@@ -50,9 +50,10 @@ const POOL_SIZE = 3;
 
 const EXTENSIONS = ['vector', 'fts', 'algo'] as const;
 
-const SCHEMA_DDL = [
-  // --- Node Tables ---
-  `CREATE NODE TABLE IF NOT EXISTS GNode(
+function buildSchemaDDL(vectorDimensions: number): readonly string[] {
+  return [
+    // --- Node Tables ---
+    `CREATE NODE TABLE IF NOT EXISTS GNode(
     pk STRING PRIMARY KEY,
     corpus_id STRING,
     node_id STRING,
@@ -61,22 +62,22 @@ const SCHEMA_DDL = [
     ref_json STRING,
     document_ids STRING
   )`,
-  `CREATE NODE TABLE IF NOT EXISTS VectorEntry(
+    `CREATE NODE TABLE IF NOT EXISTS VectorEntry(
     pk STRING PRIMARY KEY,
     corpus_id STRING,
     entry_id STRING,
     namespace STRING,
-    vec FLOAT[3072],
+    vec FLOAT[${vectorDimensions}],
     meta_json STRING,
     document_ids STRING
   )`,
-  `CREATE NODE TABLE IF NOT EXISTS SchemaNode(
+    `CREATE NODE TABLE IF NOT EXISTS SchemaNode(
     pk STRING PRIMARY KEY,
     corpus_id STRING,
     schema_id STRING,
     data_json STRING
   )`,
-  `CREATE NODE TABLE IF NOT EXISTS FactNode(
+    `CREATE NODE TABLE IF NOT EXISTS FactNode(
     pk STRING PRIMARY KEY,
     corpus_id STRING,
     fact_id STRING,
@@ -85,7 +86,7 @@ const SCHEMA_DDL = [
     passage_id STRING,
     data_json STRING
   )`,
-  `CREATE NODE TABLE IF NOT EXISTS PassageNode(
+    `CREATE NODE TABLE IF NOT EXISTS PassageNode(
     pk STRING PRIMARY KEY,
     corpus_id STRING,
     passage_id STRING,
@@ -93,15 +94,15 @@ const SCHEMA_DDL = [
     text STRING,
     data_json STRING
   )`,
-  `CREATE NODE TABLE IF NOT EXISTS JobCheckpointNode(
+    `CREATE NODE TABLE IF NOT EXISTS JobCheckpointNode(
     pk STRING PRIMARY KEY,
     job_id STRING,
     corpus_id STRING,
     processed_doc_ids STRING,
     updated_at STRING
   )`,
-  // --- Rel Tables ---
-  `CREATE REL TABLE IF NOT EXISTS GEdge(
+    // --- Rel Tables ---
+    `CREATE REL TABLE IF NOT EXISTS GEdge(
     FROM GNode TO GNode,
     edge_id STRING,
     corpus_id STRING,
@@ -110,7 +111,8 @@ const SCHEMA_DDL = [
     bridge_kind STRING,
     document_ids STRING
   )`,
-] as const;
+  ] as const;
+}
 
 const INDEX_DDL = [
   // HNSW vector index on VectorEntry
@@ -128,8 +130,11 @@ export class LadybugConnectionPool implements ILadybugConnectionPool {
   private waiting: Array<(conn: RawConnection) => void> = [];
   private readonly events = new EventEmitter();
   private initialized = false;
+  private readonly vectorDimensions: number;
 
-  constructor(private readonly dbPath: string) {}
+  constructor(private readonly dbPath: string, vectorDimensions?: number) {
+    this.vectorDimensions = vectorDimensions ?? 3072;
+  }
 
   /** Open the database, load extensions, create schema if needed. */
   async init(): Promise<void> {
@@ -149,7 +154,7 @@ export class LadybugConnectionPool implements ILadybugConnectionPool {
 
     // Create schema (idempotent via IF NOT EXISTS)
     const conn = this.available[0]!;
-    for (const ddl of SCHEMA_DDL) {
+    for (const ddl of buildSchemaDDL(this.vectorDimensions)) {
       await conn.query(ddl);
     }
 

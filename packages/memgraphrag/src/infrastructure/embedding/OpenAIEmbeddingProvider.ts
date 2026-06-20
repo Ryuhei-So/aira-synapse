@@ -14,6 +14,7 @@ interface OpenAIEmbeddingProviderOptions {
   readonly apiKey: string;
   readonly model: string;
   readonly baseUrl?: string;
+  readonly dimensions?: number;
 }
 
 interface EmbeddingApiResponse {
@@ -31,12 +32,14 @@ export class OpenAIEmbeddingProvider implements IEmbeddingProvider {
   private readonly apiKey: string;
   private readonly model: string;
   private readonly baseUrl: string;
+  private readonly dimensions: number | undefined;
   private readonly cache = new Map<string, readonly number[]>();
 
   public constructor(options: OpenAIEmbeddingProviderOptions) {
     this.apiKey = options.apiKey;
     this.model = options.model;
     this.baseUrl = (options.baseUrl ?? 'https://api.openai.com/v1').replace(/\/$/, '');
+    this.dimensions = options.dimensions;
   }
 
   public async embed(request: EmbeddingRequest): Promise<EmbeddingResponse> {
@@ -76,7 +79,11 @@ export class OpenAIEmbeddingProvider implements IEmbeddingProvider {
               'Content-Type': 'application/json',
               Authorization: `Bearer ${this.apiKey}`,
             },
-            body: JSON.stringify({ model, input: missingTexts }),
+            body: JSON.stringify({
+              model,
+              input: missingTexts,
+              ...(this.dimensions ? { dimensions: this.dimensions } : {}),
+            }),
           });
 
           if (!response.ok) {

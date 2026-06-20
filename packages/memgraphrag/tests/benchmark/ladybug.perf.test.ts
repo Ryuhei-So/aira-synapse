@@ -78,7 +78,7 @@ describe('LadybugDB Performance Validation (T-14)', () => {
 
   beforeAll(async () => {
     dir = mkdtempSync(join(tmpdir(), 'ladybug-perf-'));
-    pool = new LadybugConnectionPool(join(dir, 'perf.lbug'));
+    pool = new LadybugConnectionPool(join(dir, 'perf.lbug'), 1536);
     await pool.init();
     graphStore = new LadybugGraphStore(pool);
     vectorIndex = new LadybugVectorIndex(pool);

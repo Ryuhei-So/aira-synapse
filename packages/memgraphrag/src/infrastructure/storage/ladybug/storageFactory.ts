@@ -19,6 +19,7 @@ export interface StorageAdapters {
 
 export interface LadybugStorageOptions {
   readonly dbPath: string;
+  readonly vectorDimensions?: number;
 }
 
 export interface SQLiteStorageOptions {
@@ -31,6 +32,7 @@ export interface Neo4jStorageOptions {
   readonly username: string;
   readonly password: string;
   readonly database?: string;
+  readonly vectorDimensions?: number;
 }
 
 export interface StorageOptions {
@@ -53,7 +55,7 @@ export async function createLadybugAdapters(
   const { LadybugGraphProjection } = await import('./LadybugGraphProjection.js');
   const { LadybugLexicalRetriever } = await import('./LadybugLexicalRetriever.js');
 
-  const pool = new LadybugConnectionPool(opts.dbPath);
+  const pool = new LadybugConnectionPool(opts.dbPath, opts.vectorDimensions);
   await pool.init();
 
   const graphStore = new LadybugGraphStore(pool);

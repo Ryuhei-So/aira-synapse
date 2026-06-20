@@ -20,7 +20,7 @@ describe('LadybugConnectionPool', () => {
   function createPool(): LadybugConnectionPool {
     const dir = createTempDir();
     dirs.push(dir);
-    const pool = new LadybugConnectionPool(join(dir, 'test.lbug'));
+    const pool = new LadybugConnectionPool(join(dir, 'test.lbug'), 1536);
     pools.push(pool);
     return pool;
   }

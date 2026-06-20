@@ -36,6 +36,7 @@ providers:
   embedding:
     backend: openai
     model: text-embedding-3-large
+    dimensions: 3072
     cache_dir: ./data/memgraphrag/cache/embeddings
   nlp:
     backend: python-sidecar

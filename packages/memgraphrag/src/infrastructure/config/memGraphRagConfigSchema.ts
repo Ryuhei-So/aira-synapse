@@ -58,6 +58,7 @@ export interface LLMProviderConfig {
 export interface EmbeddingProviderConfig {
   readonly backend: string;
   readonly model: string;
+  readonly dimensions?: number;
   readonly cacheDir: string;
 }
 
@@ -81,6 +82,7 @@ export interface Neo4jConfig {
   readonly username: string;
   readonly password: string;
   readonly database?: string;
+  readonly vectorDimensions?: number;
 }
 
 export interface StorageConfig {

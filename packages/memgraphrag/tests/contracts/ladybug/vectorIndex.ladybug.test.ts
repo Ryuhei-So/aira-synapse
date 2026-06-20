@@ -17,7 +17,7 @@ describe('IVectorIndex contract — LadybugVectorIndex', () => {
 
   beforeAll(async () => {
     dir = mkdtempSync(join(tmpdir(), 'ladybug-vi-'));
-    pool = new LadybugConnectionPool(join(dir, 'test.lbug'));
+    pool = new LadybugConnectionPool(join(dir, 'test.lbug'), 1536);
     await pool.init();
   });
 
