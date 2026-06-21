@@ -14,6 +14,25 @@ interface RpcError {
   message: string;
 }
 
+/** Result from the cypher_query RPC. Discriminated by variant key. */
+export type CypherQueryResult =
+  | { Nodes: CypherNode[] }
+  | { Table: { columns: string[]; rows: CypherValue[][] } }
+  | 'Ack';
+
+export interface CypherNode {
+  id: string;
+  labels: string[];
+  properties: Record<string, CypherValue>;
+}
+
+export type CypherValue =
+  | { String: string }
+  | { Int64: number }
+  | { Float64: number }
+  | { Bool: boolean }
+  | null;
+
 interface RpcResponse {
   id: number;
   ok: boolean;
@@ -118,6 +137,24 @@ export class AiraGraphDbNativeClient {
     if (!this.child.killed) {
       this.child.kill('SIGTERM');
     }
+  }
+
+  /**
+   * Execute a Cypher query against the graph store.
+   * @param query - Cypher query string
+   * @param corpusId - optional corpus filter
+   * @param dialect - 'openCypher9' (default) or 'neo4jCompat'
+   */
+  public async cypherQuery(
+    query: string,
+    corpusId?: string,
+    dialect: 'openCypher9' | 'neo4jCompat' = 'openCypher9',
+  ): Promise<CypherQueryResult> {
+    return this.request<CypherQueryResult>('cypher_query', {
+      query,
+      ...(corpusId != null && { corpusId }),
+      dialect,
+    });
   }
 
   private onLine(line: string): void {
