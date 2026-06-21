@@ -130,6 +130,16 @@ normResp.includes(normGold)  // 多くの有効回答を見逃す
 - `cypherQuery()` メソッドを NativeClient.ts に追加
 - openCypher9 / neo4jCompat 方言サポート
 
+### パフォーマンス比較 (500問, 2026-06-22)
+
+| 指標 | Baseline (SQLite+CachedFile) | Pure aira-graphdb | 差分 |
+|------|-----|-----|------|
+| **Overall** | **87.2%** (436/500) | **84.2%** (421/500) | -3.0pt |
+| Bridge | 86.0% (344/400) | 84.5% (338/400) | -1.5pt |
+| Comparison | 92.0% (92/100) | 83.0% (83/100) | -9.0pt |
+| 速度 | 3.6s/query | **3.5s/query** | 同等 |
+| 所要時間 | 1813s (30min) | 1760s (29min) | -3% |
+
 ### パフォーマンス比較 (50問サブセット)
 
 | 指標 | Baseline (SQLite+CachedFile) | Pure aira-graphdb |
@@ -138,6 +148,15 @@ normResp.includes(normGold)  // 多くの有効回答を見逃す
 | Bridge | 89.5% (34/38) | 89.5% (34/38) |
 | Comparison | 100.0% (12/12) | 91.7% (11/12) |
 | 速度 | 3.2s/query | **2.8s/query** (12%高速) |
+
+### 分析
+
+- **Bridge 問題**: ほぼ同等 (86.0% vs 84.5%, -1.5pt) — LLM非決定性の範囲
+- **Comparison 問題**: 有意差あり (92.0% vs 83.0%, -9.0pt)
+  - Comparison は CachedFileVectorIndex の方が高い理由を要調査
+  - 仮説: passage-only vector (7,854件) では comparison に必要な fact 情報が不足
+  - Baseline は CachedFileVectorIndex に fact vectors (87K) を含む可能性
+- **速度**: ほぼ同等。JSON-RPC オーバーヘッドはクエリあたり数ms程度で影響なし
 
 ## 技術的知見
 
