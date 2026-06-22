@@ -14,7 +14,9 @@ MemGraphRAG の HotpotQA ベンチマークにおいて、Neo4j → aira-graphdb
 | 2026-06-21 | aira-graphdb v2 re-ingest | 55% (hybrid) | ID ミスマッチ問題 |
 | 2026-06-21 | ID 問題修正後 (hybrid) | 64.8% | スコアリング関数バグ残存 |
 | 2026-06-21 | スコアリング修正 | 74.0% → **84.6%** | normalizedContains 修正で +10.6pt |
-| 2026-06-22 | v0.2.2 + Cypher RPC | **90.0%** (45/50) | Baseline 92.0% とほぼ同等 |
+| 2026-06-22 | v0.2.2 + Cypher RPC (50q) | **90.0%** (45/50) | Baseline 92.0% とほぼ同等 |
+| 2026-06-22 | v0.2.2 Full 500q | **84.2%** (421/500) | Bridge 84.5%, Comparison 83.0% |
+| 2026-06-23 | v0.3.0 Full 500q | **84.2%** (421/500) | vblob/WAL は精度に影響なし（期待通り） |
 
 ## Phase 1: Neo4j ベースライン確立 (88.4%)
 
@@ -184,10 +186,51 @@ normResp.includes(normGold)  // 多くの有効回答を見逃す
 | Vectors (3072 dim × f64) | ~4.0GB | 98,230 records |
 | Memory (facts+passages+schemas) | ~0.5GB | 127K entries |
 
+## Phase 5: v0.3.0 アップデート検証
+
+### v0.3.0 の変更点
+1. **vblob (バイナリベクトルフォーマット)**: f64 配列を外部 `.vblob` ファイルに分離 → DB サイズ 1/3 削減
+2. **HNSW インデックス**: brute-force → HNSW で大規模ベクトルのスケーリング改善
+3. **WAL (増分永続化)**: 全データ flush → 差分書き込み
+4. **Cypher パーサー拡張**: relationship type filter (`-[r:TYPE]->`) サポート
+5. **Entity vectors**: 追加ベクトルによる精度向上の可能性
+
+### v0.3.0 ベンチマーク結果 (500q)
+
+| 指標 | v0.2.2 | v0.3.0 | 差分 |
+|------|--------|--------|------|
+| Overall | 84.2% (421/500) | **84.2% (421/500)** | ±0.0pt |
+| Bridge | 84.5% (338/400) | **84.5% (338/400)** | ±0.0pt |
+| Comparison | 83.0% (83/100) | **83.0% (83/100)** | ±0.0pt |
+| 速度 | 3.5s/q | 3.6s/q | ほぼ同等 |
+
+### 分析
+
+- **精度**: 完全に同一結果。vblob/HNSW/WAL はストレージとパフォーマンスの最適化であり、精度に影響しない（期待通り）
+- **速度**: v0.3.0 はわずかに遅い (+0.1s/q) が LLM 応答時間の揺らぎ範囲内
+- **vblob 移行**: ベンチマークは読み取り専用のため `.vblob` ファイルは未生成。書き込み操作（persist）時に自動移行される
+- **結論**: v0.3.0 は精度を維持しつつ、ストレージ効率を改善。精度向上には別のアプローチが必要
+
+## 全体比較表
+
+| 構成 | Overall | Bridge | Comparison | 速度 | 備考 |
+|------|---------|--------|------------|------|------|
+| Neo4j baseline | **88.4%** | 87.5% | **92.0%** | — | 外部 Docker 依存 |
+| Baseline hybrid | 87.2% | 87.0% | 88.0% | 3.6s/q | CachedFile + SQLite + agdb graph |
+| Pure agdb v0.2.2 | 84.2% | 84.5% | 83.0% | 3.5s/q | 単一 DB 統合 |
+| Pure agdb v0.3.0 | 84.2% | 84.5% | 83.0% | 3.6s/q | vblob/WAL 最適化 |
+
+### 精度ギャップの要因
+
+- **Baseline vs Pure agdb (-3.0pt)**: 主に Comparison 問題で -5.0pt の差
+  - CachedFileVectorIndex に fact vectors (87K) が含まれ、比較に必要な詳細情報が取得可能
+  - Pure agdb は passage-only vectors (7,854件) のみで検索
+- **Neo4j vs Pure agdb (-4.2pt)**: Neo4j baseline は CachedFile + SQLite 構成を含む
+  - 同じ fact vector 問題に加え、Neo4j グラフの traversal 特性の違い
+
 ## 今後の改善候補
 
-1. **バイナリベクトルフォーマット**: JSON 内の f64 配列を外部バイナリに分離 → DB 1/3 に削減可能
-2. **HNSW インデックス**: brute-force → HNSW で 100K+ vectors のスケーリング改善
-3. **Cypher パーサー拡張**: relationship type filter (`-[r:TYPE]->`) サポート
-4. **増分永続化**: 全データ flush ではなく WAL ベースの差分書き込み
-5. **Entity vectors 追加**: 残り 64K vectors を追加で更なる精度向上の可能性
+1. **Fact vectors の追加**: passage-only (7,854) → passage+fact (95K) で Comparison 精度向上が期待される
+2. **Entity vectors**: 残り 64K vectors を追加で更なる精度向上の可能性
+3. **vblob 活用**: v0.3.0 のバイナリフォーマットで 6GB → ~2GB に削減（要 persist 実行）
+4. **Cypher `:TYPE` フィルタ**: relationship type 指定による精密なグラフ検索
