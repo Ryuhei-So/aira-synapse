@@ -11,6 +11,7 @@ export interface QueryFeatureFlags {
   readonly enableAliasHints: boolean;
   readonly enableSubQueryDecomposition: boolean;
   readonly enableComparisonVerification: boolean;
+  readonly enableMultiHopReasoning: boolean;
 }
 
 export interface EvalFeatureFlags {
@@ -34,6 +35,7 @@ export const DEFAULT_QUERY_FLAGS: Readonly<QueryFeatureFlags> = {
   enableAliasHints: false,
   enableSubQueryDecomposition: false,
   enableComparisonVerification: false,
+  enableMultiHopReasoning: false,
 };
 
 export const DEFAULT_EVAL_FLAGS: Readonly<EvalFeatureFlags> = {
@@ -52,6 +54,7 @@ export const V15_BASELINE_QUERY_FLAGS: Readonly<QueryFeatureFlags> = {
   enableAliasHints: false,
   enableSubQueryDecomposition: false,
   enableComparisonVerification: false,
+  enableMultiHopReasoning: false,
 };
 
 /** All v0.3.0 query flags enabled — for ablation and future tuning. */
@@ -62,4 +65,5 @@ export const V03_ALL_ON_QUERY_FLAGS: Readonly<QueryFeatureFlags> = {
   enableAliasHints: true,
   enableSubQueryDecomposition: true,
   enableComparisonVerification: true,
+  enableMultiHopReasoning: true,
 };

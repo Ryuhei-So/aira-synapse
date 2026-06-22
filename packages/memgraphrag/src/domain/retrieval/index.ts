@@ -19,3 +19,13 @@ export {
   type IPPR,
   type IContextBuilder,
 } from './ppr.js';
+
+export {
+  type QuestionType,
+  type MultiHopFallbackReason,
+  type Decomposition,
+  type HopResult,
+  type MultiHopResult,
+  type MultiHopOptions,
+  type IMultiHopReasoner,
+} from './multiHop.js';

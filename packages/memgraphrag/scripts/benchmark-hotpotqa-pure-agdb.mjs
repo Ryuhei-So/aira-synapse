@@ -21,6 +21,7 @@ import { SimpleNodeInitializer } from '../dist/application/query/SimpleNodeIniti
 import { SimplePPR } from '../dist/application/query/SimplePPR.js';
 import { SimpleContextBuilder } from '../dist/application/query/SimpleContextBuilder.js';
 import { ThesaurusExpansionPolicy } from '../dist/application/index.js';
+import { MultiHopReasoner } from '../dist/application/query/MultiHopReasoner.js';
 
 const BENCHMARK_DIR = resolve(process.cwd(), 'data/benchmark/hotpotqa');
 const BENCH_SIZE = process.env.BENCH_SIZE || '500';
@@ -203,6 +204,7 @@ async function main() {
   const HP_CTX = parseInt(process.env.HP_CTX || '3000');
   const HP_EFFORT = process.env.HP_EFFORT || 'high';
   const HP_VERBOSITY = process.env.HP_VERBOSITY || 'low';
+  const ENABLE_MULTI_HOP = process.argv.includes('--multi-hop') || process.env.MULTI_HOP === '1';
 
   const hyperParams = {
     teleportProbability: 0.5,
@@ -213,9 +215,21 @@ async function main() {
     verbosity: HP_VERBOSITY,
   };
 
+  const featureFlags = {
+    enableDictionaryInjection: false,
+    enableThesaurusExpansion: false,
+    enableHypernymExpansion: false,
+    enableAliasHints: false,
+    enableSubQueryDecomposition: false,
+    enableComparisonVerification: false,
+    enableMultiHopReasoning: ENABLE_MULTI_HOP,
+  };
+
   // GraphStore needed by VectorMemoryFilter (for getAdjacent)
   const { AiraGraphDbGraphStore } = await import('../dist/infrastructure/index.js');
   const graphStore = new AiraGraphDbGraphStore(agdbClient);
+
+  const multiHopReasoner = ENABLE_MULTI_HOP ? new MultiHopReasoner(llm) : undefined;
 
   const queryService = new DefaultQueryService({
     dictionary,
@@ -227,6 +241,8 @@ async function main() {
     contextBuilder: new SimpleContextBuilder(memoryStore),
     llm,
     hyperParams,
+    featureFlags,
+    multiHopReasoner,
   });
 
   const questions = JSON.parse(readFileSync(QUESTIONS_FILE, 'utf-8'));
@@ -235,6 +251,7 @@ async function main() {
   console.log(`  Memory: AiraGraphDbMemoryStore (113K facts, 9987 passages)`);
   console.log(`  Graph: AiraGraphDbGraphProjection (206K nodes)`);
   console.log(`  Dict/Thesaurus: SQLite`);
+  console.log(`  Multi-hop: ${ENABLE_MULTI_HOP ? 'ENABLED' : 'disabled'}`);
   console.log(`  HyperParams: hub=${HP_HUB} K=${HP_TOPK} M=${HP_TOPM} ctx=${HP_CTX} effort=${HP_EFFORT}`);
 
   const CONCURRENCY = parseInt(process.env.CONCURRENCY || '5');
@@ -257,7 +274,16 @@ async function main() {
           contextTokenLimit: HP_CTX,
         });
         const isCorrect = normalizedContains(result.response, q.answer);
-        return { question: q.question, answer: q.answer, response: result.response, correct: isCorrect, type: q.type };
+        return {
+          question: q.question, answer: q.answer, response: result.response, correct: isCorrect, type: q.type,
+          multiHop: result.metrics.multiHopEnabled ? {
+            questionType: result.metrics.questionType,
+            hop1Answer: result.metrics.hop1Answer,
+            hop2Answer: result.metrics.hop2Answer,
+            fallbackReason: result.metrics.multiHopFallbackReason,
+            latencyMs: result.metrics.multiHopLatencyMs,
+          } : undefined,
+        };
       } catch (err) {
         return { question: q.question, answer: q.answer, response: `ERROR: ${err.message}`, correct: false, type: q.type };
       }

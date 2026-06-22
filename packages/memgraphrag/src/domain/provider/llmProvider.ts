@@ -20,6 +20,8 @@ export interface TextGenerationRequest {
   readonly reasoningEffort?: ReasoningEffort;
   /** Output verbosity for reasoning models. Ignored for non-reasoning models. */
   readonly verbosity?: Verbosity;
+  /** AbortSignal for cancellation. When aborted, the provider should reject promptly. */
+  readonly signal?: AbortSignal;
 }
 
 export interface TextGenerationResponse {

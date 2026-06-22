@@ -126,6 +126,7 @@ export class OpenAILLMProvider implements ILLMProvider {
         method: 'POST',
         headers: this.buildHeaders(),
         body: JSON.stringify(payload),
+        signal: request.signal,
       });
 
       if (!apiResponse.ok) {
@@ -148,6 +149,7 @@ export class OpenAILLMProvider implements ILLMProvider {
           method: 'POST',
           headers: this.buildHeaders(),
           body: JSON.stringify(fallbackPayload),
+          signal: request.signal,
         });
         if (!apiResponse.ok) {
           const body = await apiResponse.text();

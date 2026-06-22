@@ -15,6 +15,7 @@ import type {
 import type { Fact } from '../../domain/memory/fact.js';
 import type { Passage } from '../../domain/memory/passage.js';
 import type { QueryFeatureFlags } from '../../domain/config/featureFlags.js';
+import type { IMultiHopReasoner } from '../../domain/retrieval/multiHop.js';
 import { DEFAULT_QUERY_FLAGS } from '../../domain/config/featureFlags.js';
 import { ThesaurusExpansionPolicy } from './ThesaurusExpansionPolicy.js';
 import { TemplateResponseGenerator } from './TemplateResponseGenerator.js';
@@ -56,6 +57,17 @@ export interface QueryMetrics {
   readonly hop2FactCount?: number;
   readonly comparisonVerified?: boolean;
   readonly totalLatencyMs?: number;
+  // Multi-hop reasoning additions (REQ-MH-009)
+  readonly multiHopEnabled?: boolean;
+  readonly questionType?: import('../../domain/retrieval/multiHop.js').QuestionType;
+  readonly hop1SubQuestion?: string;
+  readonly hop2SubQuestion?: string;
+  readonly hop1Answer?: string;
+  readonly hop2Answer?: string;
+  readonly hop1PassageIds?: readonly string[];
+  readonly hop2PassageIds?: readonly string[];
+  readonly multiHopFallbackReason?: import('../../domain/retrieval/multiHop.js').MultiHopFallbackReason;
+  readonly multiHopLatencyMs?: number;
 }
 
 export interface QueryResponse {
@@ -102,6 +114,7 @@ export interface QueryServiceDependencies {
   readonly featureFlags?: QueryFeatureFlags;
   readonly subQueryDecomposer?: SubQueryDecomposer;
   readonly comparisonVerifier?: ComparisonVerifier;
+  readonly multiHopReasoner?: IMultiHopReasoner;
 }
 
 function normalizeQueryText(text: string): string {
@@ -210,6 +223,87 @@ export class DefaultQueryService implements QueryService {
     let templateFallbackTriggered = false;
     let scVotes: string[] | undefined;
     let comparisonVerified: boolean | undefined;
+
+    // Multi-hop reasoning metrics
+    let multiHopEnabled: boolean | undefined;
+    let mhQuestionType: import('../../domain/retrieval/multiHop.js').QuestionType | undefined;
+    let mhHop1SubQuestion: string | undefined;
+    let mhHop2SubQuestion: string | undefined;
+    let mhHop1Answer: string | undefined;
+    let mhHop2Answer: string | undefined;
+    let mhHop1PassageIds: readonly string[] | undefined;
+    let mhHop2PassageIds: readonly string[] | undefined;
+    let mhFallbackReason: import('../../domain/retrieval/multiHop.js').MultiHopFallbackReason | undefined;
+    let mhLatencyMs: number | undefined;
+
+    // Multi-hop reasoning branch (before standard LLM)
+    if (this.flags.enableMultiHopReasoning && this.dependencies.multiHopReasoner && !isComparison) {
+      multiHopEnabled = true;
+      const passagesForMH = context.citedPassages.map((p) => ({
+        id: p.passageId,
+        text: p.text,
+      }));
+
+      const mhResult = await this.dependencies.multiHopReasoner.reason(
+        expandedRequest.text,
+        passagesForMH,
+      );
+
+      mhQuestionType = mhResult.questionType;
+      mhLatencyMs = mhResult.latencyMs;
+      llmInputTokens += mhResult.usage.inputTokens;
+      llmOutputTokens += mhResult.usage.outputTokens;
+
+      if (mhResult.hop1) {
+        mhHop1Answer = mhResult.hop1.answer;
+        mhHop1PassageIds = mhResult.hop1.passageIds;
+      }
+      if (mhResult.hop2) {
+        mhHop2Answer = mhResult.hop2.answer;
+        mhHop2PassageIds = mhResult.hop2.passageIds;
+      }
+      if (mhResult.fallbackReason) {
+        mhFallbackReason = mhResult.fallbackReason;
+      }
+
+      // If multi-hop succeeded (bridge question, no fallback), use its answer
+      if (!mhResult.fellBack && mhResult.answer) {
+        const totalLatencyMs = Date.now() - startTime;
+        return {
+          response: mhResult.answer,
+          citations: toCitations(context),
+          entities,
+          metrics: {
+            dictionaryMatchCount: matches.length,
+            expandedTerms: candidates.expandedTerms,
+            fallbackTriggered: candidates.fallbackRequired || initialVector.fallbackTriggered,
+            pprIterations: ranking.iterations,
+            pprConverged: ranking.converged,
+            citedPassageCount: context.citedPassages.length,
+            llmInputTokens,
+            llmOutputTokens,
+            dictionaryHintCount: dictionaryHintCount > 0 ? dictionaryHintCount : undefined,
+            aliasHintCount: context.metadata?.aliasHintCount,
+            thesaurusExpandedTerms: expansion.expandedTerms.length > 0 ? expansion.expandedTerms : undefined,
+            subQueryDecomposed: subQueryDecomposed || undefined,
+            hop1FactCount: hop1FactCount > 0 ? hop1FactCount : undefined,
+            hop2FactCount: hop2FactCount > 0 ? hop2FactCount : undefined,
+            totalLatencyMs,
+            multiHopEnabled,
+            questionType: mhQuestionType,
+            hop1SubQuestion: mhHop1SubQuestion,
+            hop2SubQuestion: mhHop2SubQuestion,
+            hop1Answer: mhHop1Answer,
+            hop2Answer: mhHop2Answer,
+            hop1PassageIds: mhHop1PassageIds,
+            hop2PassageIds: mhHop2PassageIds,
+            multiHopFallbackReason: mhFallbackReason,
+            multiHopLatencyMs: mhLatencyMs,
+          },
+        };
+      }
+      // Multi-hop fell back — continue to standard LLM path
+    }
 
     try {
       const prompt = isComparison
@@ -338,6 +432,16 @@ Reasoning and answer:`;
         hop2FactCount: hop2FactCount > 0 ? hop2FactCount : undefined,
         comparisonVerified: comparisonVerified,
         totalLatencyMs,
+        multiHopEnabled,
+        questionType: mhQuestionType,
+        hop1SubQuestion: mhHop1SubQuestion,
+        hop2SubQuestion: mhHop2SubQuestion,
+        hop1Answer: mhHop1Answer,
+        hop2Answer: mhHop2Answer,
+        hop1PassageIds: mhHop1PassageIds,
+        hop2PassageIds: mhHop2PassageIds,
+        multiHopFallbackReason: mhFallbackReason,
+        multiHopLatencyMs: mhLatencyMs,
       },
     };
   }
