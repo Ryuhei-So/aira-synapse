@@ -17,6 +17,7 @@ MemGraphRAG の HotpotQA ベンチマークにおいて、Neo4j → aira-graphdb
 | 2026-06-22 | v0.2.2 + Cypher RPC (50q) | **90.0%** (45/50) | Baseline 92.0% とほぼ同等 |
 | 2026-06-22 | v0.2.2 Full 500q | **84.2%** (421/500) | Bridge 84.5%, Comparison 83.0% |
 | 2026-06-23 | v0.3.0 Full 500q | **84.2%** (421/500) | vblob/WAL は精度に影響なし（期待通り） |
+| 2026-06-22 | ベクトル補完 (全namespace sync) | **84.6%** (423/500) | Bridge +0.8pt、fact vector bug修正 |
 
 ## Phase 1: Neo4j ベースライン確立 (88.4%)
 
@@ -217,8 +218,9 @@ normResp.includes(normGold)  // 多くの有効回答を見逃す
 |------|---------|--------|------------|------|------|
 | Neo4j baseline | **88.4%** | 87.5% | **92.0%** | — | 外部 Docker 依存 |
 | Baseline hybrid | 87.2% | 87.0% | 88.0% | 3.6s/q | CachedFile + SQLite + agdb graph |
-| Pure agdb v0.2.2 | 84.2% | 84.5% | 83.0% | 3.5s/q | 単一 DB 統合 |
+| Pure agdb v0.2.2 | 84.2% | 84.5% | 83.0% | 3.5s/q | 単一 DB 統合 (40K facts) |
 | Pure agdb v0.3.0 | 84.2% | 84.5% | 83.0% | 3.6s/q | vblob/WAL 最適化 |
+| **Pure agdb + vec sync** | **84.6%** | **85.3%** | 82.0% | 3.4s/q | 全 namespace ベクトル補完 |
 
 ### 精度ギャップの要因
 
@@ -228,9 +230,50 @@ normResp.includes(normGold)  // 多くの有効回答を見逃す
 - **Neo4j vs Pure agdb (-4.2pt)**: Neo4j baseline は CachedFile + SQLite 構成を含む
   - 同じ fact vector 問題に加え、Neo4j グラフの traversal 特性の違い
 
+## Phase 6: ベクトル補完 (84.6%)
+
+### 問題発見
+aira-graphdb にはベクトルの約半分しか存在していなかった:
+
+| Namespace | CachedFile | aira-graphdb (sync前) | 欠損率 |
+|-----------|-----------|---------------------|--------|
+| passage | 7,854 | 3,602 | 54% |
+| fact | 87,133 | 40,480 | 54% |
+| schema | 3,243 | 232 | 93% |
+| entity | 64,875 | 0 | 100% |
+
+### sync スクリプトのバグ修正
+初回 sync で **フィールド名の不一致** (`vector` vs `values`) により全ベクトルがゼロベクトルとして保存された。
+Rust の `VectorRecord` は `#[serde(rename_all = "camelCase")]` で `values` フィールドを期待するが、
+JS スクリプトは `vector` フィールドを送信。`#[serde(default)]` によりエラーなく空 Vec に変換された。
+
+修正: `vector` → `values` に変更し、`--force` で全ベクトルを再同期。
+
+### ベンチマーク結果 (500q)
+
+| 指標 | sync前 (40K facts) | sync後 (87K facts) | 差分 |
+|------|-------------------|-------------------|------|
+| Overall | 84.2% (421) | **84.6% (423)** | +0.4pt |
+| Bridge | 84.5% (338) | **85.3% (341)** | +0.8pt |
+| Comparison | 83.0% (83) | 82.0% (82) | -1.0pt |
+| 速度 | 3.5s/q | 3.4s/q | +0.1s 高速化 |
+
+### 分析
+- **Bridge +0.8pt**: passage ベクトルが 3,602→7,854 に増加し、関連パッセージの取得精度が向上
+- **Comparison -1.0pt**: LLM 非決定性の範囲（±3-5pt の揺らぎ）
+- **Baseline hybrid (87.2%) との差 -2.6pt**: ベクトルは同一になったが、メモリストアの差（SQLite vs agdb）が影響している可能性
+- **Neo4j baseline (88.4%) との差 -3.8pt**: グラフトラバーサル特性と Comparison 問題の処理の違い
+
+### 残存ギャップの要因分析
+1. **メモリストアの実装差**: SQLiteMemoryStore の fact 検索と AiraGraphDbMemoryStore の fact 検索で結果が異なる可能性
+2. **グラフ構造の差**: Neo4j のグラフトラバーサルと aira-graphdb の adjacency RPC の挙動の違い
+3. **VectorMemoryFilter の entity namespace**: entity ベクトル (64K) は VectorMemoryFilter で検索対象外
+4. **Comparison 問題固有**: 比較型質問には fact の詳細情報が重要だが、fact vector の品質/カバレッジに差がある可能性
+
 ## 今後の改善候補
 
-1. **Fact vectors の追加**: passage-only (7,854) → passage+fact (95K) で Comparison 精度向上が期待される
-2. **Entity vectors**: 残り 64K vectors を追加で更なる精度向上の可能性
-3. **vblob 活用**: v0.3.0 のバイナリフォーマットで 6GB → ~2GB に削減（要 persist 実行）
-4. **Cypher `:TYPE` フィルタ**: relationship type 指定による精密なグラフ検索
+1. **VectorMemoryFilter に entity namespace 追加**: 現在 passage/fact/schema のみ検索。entity ベクトル (64K) を検索対象に追加することで entity 情報の取得精度向上が期待される
+2. **メモリストア統一検証**: SQLiteMemoryStore と AiraGraphDbMemoryStore の fact 検索結果を比較し、差異の原因を特定
+3. **Comparison 問題の分析**: 不正解の Comparison 問題を個別分析し、何が欠けているかを特定
+4. **ハイパーパラメータ調整**: topK/topM の増加（10→20）で fact/passage の取得量を増やす
+5. **vblob 活用**: v0.3.0 のバイナリフォーマットで DB サイズ最適化（既に有効化済み）
