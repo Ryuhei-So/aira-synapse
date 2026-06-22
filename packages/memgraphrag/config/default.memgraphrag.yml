@@ -38,6 +38,8 @@ providers:
     model: text-embedding-3-large
     dimensions: 3072
     cache_dir: ./data/memgraphrag/cache/embeddings
+    batch_mode: false          # true: OpenAI Batch API (50% cost, 24h SLA), false: real-time
+    batch_output_dir: ./data/memgraphrag/batch  # batch request/response files
   nlp:
     backend: python-sidecar
     python_command: python3

@@ -12,6 +12,7 @@ export { CachedGraphProjection } from './storage/cached/CachedGraphProjection.js
 export { CachedFileVectorIndex } from './storage/cached/CachedFileVectorIndex.js';
 export { OpenAILLMProvider } from './llm/OpenAILLMProvider.js';
 export { OpenAIEmbeddingProvider } from './embedding/OpenAIEmbeddingProvider.js';
+export { BatchEmbeddingProvider } from './embedding/BatchEmbeddingProvider.js';
 export { RegexExtractor } from './nlp/RegexExtractor.js';
 export { PythonSidecarExtractor } from './nlp/PythonSidecarExtractor.js';
 export {
@@ -35,3 +36,12 @@ export { Neo4jVectorIndex } from './storage/neo4j/Neo4jVectorIndex.js';
 export { Neo4jMemoryStore } from './storage/neo4j/Neo4jMemoryStore.js';
 export { Neo4jGraphProjection } from './storage/neo4j/Neo4jGraphProjection.js';
 export { Neo4jLexicalRetriever } from './storage/neo4j/Neo4jLexicalRetriever.js';
+export { AiraGraphDbNativeClient } from './storage/aira-graphdb/NativeClient.js';
+export {
+  AiraGraphDbGraphStore,
+  AiraGraphDbVectorIndex,
+  AiraGraphDbMemoryStore,
+  AiraGraphDbGraphProjection,
+  AiraGraphDbLexicalRetriever,
+} from './storage/aira-graphdb/AiraGraphDbAdapters.js';
+export { createAiraGraphDbAdapters, type AiraGraphDbStorageOptions } from './storage/ladybug/storageFactory.js';

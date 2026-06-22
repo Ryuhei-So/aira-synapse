@@ -4,7 +4,7 @@
 
 [![Node.js](https://img.shields.io/badge/Node.js-20%2B-green)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3%2B-blue)](https://www.typescriptlang.org/)
-[![Tests](https://img.shields.io/badge/tests-353%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-527%20passing-brightgreen)]()
 [![License](https://img.shields.io/badge/license-MIT-blue)]()
 
 > An implementation of the KDD 2026 paper [*"MemGraphRAG: Memory-based Multi-Agent System for Graph Retrieval-Augmented Generation"*](https://arxiv.org/abs/2606.00610) — enhanced with domain-specific term dictionaries, thesaurus normalization, and Japanese NLP support via GiNZA.
@@ -196,6 +196,32 @@ Runs as an MCP stdio server for [AIRA](https://github.com/nahisaho/aira). AIRA's
 
 All commands support `--json` for machine-readable output.
 
+### aira-graphdb Direct Tools (for High-Performance Indexing)
+
+Standalone scripts for direct document ingestion into [aira-graphdb](https://github.com/nahisaho/aira-graphdb) (Rust-based graph store). Bypasses SQLite for maximum throughput.
+
+```bash
+# Ingest markdown documents
+node scripts/agdb-ingest.mjs <corpus-dir> --corpus <id> [--db <path>] \
+     [--skip-vector] [--skip-lexical] [--concurrency <N>]
+
+# Rebuild vector or lexical index
+node scripts/agdb-index.mjs --corpus <id> --type <vector|lexical> [--db <path>]
+```
+
+**Requirements:**
+- `npm run build` (scripts import from `dist/`)
+- `OPENAI_API_KEY` environment variable
+- `AIRA_GRAPHDB_NATIVE_CMD` pointing to the aira-graphdb binary (or auto-discovered from `../aira-graphdb/target/release/`)
+
+**Features:**
+- Document-scoped entity nodes (safe re-ingest without data loss)
+- O_EXCL exclusive locking (concurrent access prevention)
+- Memory snapshot merge (load → filter → concat → save)
+- Batch mode for embeddings (50% cost reduction via OpenAI Batch API)
+
+See [DES-AGDB-TOOL-001](../../spec/DES-AGDB-TOOL-001.md) for design details.
+
 ## ⚙️ Configuration Reference
 
 All configuration is managed through a single YAML file (`memgraphrag.yml`) and optional environment variable overrides. See [`config/default.memgraphrag.yml`](config/default.memgraphrag.yml) for defaults.
@@ -236,6 +262,8 @@ providers:
     backend: openai
     model: text-embedding-3-large
     cache_dir: ./data/memgraphrag/cache/embeddings
+    batch_mode: false                    # true: OpenAI Batch API (50% off, 24h SLA)
+    batch_output_dir: ./data/memgraphrag/batch
 ```
 
 #### Azure OpenAI
@@ -332,9 +360,18 @@ storage:
   auto_migrate: true                  # auto-run schema migrations on startup
 ```
 
-When `backend: aira-graphdb` is selected, runtime metadata still uses `sqlite_path`,
-and graph/vector/memory data is persisted via native Rust sidecar to
-`<sqlite_path>.aira-graphdb.json`.
+#### aira-graphdb Backend
+
+[aira-graphdb](https://github.com/nahisaho/aira-graphdb) is a high-performance Rust sidecar with native vector search and Cypher query support.
+
+```yaml
+storage:
+  backend: aira-graphdb
+  aira_graphdb:
+    db_path: ./data/memgraphrag/corpus.agdb   # JSON persistence file
+```
+
+For direct document ingestion (bypassing MCP/CLI), use the `agdb-ingest.mjs` and `agdb-index.mjs` scripts. EN HotpotQA benchmark: **89.6% accuracy** (vs Neo4j 88.4%).
 
 ### Security & Logging
 
@@ -362,6 +399,8 @@ Environment variables override YAML config values.
 | `MEMGRAPHRAG_NLP_BACKEND` | `providers.nlp.backend` in config |
 | `MEMGRAPHRAG_LOG_LEVEL` | `logging.level` in config |
 | `MEMGRAPHRAG_BACKEND` | storage backend selection (`sqlite` / `ladybug` / `neo4j` / `aira-graphdb`) |
+| `AIRA_GRAPHDB_DB_PATH` | Default DB path for agdb-ingest/agdb-index scripts |
+| `AIRA_GRAPHDB_NATIVE_CMD` | Path to aira-graphdb-native binary |
 
 ## 🏗️ Project Structure
 
@@ -384,9 +423,9 @@ packages/memgraphrag/
 │   │   ├── runtime/         # DegradedModePolicy
 │   │   └── observability/   # MetricsCollector
 │   ├── infrastructure/      # Adapters
-│   │   ├── storage/         # SQLite stores, FileVectorIndex, migrations
+│   │   ├── storage/         # SQLite, Neo4j, aira-graphdb stores, migrations
 │   │   ├── llm/             # OpenAILLMProvider
-│   │   ├── embedding/       # OpenAIEmbeddingProvider
+│   │   ├── embedding/       # OpenAIEmbeddingProvider, BatchEmbeddingProvider
 │   │   ├── nlp/             # PythonSidecarExtractor, RegexExtractor
 │   │   ├── api/             # SemanticScholarClient/Cache
 │   │   ├── retrieval/       # Bm25LexicalRetriever
@@ -398,9 +437,10 @@ packages/memgraphrag/
 │       ├── cli/             # Commander.js commands
 │       └── runtime/         # MemGraphRagRuntime (DI composition root)
 ├── python/sidecar/          # Python NLP sidecar (scispaCy + GiNZA)
+├── scripts/                 # Batch tools (agdb-ingest, agdb-index, benchmarks)
 ├── config/                  # Default YAML config
 ├── docs/                    # AIRA MCP template and documentation
-└── tests/                   # 61 test files, 353 tests
+└── tests/                   # 88 test files, 527 tests
     ├── unit/
     ├── integration/
     ├── contract/

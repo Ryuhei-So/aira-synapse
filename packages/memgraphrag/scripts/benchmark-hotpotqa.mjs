@@ -20,7 +20,8 @@ import {
   OpenAILLMProvider, OpenAIEmbeddingProvider,
   CachedMemoryStore, CachedGraphProjection, CachedFileVectorIndex,
   openDatabase,
-  Neo4jConnectionPool, Neo4jGraphStore, Neo4jGraphProjection,
+  AiraGraphDbNativeClient, AiraGraphDbGraphStore, AiraGraphDbGraphProjection,
+  AiraGraphDbVectorIndex, AiraGraphDbMemoryStore, AiraGraphDbLexicalRetriever,
 } from '../dist/infrastructure/index.js';
 import { DefaultQueryService } from '../dist/application/query/QueryService.js';
 import { VectorMemoryFilter } from '../dist/application/query/VectorMemoryFilter.js';
@@ -220,7 +221,7 @@ function normalizedContains(response, goldAnswer) {
 }
 
 async function createBenchmarkRuntime() {
-  const configPath = resolve(process.cwd(), 'packages/memgraphrag/config/default.memgraphrag.yml');
+  const configPath = resolve(process.cwd(), 'config/default.memgraphrag.yml');
   const baseConfig = loadMemGraphRagConfig(configPath);
   
   // Override storage paths and NLP backend for benchmark
@@ -305,8 +306,9 @@ async function indexCorpus(runtime) {
 }
 
 async function evaluateQueries(runtime, corpusId) {
+  console.log('[benchmark] evaluateQueries starting, corpusId:', corpusId);
   // Build cached query infrastructure directly (bypass runtime's per-query reconstruction)
-  const configPath = resolve(process.cwd(), 'packages/memgraphrag/config/default.memgraphrag.yml');
+  const configPath = resolve(process.cwd(), 'config/default.memgraphrag.yml');
   const baseConfig = loadMemGraphRagConfig(configPath);
   const config = resolveConfigFromEnv(baseConfig);
   const apiKey = resolveApiKey(config.providers.apiKeyFile);
@@ -315,16 +317,13 @@ async function evaluateQueries(runtime, corpusId) {
   const vectorsDir = resolve(process.cwd(), 'data/benchmark/hotpotqa/vectors');
   const db = openDatabase(sqlitePath);
 
-  // Neo4j for graph operations
-  const neo4jPool = new Neo4jConnectionPool({
-    uri: process.env.NEO4J_URI || 'bolt://localhost:7687',
-    username: process.env.NEO4J_USER || 'neo4j',
-    password: process.env.NEO4J_PASS || 'memgraphrag',
-    database: process.env.NEO4J_DB || 'neo4j',
-  });
-  await neo4jPool.init();
-  const graphStore = new Neo4jGraphStore(neo4jPool);
-  const graphProjection = new CachedGraphProjection(new Neo4jGraphProjection(graphStore));
+  // aira-graphdb for graph operations
+  const agdbPath = resolve(process.cwd(), 'data/benchmark/hotpotqa/hotpotqa.agdb');
+  const agdbClient = new AiraGraphDbNativeClient(agdbPath);
+  // Warm up the sidecar with a ping
+  await agdbClient.request('ping');
+  const graphStore = new AiraGraphDbGraphStore(agdbClient);
+  const graphProjection = new CachedGraphProjection(new AiraGraphDbGraphProjection(agdbClient));
   const memoryStore = new CachedMemoryStore(new SQLiteMemoryStore(db));
   const vectorIndex = new CachedFileVectorIndex(vectorsDir);
   const dictionary = new SQLiteLexiconStore(db, corpusId);
@@ -374,7 +373,7 @@ async function evaluateQueries(runtime, corpusId) {
 
   console.log(`\n=== Evaluating ${questions.length} queries ===`);
   console.log(`  HyperParams: tp=${HP_TP} hub=${HP_HUB} K=${HP_TOPK} M=${HP_TOPM} ctx=${HP_CTX} effort=${HP_EFFORT} verbosity=${HP_VERBOSITY}`);
-  console.log(`  Backend: Neo4j + CachedFileVectorIndex + CachedGraphProjection + CachedMemoryStore`);
+  console.log(`  Backend: aira-graphdb + CachedFileVectorIndex + CachedGraphProjection + CachedMemoryStore`);
 
   const results = new Array(questions.length);
   let correct = 0;
@@ -411,6 +410,7 @@ async function evaluateQueries(runtime, corpusId) {
           contextPreview: result.citations.map(c => c.snippet?.substring(0, 100)).slice(0, 5),
         };
       } catch (error) {
+        if (total < 3) console.error(`  [ERROR] ${q.id}: ${error.message}`);
         return {
           id: q.id,
           question: q.question,
@@ -474,6 +474,7 @@ async function evaluateQueries(runtime, corpusId) {
   console.log(`\nResults saved to: ${RESULTS_FILE}`);
 
   db.close();
+  await agdbClient.close();
   return summary;
 }
 

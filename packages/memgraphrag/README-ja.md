@@ -4,7 +4,7 @@
 
 [![Node.js](https://img.shields.io/badge/Node.js-20%2B-green)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3%2B-blue)](https://www.typescriptlang.org/)
-[![Tests](https://img.shields.io/badge/tests-353%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-527%20passing-brightgreen)]()
 [![License](https://img.shields.io/badge/license-MIT-blue)]()
 
 > KDD 2026 論文 [*"MemGraphRAG: Memory-based Multi-Agent System for Graph Retrieval-Augmented Generation"*](https://arxiv.org/abs/2606.00610) の実装。専門用語辞書・シソーラス正規化・GiNZA による日本語 NLP を統合し、高精度な学術文献 GraphRAG を実現する。
@@ -196,6 +196,30 @@ MemGraphRAG は用途に応じて 2 つのインターフェースを提供す�
 
 全コマンドで `--json` オプションにより機械可読な JSON 出力に対応。
 
+### aira-graphdb 直接ツール（高速インデクシング用）
+
+[aira-graphdb](https://github.com/nahisaho/aira-graphdb)（Rust製グラフストア）へ直接ドキュメントを登録するスクリプト。SQLite を経由せず最大スループットを実現。
+
+```bash
+# ドキュメント登録
+node scripts/agdb-ingest.mjs <corpus-dir> --corpus <id> [--db <path>] \
+     [--skip-vector] [--skip-lexical] [--concurrency <N>]
+
+# ベクトル/レキシカルインデクス再構築
+node scripts/agdb-index.mjs --corpus <id> --type <vector|lexical> [--db <path>]
+```
+
+**必要環境:**
+- `npm run build`（スクリプトは `dist/` からインポート）
+- `OPENAI_API_KEY` 環境変数
+- `AIRA_GRAPHDB_NATIVE_CMD` で aira-graphdb バイナリを指定（または `../aira-graphdb/target/release/` から自動検出）
+
+**機能:**
+- ドキュメントスコープのエンティティノード（再登録時のデータ損失防止）
+- O_EXCL 排他ロック（同時アクセス防止）
+- メモリスナップショットのマージ（load → filter → concat → save）
+- エンベディングのバッチモード（OpenAI Batch API で 50% コスト削減）
+
 ## ⚙️ 設定リファレンス
 
 すべての設定は単一の YAML ファイル（`memgraphrag.yml`）と環境変数オーバーライドで管理する。デフォルト値は [`config/default.memgraphrag.yml`](config/default.memgraphrag.yml) を参照。
@@ -236,6 +260,8 @@ providers:
     backend: openai
     model: text-embedding-3-large
     cache_dir: ./data/memgraphrag/cache/embeddings
+    batch_mode: false                    # true: OpenAI Batch API（50%コスト削減、24時間SLA）
+    batch_output_dir: ./data/memgraphrag/batch
 ```
 
 #### Azure OpenAI
@@ -394,7 +420,10 @@ packages/memgraphrag/
 ├── python/sidecar/          # Python NLP サイドカー（scispaCy + GiNZA）
 ├── config/                  # デフォルト YAML 設定
 ├── docs/                    # AIRA MCP テンプレートとドキュメント
-└── tests/                   # 61 テストファイル、353 テスト
+├── scripts/                 # バッチツール（agdb-ingest, agdb-index, ベンチマーク）
+├── config/                  # デフォルト YAML 設定
+├── docs/                    # AIRA MCP テンプレートとドキュメント
+└── tests/                   # 88 テストファイル、527 テスト
     ├── unit/                # ユニットテスト
     ├── integration/         # 統合テスト
     ├── contract/            # コントラクトテスト

@@ -75,6 +75,10 @@ export class AiraGraphDbVectorIndex implements IVectorIndex {
   public async deleteByDocument(corpusId: string, documentId: string): Promise<void> {
     await this.client.request('vector_delete_by_document', { corpusId, documentId });
   }
+
+  public async deleteByCorpus(corpusId: string): Promise<{ deleted: number }> {
+    return this.client.request('vector_delete_by_corpus', { corpusId });
+  }
 }
 
 export class AiraGraphDbMemoryStore implements IMemoryStore {
@@ -134,5 +138,22 @@ export class AiraGraphDbLexicalRetriever implements ILexicalRetriever {
 
   public async deleteByDocument(corpusId: string, documentId: string): Promise<void> {
     await this.client.request('lexical_delete_by_document', { corpusId, documentId });
+  }
+
+  public async deleteByCorpus(corpusId: string): Promise<{ deleted: number }> {
+    return this.client.request('lexical_delete_by_corpus', { corpusId });
+  }
+}
+
+export class AiraGraphDbIndexStatusManager {
+  public constructor(private readonly client: AiraGraphDbNativeClient) {}
+
+  public async save(corpusId: string, indexType: 'vector' | 'lexical', status: string): Promise<void> {
+    await this.client.request('index_status_save', { corpusId, indexType, status });
+  }
+
+  public async load(corpusId: string, indexType: 'vector' | 'lexical'): Promise<string | null> {
+    const result = await this.client.request<{ status: string | null }>('index_status_load', { corpusId, indexType });
+    return result.status;
   }
 }
