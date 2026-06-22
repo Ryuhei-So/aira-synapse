@@ -39,7 +39,7 @@ describe('validateGrounding', () => {
     { id: 'p2', text: 'London is the capital of England and the United Kingdom.' },
   ];
 
-  it('should validate grounded answer', () => {
+  it('should validate grounded answer (exact substring)', () => {
     const result = validateGrounding('Paris', passages);
     expect(result.grounded).toBe(true);
     expect(result.passageIds).toContain('p1');
@@ -56,10 +56,20 @@ describe('validateGrounding', () => {
     expect(result.grounded).toBe(false);
   });
 
-  it('should match multiple passages', () => {
-    const result = validateGrounding('capital', passages);
+  it('should match via word-overlap for multi-word answers', () => {
+    // "capital France" has both words in p1 ("Paris is the capital of France")
+    const result = validateGrounding('capital of France', passages);
     expect(result.grounded).toBe(true);
-    expect(result.passageIds).toHaveLength(2);
+  });
+
+  it('should match significant words for short multi-word answers', () => {
+    // "Lost Highway" — both words (≥4 chars) appear in passage
+    const result = validateGrounding('Lost Highway', [
+      { id: 'p1', text: 'Paris is the capital' },
+      { id: 'p2', text: 'Lost Highway Records is a Nashville-based record label' },
+    ]);
+    expect(result.grounded).toBe(true);
+    expect(result.passageIds).toContain('p2');
   });
 
   it('should use word-boundary for short answers (≤3 chars)', () => {

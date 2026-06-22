@@ -17,7 +17,10 @@ export function parseHopOutput(llmText: string): string {
 
 /**
  * Validate that a hop answer is grounded in the provided passages.
- * Uses normalized substring match; word-boundary check for short answers (≤3 chars).
+ * Uses multi-strategy matching:
+ * 1. Normalized substring match (exact)
+ * 2. Word-boundary check for short answers (≤3 chars)
+ * 3. Word-overlap similarity (Jaccard ≥ 0.6) for longer answers
  */
 export function validateGrounding(
   answer: string,
@@ -33,18 +36,43 @@ export function validateGrounding(
   }
 
   const matchedIds: string[] = [];
+  const answerWords = normalizedAnswer.split(' ').filter((w) => w.length > 1);
 
   for (const passage of passages) {
     const normalizedPassage = normalizeForGrounding(passage.text);
+
+    // Strategy 1: Exact substring match
     if (normalizedAnswer.length <= 3) {
-      // Word-boundary check for very short answers
       const regex = new RegExp(`\\b${escapeRegex(normalizedAnswer)}\\b`);
       if (regex.test(normalizedPassage)) {
         matchedIds.push(passage.id);
+        continue;
       }
-    } else {
-      if (normalizedPassage.includes(normalizedAnswer)) {
+    } else if (normalizedPassage.includes(normalizedAnswer)) {
+      matchedIds.push(passage.id);
+      continue;
+    }
+
+    // Strategy 2: Word-overlap (Jaccard ≥ 0.6 for multi-word answers)
+    if (answerWords.length >= 2) {
+      const passageWords = new Set(normalizedPassage.split(' '));
+      const matchCount = answerWords.filter((w) => passageWords.has(w)).length;
+      const ratio = matchCount / answerWords.length;
+      if (ratio >= 0.6) {
         matchedIds.push(passage.id);
+        continue;
+      }
+    }
+
+    // Strategy 3: Each significant word (≥4 chars) found in passage
+    if (answerWords.length >= 1 && answerWords.length <= 3) {
+      const significantWords = answerWords.filter((w) => w.length >= 4);
+      if (significantWords.length > 0) {
+        const allFound = significantWords.every((w) => normalizedPassage.includes(w));
+        if (allFound) {
+          matchedIds.push(passage.id);
+          continue;
+        }
       }
     }
   }

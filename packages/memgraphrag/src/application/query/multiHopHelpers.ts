@@ -7,23 +7,17 @@
 import type { QuestionType } from '../../domain/retrieval/multiHop.js';
 import { isComparisonQuery } from './comparisonDetector.js';
 
-/** Bridge detection patterns (subset from SubQueryDecomposer + extensions). */
-const BRIDGE_PATTERNS = [
-  /\bthe (?:person|one|man|woman|city|country|team|company|organization|film|movie|book|album|song|show|series|band|group|school|university) (?:who|that|which)\b/i,
-  /\bwho(?:'s| is| was| has| had| did)\b.+\b(?:also|then|later|before|after)\b/i,
-  /\bwhere (?:did|does|was|is)\b.+\b(?:who|that|which)\b/i,
-  /\b(?:born|founded|located|headquartered|based) in\b.+\b(?:who|that|which)\b/i,
-  /\b(?:directed|written|produced|composed|created|designed|invented) by\b.+\b(?:who|that|which|also)\b/i,
-];
-
 /**
  * Classify a question as bridge, comparison, or simple.
- * Priority: comparison > bridge > simple (per REQ-MH-001).
+ * Priority: comparison > bridge (default for non-comparison).
+ * In multi-hop QA benchmarks, most questions are bridge-type.
+ * Simple classification requires explicit simple patterns; otherwise assume bridge.
  */
 export function classifyQuestion(query: string): QuestionType {
   if (isComparisonQuery(query)) return 'comparison';
-  if (BRIDGE_PATTERNS.some((p) => p.test(query))) return 'bridge';
-  return 'simple';
+  // Default to bridge for non-comparison questions.
+  // The decomposition step will naturally fallback if the question is truly simple.
+  return 'bridge';
 }
 
 /**

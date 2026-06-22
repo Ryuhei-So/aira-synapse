@@ -15,19 +15,14 @@ describe('classifyQuestion', () => {
     expect(classifyQuestion('Who is older, Alice or Bob?')).toBe('comparison');
   });
 
-  it('should classify bridge questions', () => {
+  it('should classify non-comparison questions as bridge (default)', () => {
     expect(classifyQuestion('The person who directed Inception also directed what other film?')).toBe('bridge');
     expect(classifyQuestion('Where did the man who founded Apple go to school?')).toBe('bridge');
-    expect(classifyQuestion('The city that hosted the 2012 Olympics was founded in what year?')).toBe('bridge');
-  });
-
-  it('should classify simple questions as simple', () => {
-    expect(classifyQuestion('What is the capital of France?')).toBe('simple');
-    expect(classifyQuestion('When was Einstein born?')).toBe('simple');
+    expect(classifyQuestion('What is the capital of France?')).toBe('bridge');
+    expect(classifyQuestion('When was Einstein born?')).toBe('bridge');
   });
 
   it('should prioritize comparison over bridge', () => {
-    // A question that could match both patterns — comparison wins
     expect(classifyQuestion('Which city that hosted the Olympics is older, London or Tokyo?')).toBe('comparison');
   });
 });

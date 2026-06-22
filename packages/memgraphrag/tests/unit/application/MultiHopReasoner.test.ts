@@ -35,12 +35,21 @@ describe('MultiHopReasoner', () => {
       expect(result.usage.inputTokens).toBe(0);
     });
 
-    it('should skip multi-hop for simple questions', async () => {
-      const llm = createMockLLM(['should not be called']);
+    it('should apply multi-hop for non-comparison questions (all treated as bridge)', async () => {
+      // Simple questions now also go through multi-hop pipeline
+      const llm = createMockLLM([
+        JSON.stringify({
+          hop1SubQuestion: 'What is the capital of France?',
+          hop2SubQuestion: 'When was {hop1Answer} built?',
+        }),
+        'FINAL: Paris',
+        'FINAL: unknown',
+      ]);
       const reasoner = new MultiHopReasoner(llm);
       const result = await reasoner.reason('What is the capital of France?', passages);
-      expect(result.questionType).toBe('simple');
-      expect(result.fellBack).toBe(true);
+      expect(result.questionType).toBe('bridge');
+      // It will attempt multi-hop (LLM will be called)
+      expect((llm.generate as any).mock.calls.length).toBeGreaterThan(0);
     });
   });
 
