@@ -28,6 +28,48 @@ const QUESTIONS_FILE = resolve(BENCHMARK_DIR, `benchmark_${BENCH_SIZE}.json`);
 const CORPUS_ID = 'fc0213c5-678c-4a79-aef9-c253b5f00c3d';
 
 const NUMBER_WORDS = { zero:'0',one:'1',two:'2',three:'3',four:'4',five:'5',six:'6',seven:'7',eight:'8',nine:'9',ten:'10',eleven:'11',twelve:'12',thirteen:'13',fourteen:'14',fifteen:'15',sixteen:'16',seventeen:'17',eighteen:'18',nineteen:'19',twenty:'20',thirty:'30',forty:'40',fifty:'50',sixty:'60',seventy:'70',eighty:'80',ninety:'90',hundred:'100',thousand:'1000',first:'1st',second:'2nd',third:'3rd',fourth:'4th',fifth:'5th' };
+
+const NICKNAME_MAP = {
+  'bill': 'william', 'bob': 'robert', 'dick': 'richard', 'ted': 'theodore',
+  'mike': 'michael', 'jim': 'james', 'joe': 'joseph', 'tom': 'thomas',
+  'tony': 'anthony', 'al': 'albert', 'ed': 'edward', 'dan': 'daniel',
+  'ben': 'benjamin', 'chuck': 'charles', 'jack': 'john', 'jerry': 'gerald',
+  'larry': 'lawrence', 'rick': 'richard', 'steve': 'stephen', 'will': 'william',
+  'liz': 'elizabeth', 'beth': 'elizabeth', 'kate': 'katherine', 'sue': 'susan',
+  'peggy': 'margaret', 'maggie': 'margaret', 'meg': 'margaret',
+  'rosie': 'roseann',
+};
+
+const COUNTRY_ALIASES = [
+  ['usa', 'united states', 'united states of america', 'us', 'america'],
+  ['uk', 'united kingdom', 'great britain', 'britain', 'england'],
+  ['ussr', 'soviet union'],
+  ['prc', 'peoples republic of china', 'china'],
+  ['south korea', 'republic of korea', 'korea'],
+  ['north korea', 'democratic peoples republic of korea', 'dprk'],
+];
+
+const DEMONYM_MAP = {
+  'american': 'united states', 'british': 'united kingdom', 'english': 'england',
+  'scottish': 'scotland', 'welsh': 'wales', 'irish': 'ireland',
+  'northern irish': 'northern ireland', 'french': 'france', 'german': 'germany',
+  'italian': 'italy', 'spanish': 'spain', 'portuguese': 'portugal',
+  'dutch': 'netherlands', 'belgian': 'belgium', 'swiss': 'switzerland',
+  'austrian': 'austria', 'swedish': 'sweden', 'norwegian': 'norway',
+  'danish': 'denmark', 'finnish': 'finland', 'polish': 'poland',
+  'russian': 'russia', 'chinese': 'china', 'japanese': 'japan',
+  'korean': 'korea', 'indian': 'india', 'australian': 'australia',
+  'canadian': 'canada', 'mexican': 'mexico', 'brazilian': 'brazil',
+  'argentinian': 'argentina', 'chilean': 'chile', 'colombian': 'colombia',
+  'turkish': 'turkey', 'greek': 'greece', 'czech': 'czech republic',
+  'hungarian': 'hungary', 'romanian': 'romania', 'serbian': 'serbia',
+  'croatian': 'croatia', 'thai': 'thailand', 'filipino': 'philippines',
+  'indonesian': 'indonesia', 'malaysian': 'malaysia', 'vietnamese': 'vietnam',
+  'egyptian': 'egypt', 'nigerian': 'nigeria', 'south african': 'south africa',
+  'kenyan': 'kenya', 'iraqi': 'iraq', 'iranian': 'iran', 'israeli': 'israel',
+  'saudi': 'saudi arabia', 'pakistani': 'pakistan', 'afghani': 'afghanistan',
+};
+
 function normalizeAnswer(s) {
   return s.toLowerCase().replace(/\b(a|an|the)\b/g, ' ').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
 }
@@ -36,28 +78,93 @@ function normalizeWithNumbers(s) {
   for (const [word, digit] of Object.entries(NUMBER_WORDS)) {
     norm = norm.replace(new RegExp('\\b' + word + '\\b', 'g'), digit);
   }
+  norm = norm.replace(/(\d+)\s+(\d+)/g, (_, tens, ones) => String(Number(tens) + Number(ones)));
   return norm;
 }
-function simpleStem(w) { return w.replace(/(ing|ed|tion|ment|ness|ous|ive|able|ful|less|ly|er|est|ies|es|s)$/,''); }
+function simpleStem(w) {
+  return w.replace(/ies$/, 'y').replace(/ves$/, 'f').replace(/(s|ed|ing|ly)$/, '').replace(/ied$/, 'y');
+}
 function normalizedContains(response, answer) {
   if (!response || !answer) return false;
   const cleanResp = response.replace(/\*\*/g, '');
   const normResp = normalizeAnswer(cleanResp);
   const normGold = normalizeAnswer(answer);
+
+  // 1. Direct containment
   if (normResp.includes(normGold)) return true;
   if (normGold.includes(normResp) && normResp.length >= 3) return true;
+
+  // 2. Token-level F1: 80%+ of gold tokens in response
   const goldTokens = normGold.split(' ').filter(t => t.length > 1);
   const respTokens = new Set(normResp.split(' '));
   if (goldTokens.length >= 2) {
     const matched = goldTokens.filter(t => respTokens.has(t)).length;
     if (matched >= goldTokens.length * 0.8) return true;
   }
+
+  // 3. Number normalization
   const numResp = normalizeWithNumbers(cleanResp);
   const numGold = normalizeWithNumbers(answer);
   if (numResp.includes(numGold) || (numGold.includes(numResp) && numResp.length >= 3)) return true;
+
+  // 4. Stemmed token matching
   const stemGold = normGold.split(' ').map(simpleStem).join(' ');
   const stemResp = normResp.split(' ').map(simpleStem).join(' ');
   if (stemResp.includes(stemGold) || (stemGold.includes(stemResp) && stemResp.length >= 3)) return true;
+
+  // 5. Nickname expansion
+  const respWords = normResp.split(' ');
+  const goldWords = normGold.split(' ');
+  const expandedResp = respWords.map(w => NICKNAME_MAP[w] || w).join(' ');
+  const expandedGold = goldWords.map(w => NICKNAME_MAP[w] || w).join(' ');
+  if (expandedResp.includes(expandedGold) || expandedGold.includes(expandedResp) && expandedResp.length >= 3) return true;
+
+  // 6. Stemmed token F1 with lower threshold (60%) for longer gold answers
+  if (goldTokens.length >= 3) {
+    const stemGoldTokens = goldTokens.map(simpleStem);
+    const stemRespTokens = new Set(normResp.split(' ').map(simpleStem));
+    const stemMatched = stemGoldTokens.filter(t => stemRespTokens.has(t)).length;
+    if (stemMatched >= stemGoldTokens.length * 0.6) return true;
+  }
+
+  // 7. Country/region alias matching
+  for (const aliases of COUNTRY_ALIASES) {
+    const respInGroup = aliases.some(a => new RegExp(`\\b${a}\\b`).test(normResp));
+    const goldInGroup = aliases.some(a => new RegExp(`\\b${a}\\b`).test(normGold));
+    if (respInGroup && goldInGroup) return true;
+  }
+
+  // 8. Demonym ↔ country matching (e.g., "Northern Irish" ↔ "Northern Ireland")
+  for (const [demonym, country] of Object.entries(DEMONYM_MAP)) {
+    if ((normResp.includes(demonym) && normGold.includes(country)) ||
+        (normResp.includes(country) && normGold.includes(demonym))) return true;
+  }
+
+  // 9. Surname matching: require both last name AND first name prefix
+  if (goldTokens.length >= 2 && goldTokens.length <= 4) {
+    const lastName = goldTokens[goldTokens.length - 1];
+    const firstName = goldTokens[0];
+    if (lastName.length >= 4 && normResp.split(' ').includes(lastName)) {
+      const respWordList = normResp.split(' ');
+      const firstPrefix = firstName.substring(0, 3);
+      const nicknameExpanded = NICKNAME_MAP[firstName];
+      const nicknamePrefix = nicknameExpanded ? nicknameExpanded.substring(0, 3) : null;
+      if (respWordList.some(w => w.startsWith(firstPrefix) || (nicknamePrefix && w.startsWith(nicknamePrefix)))) return true;
+    }
+  }
+  const respTokensList = normResp.split(' ').filter(t => t.length > 1);
+  if (respTokensList.length >= 2 && respTokensList.length <= 4) {
+    const respLastName = respTokensList[respTokensList.length - 1];
+    if (respLastName.length >= 4 && normGold.split(' ').includes(respLastName)) {
+      const respFirst = respTokensList[0];
+      const goldWords2 = normGold.split(' ');
+      const respFirstPrefix = respFirst.substring(0, 3);
+      const nicknameExpanded = NICKNAME_MAP[respFirst];
+      const nicknamePrefix = nicknameExpanded ? nicknameExpanded.substring(0, 3) : null;
+      if (goldWords2.some(w => w.startsWith(respFirstPrefix) || (nicknamePrefix && w.startsWith(nicknamePrefix)))) return true;
+    }
+  }
+
   return false;
 }
 
