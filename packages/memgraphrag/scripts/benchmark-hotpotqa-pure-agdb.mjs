@@ -17,6 +17,7 @@ import {
 } from '../dist/infrastructure/index.js';
 import { DefaultQueryService } from '../dist/application/query/QueryService.js';
 import { VectorMemoryFilter } from '../dist/application/query/VectorMemoryFilter.js';
+import { HybridMemoryFilter } from '../dist/application/query/HybridMemoryFilter.js';
 import { SimpleNodeInitializer } from '../dist/application/query/SimpleNodeInitializer.js';
 import { SimplePPR } from '../dist/application/query/SimplePPR.js';
 import { SimpleContextBuilder } from '../dist/application/query/SimpleContextBuilder.js';
@@ -329,6 +330,7 @@ async function main() {
   const HP_EFFORT = process.env.HP_EFFORT || 'high';
   const HP_VERBOSITY = process.env.HP_VERBOSITY || 'low';
   const ENABLE_MULTI_HOP = process.argv.includes('--multi-hop') || process.env.MULTI_HOP === '1';
+  const ENABLE_HYBRID = process.argv.includes('--hybrid') || process.env.HYBRID === '1';
 
   const hyperParams = {
     teleportProbability: 0.5,
@@ -350,15 +352,22 @@ async function main() {
   };
 
   // GraphStore needed by VectorMemoryFilter (for getAdjacent)
-  const { AiraGraphDbGraphStore } = await import('../dist/infrastructure/index.js');
+  const { AiraGraphDbGraphStore, AiraGraphDbLexicalRetriever } = await import('../dist/infrastructure/index.js');
   const graphStore = new AiraGraphDbGraphStore(agdbClient);
 
+  // Lexical retriever for hybrid mode
+  const lexicalRetriever = new AiraGraphDbLexicalRetriever(agdbClient);
+
   const multiHopReasoner = ENABLE_MULTI_HOP ? new MultiHopReasoner(llm) : undefined;
+
+  const memoryFilter = ENABLE_HYBRID
+    ? new HybridMemoryFilter(embedding, vectorIndex, memoryStore, lexicalRetriever, graphStore)
+    : new VectorMemoryFilter(embedding, vectorIndex, memoryStore, graphStore);
 
   const queryService = new DefaultQueryService({
     dictionary,
     expansionPolicy: new ThesaurusExpansionPolicy(thesaurus),
-    memoryFilter: new VectorMemoryFilter(embedding, vectorIndex, memoryStore, graphStore),
+    memoryFilter,
     nodeInitializer: new SimpleNodeInitializer(memoryStore),
     ppr: new SimplePPR(HP_HUB),
     projection: graphProjection,
@@ -376,6 +385,7 @@ async function main() {
   console.log(`  Graph: AiraGraphDbGraphProjection (206K nodes)`);
   console.log(`  Dict/Thesaurus: SQLite`);
   console.log(`  Multi-hop: ${ENABLE_MULTI_HOP ? 'ENABLED' : 'disabled'}`);
+  console.log(`  Hybrid (Vector+BM25): ${ENABLE_HYBRID ? 'ENABLED' : 'disabled'}`);
   console.log(`  HyperParams: hub=${HP_HUB} K=${HP_TOPK} M=${HP_TOPM} ctx=${HP_CTX} effort=${HP_EFFORT}`);
 
   const CONCURRENCY = parseInt(process.env.CONCURRENCY || '5');
