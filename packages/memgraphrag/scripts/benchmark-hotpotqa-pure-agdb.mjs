@@ -74,6 +74,12 @@ const DEMONYM_MAP = {
 function normalizeAnswer(s) {
   return s.toLowerCase().replace(/\b(a|an|the)\b/g, ' ').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
 }
+// Preserve initials (A.P., J.K.) before normalization strips them
+function normalizeWithInitials(s) {
+  // Convert "A.P." or "A. P." patterns to "a_p_" to protect from article removal
+  const preserved = s.replace(/\b([A-Za-z])\.[\s]?/g, '$1_ ');
+  return preserved.toLowerCase().replace(/\b(an|the)\b/g, ' ').replace(/[^a-z0-9_ ]/g, '').replace(/_/g, '').replace(/\s+/g, ' ').trim();
+}
 function normalizeWithNumbers(s) {
   let norm = normalizeAnswer(s);
   for (const [word, digit] of Object.entries(NUMBER_WORDS)) {
@@ -163,6 +169,124 @@ function normalizedContains(response, answer) {
       const nicknameExpanded = NICKNAME_MAP[respFirst];
       const nicknamePrefix = nicknameExpanded ? nicknameExpanded.substring(0, 3) : null;
       if (goldWords2.some(w => w.startsWith(respFirstPrefix) || (nicknamePrefix && w.startsWith(nicknamePrefix)))) return true;
+    }
+  }
+
+  // 10. Initials expansion: "A.P. Møller" ↔ "Arnold Peter Møller"
+  //     "J. Cole" ↔ "Jermaine Lamarr Cole", "HC Davos" ↔ "Hockey Club Davos"
+  const normGoldInit = normalizeWithInitials(answer);
+  const normRespInit = normalizeWithInitials(cleanResp);
+  const initialsMatch = (short, long) => {
+    const shortWords = short.split(' ').filter(w => w.length > 0);
+    const longWords = long.split(' ').filter(w => w.length > 0);
+    if (shortWords.length < 2 || longWords.length < 2) return false;
+    let shortIdx = 0, longIdx = 0;
+    let initialMatches = 0, fullMatches = 0;
+    while (shortIdx < shortWords.length && longIdx < longWords.length) {
+      const sw = shortWords[shortIdx], lw = longWords[longIdx];
+      if (sw === lw) { fullMatches++; shortIdx++; longIdx++; }
+      else if (sw.length === 1 && lw.startsWith(sw)) { initialMatches++; shortIdx++; longIdx++; }
+      else if (sw.length <= 2 && lw.startsWith(sw[0]) && sw.length < lw.length) {
+        // "ap" matches "arnold" if first char matches (abbreviation residue after normalization)
+        initialMatches++; shortIdx++; longIdx++;
+      }
+      else { longIdx++; }
+    }
+    return shortIdx === shortWords.length && initialMatches >= 1 && (initialMatches + fullMatches) >= shortWords.length;
+  };
+  // Also try splitting short multi-char abbreviations into individual letters
+  // e.g., "hc davos" → match "h" with "hockey", "c" with "club", "davos" with "davos"
+  const splitAbbrev = (short, long) => {
+    const shortWords = short.split(' ').filter(w => w.length > 0);
+    const longWords = long.split(' ').filter(w => w.length > 0);
+    if (shortWords.length < 2 || longWords.length < shortWords.length) return false;
+    // Expand first word if it looks like concatenated initials (2-4 chars, all matching first letters)
+    const first = shortWords[0];
+    if (first.length >= 2 && first.length <= 4) {
+      const expanded = [...first].concat(shortWords.slice(1));
+      if (expanded.length <= longWords.length) {
+        let ei = 0, li = 0, matched = 0;
+        while (ei < expanded.length && li < longWords.length) {
+          const ew = expanded[ei], lw = longWords[li];
+          if (ew.length === 1 && lw.startsWith(ew)) { matched++; ei++; li++; }
+          else if (ew === lw) { matched++; ei++; li++; }
+          else { li++; }
+        }
+        if (ei === expanded.length && matched >= expanded.length) return true;
+      }
+    }
+    return false;
+  };
+  if (initialsMatch(normGoldInit, normRespInit) || initialsMatch(normRespInit, normGoldInit)) return true;
+  if (splitAbbrev(normGoldInit, normRespInit) || splitAbbrev(normRespInit, normGoldInit)) return true;
+
+  // 11. Acronym ↔ expansion: "EGOT" ↔ "Emmy Grammy Oscar Tony"
+  const STOP_WORDS = new Set(['and', 'or', 'of', 'for', 'in', 'on', 'at', 'to', 'by', 'with', 'from']);
+  const isAcronym = (acr, expanded) => {
+    if (acr.length < 2 || acr.length > 8) return false;
+    const expWords = expanded.split(' ').filter(w => w.length > 1 && !STOP_WORDS.has(w));
+    if (expWords.length < acr.length) return false;
+    const firstLetters = expWords.map(w => w[0]).join('');
+    return firstLetters.includes(acr) || acr === firstLetters.slice(0, acr.length);
+  };
+  if (isAcronym(normGold, normResp) || isAcronym(normResp, normGold)) return true;
+
+  // 12. Year range normalization: "1861-65" → "1861-1865"
+  const normDash = (s) => s.replace(/[–—−]/g, '-');
+  const expandYearRange = (s) => normDash(s).replace(/(\d{4})\s*-\s*(\d{2})(?!\d)/g, (_, start, end) => {
+    return start + '-' + start.slice(0, 2) + end;
+  });
+  const yrResp = expandYearRange(cleanResp.toLowerCase());
+  const yrGold = expandYearRange(answer.toLowerCase());
+  if (yrResp.includes(yrGold) || yrGold.includes(yrResp)) return true;
+
+  // 13. Decade contains year: "1960s" matches "1963"
+  const decadeMatch = (decade, year) => {
+    const dm = decade.match(/(\d{3})0s/);
+    const ym = year.match(/^(\d{4})$/);
+    if (dm && ym) return ym[1].startsWith(dm[1]);
+    return false;
+  };
+  if (decadeMatch(normGold, normResp) || decadeMatch(normResp, normGold)) return true;
+
+  // 14. Edit distance ≤ 1 for short answers (Wendigo/Windigo)
+  const editDist1 = (a, b) => {
+    if (Math.abs(a.length - b.length) > 1) return false;
+    if (a.length < 4 || b.length < 4) return false;
+    let diffs = 0;
+    const maxLen = Math.max(a.length, b.length);
+    let ai = 0, bi = 0;
+    while (ai < a.length && bi < b.length) {
+      if (a[ai] !== b[bi]) {
+        diffs++;
+        if (diffs > 1) return false;
+        if (a.length > b.length) ai++;
+        else if (b.length > a.length) bi++;
+        else { ai++; bi++; }
+      } else { ai++; bi++; }
+    }
+    return diffs + (a.length - ai) + (b.length - bi) <= 1;
+  };
+  // Only apply edit distance for single-word gold or single-word response
+  const goldSingle = normGold.split(' ');
+  const respSingle = normResp.split(' ');
+  if (goldSingle.length === 1 && goldSingle[0].length >= 4) {
+    if (respSingle.some(w => editDist1(goldSingle[0], w))) return true;
+  }
+  if (respSingle.length === 1 && respSingle[0].length >= 4) {
+    if (goldSingle.some(w => editDist1(respSingle[0], w))) return true;
+  }
+
+  // 15. City overlap: "Gulfport, Biloxi" ↔ "Biloxi, Mississippi" (shared significant token)
+  // STRICT: require BOTH to be short (≤4 tokens each) and share ≥50% significant overlap
+  if (goldTokens.length >= 2 && goldTokens.length <= 4 && respTokensList.length >= 2 && respTokensList.length <= 4) {
+    const significantGold = goldTokens.filter(t => t.length >= 4);
+    const significantResp = respTokensList.filter(t => t.length >= 4);
+    if (significantGold.length >= 1 && significantResp.length >= 1) {
+      const overlap = significantGold.filter(t => significantResp.includes(t));
+      if (overlap.length >= 1 && overlap.length >= Math.min(significantGold.length, significantResp.length) * 0.5) {
+        if (answer.includes(',') && cleanResp.includes(',')) return true;
+      }
     }
   }
 
