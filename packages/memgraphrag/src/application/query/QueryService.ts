@@ -267,11 +267,9 @@ export class DefaultQueryService implements QueryService {
         mhFallbackReason = mhResult.fallbackReason;
       }
 
-      // Inject multi-hop reasoning as a hint for the main LLM (non-authoritative)
+      // Inject multi-hop reasoning as a hint ONLY when fully grounded (no fallback)
       if (!mhResult.fellBack && mhResult.answer) {
         multiHopHint = `\n\n[Chain-of-thought hint: intermediate reasoning suggests "${mhResult.hop1?.answer ?? ''}" leads to "${mhResult.answer}". Verify against context before using.]`;
-      } else if (mhResult.hop1?.answer) {
-        multiHopHint = `\n\n[Chain-of-thought hint: the bridge entity may be "${mhResult.hop1.answer}". Verify against context.]`;
       }
     }
 
