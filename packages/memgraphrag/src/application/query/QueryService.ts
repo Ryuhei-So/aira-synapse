@@ -237,6 +237,7 @@ export class DefaultQueryService implements QueryService {
     let mhLatencyMs: number | undefined;
 
     // Multi-hop reasoning branch (before standard LLM)
+    let multiHopHint = '';
     if (this.flags.enableMultiHopReasoning && this.dependencies.multiHopReasoner && !isComparison) {
       multiHopEnabled = true;
       const passagesForMH = context.citedPassages.map((p) => ({
@@ -266,43 +267,12 @@ export class DefaultQueryService implements QueryService {
         mhFallbackReason = mhResult.fallbackReason;
       }
 
-      // If multi-hop succeeded (bridge question, no fallback), use its answer
+      // Inject multi-hop reasoning as a hint for the main LLM (non-authoritative)
       if (!mhResult.fellBack && mhResult.answer) {
-        const totalLatencyMs = Date.now() - startTime;
-        return {
-          response: mhResult.answer,
-          citations: toCitations(context),
-          entities,
-          metrics: {
-            dictionaryMatchCount: matches.length,
-            expandedTerms: candidates.expandedTerms,
-            fallbackTriggered: candidates.fallbackRequired || initialVector.fallbackTriggered,
-            pprIterations: ranking.iterations,
-            pprConverged: ranking.converged,
-            citedPassageCount: context.citedPassages.length,
-            llmInputTokens,
-            llmOutputTokens,
-            dictionaryHintCount: dictionaryHintCount > 0 ? dictionaryHintCount : undefined,
-            aliasHintCount: context.metadata?.aliasHintCount,
-            thesaurusExpandedTerms: expansion.expandedTerms.length > 0 ? expansion.expandedTerms : undefined,
-            subQueryDecomposed: subQueryDecomposed || undefined,
-            hop1FactCount: hop1FactCount > 0 ? hop1FactCount : undefined,
-            hop2FactCount: hop2FactCount > 0 ? hop2FactCount : undefined,
-            totalLatencyMs,
-            multiHopEnabled,
-            questionType: mhQuestionType,
-            hop1SubQuestion: mhHop1SubQuestion,
-            hop2SubQuestion: mhHop2SubQuestion,
-            hop1Answer: mhHop1Answer,
-            hop2Answer: mhHop2Answer,
-            hop1PassageIds: mhHop1PassageIds,
-            hop2PassageIds: mhHop2PassageIds,
-            multiHopFallbackReason: mhFallbackReason,
-            multiHopLatencyMs: mhLatencyMs,
-          },
-        };
+        multiHopHint = `\n\n[Chain-of-thought hint: intermediate reasoning suggests "${mhResult.hop1?.answer ?? ''}" leads to "${mhResult.answer}". Verify against context before using.]`;
+      } else if (mhResult.hop1?.answer) {
+        multiHopHint = `\n\n[Chain-of-thought hint: the bridge entity may be "${mhResult.hop1.answer}". Verify against context.]`;
       }
-      // Multi-hop fell back — continue to standard LLM path
     }
 
     try {
@@ -326,7 +296,7 @@ Rules:
 Question: ${expandedRequest.text}
 
 Context:
-${enrichedContext}
+${enrichedContext}${multiHopHint}
 
 Reasoning and answer:`
         : `You are answering a multi-hop question that requires connecting information across multiple passages.
@@ -349,7 +319,7 @@ Rules:
 Question: ${expandedRequest.text}
 
 Context:
-${enrichedContext}
+${enrichedContext}${multiHopHint}
 
 Reasoning and answer:`;
 
