@@ -49,6 +49,7 @@ export {
 } from './indexing/MarkdownPreprocessor.js';
 export {
   chunkMarkdownDocument,
+  chunkMarkdownDocumentWithGinza,
   toExtractionChunk,
   type MarkdownChunk,
   type MarkdownChunkFeatures,

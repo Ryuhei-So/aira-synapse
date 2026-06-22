@@ -20,9 +20,10 @@ import { loadMemGraphRagConfig, resolveConfigFromEnv, resolveApiKey } from '../d
 import {
   AiraGraphDbNativeClient, AiraGraphDbGraphStore,
   AiraGraphDbVectorIndex, AiraGraphDbMemoryStore, AiraGraphDbLexicalRetriever,
+  PythonSidecarExtractor,
 } from '../dist/infrastructure/index.js';
 import { AiraGraphDbIndexStatusManager } from '../dist/infrastructure/storage/aira-graphdb/AiraGraphDbAdapters.js';
-import { chunkMarkdownDocument, toExtractionChunk, upsertVectors } from '../dist/application/index.js';
+import { chunkMarkdownDocument, chunkMarkdownDocumentWithGinza, toExtractionChunk, upsertVectors } from '../dist/application/index.js';
 import { LLMExtractionAgent } from '../dist/application/index.js';
 import { OpenAIEmbeddingProvider } from '../dist/infrastructure/index.js';
 import { BatchEmbeddingProvider } from '../dist/infrastructure/index.js';
@@ -223,6 +224,25 @@ async function main() {
   if (batchMode) console.log(`[agdb-ingest] Batch mode ON (50% cost reduction, 24h SLA)`);
   const extractionAgent = new LLMExtractionAgent(llmProvider, 'en');
 
+  // Start Python sidecar for GINZA-based Japanese chunking/NER
+  let sidecar = null;
+  try {
+    sidecar = new PythonSidecarExtractor({
+      requestTimeoutMs: 30_000,
+      healthcheckTimeoutMs: 10_000,
+    });
+    const health = await sidecar.healthCheck();
+    if (health.healthy) {
+      console.log(`[agdb-ingest] GINZA sidecar: ACTIVE (JA sentence chunking enabled)`);
+    } else {
+      console.warn(`[agdb-ingest] GINZA sidecar: UNHEALTHY, falling back to paragraph chunking`);
+      sidecar = null;
+    }
+  } catch (err) {
+    console.warn(`[agdb-ingest] GINZA sidecar: UNAVAILABLE (${err.message}), falling back to paragraph chunking`);
+    sidecar = null;
+  }
+
   // Enumerate .md files
   const mdFiles = readdirSync(corpusDir, { recursive: true })
     .filter(f => f.endsWith('.md'))
@@ -246,15 +266,26 @@ async function main() {
         continue;
       }
 
-      // 1. Chunk
+      // 1. Chunk — use GINZA for Japanese, paragraph-based for English
+      const isJapanese = /[\u3040-\u30ff\u4e00-\u9fff]/.test(markdown);
+      const language = isJapanese ? 'ja' : 'en';
       const request = {
         corpusId, documentId,
         title: basename(filePath, '.md'),
         sourceUrl: '',
         markdown,
-        language: 'en',
+        language,
       };
-      const chunks = chunkMarkdownDocument(request);
+      let chunks;
+      if (isJapanese && sidecar) {
+        try {
+          chunks = await chunkMarkdownDocumentWithGinza(request, sidecar);
+        } catch {
+          chunks = chunkMarkdownDocument(request);
+        }
+      } else {
+        chunks = chunkMarkdownDocument(request);
+      }
       if (chunks.length === 0) {
         statusMgr.setStatus(documentId, 'indexed');
         continue;

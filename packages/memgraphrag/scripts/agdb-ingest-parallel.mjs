@@ -23,9 +23,9 @@ import { loadMemGraphRagConfig, resolveConfigFromEnv, resolveApiKey } from '../d
 import {
   AiraGraphDbNativeClient, AiraGraphDbGraphStore,
   AiraGraphDbVectorIndex, AiraGraphDbMemoryStore, AiraGraphDbLexicalRetriever,
-  BatchEmbeddingProvider,
+  BatchEmbeddingProvider, PythonSidecarExtractor,
 } from '../dist/infrastructure/index.js';
-import { chunkMarkdownDocument, toExtractionChunk, upsertVectors } from '../dist/application/index.js';
+import { chunkMarkdownDocument, chunkMarkdownDocumentWithGinza, toExtractionChunk, upsertVectors } from '../dist/application/index.js';
 import { LLMExtractionAgent } from '../dist/application/index.js';
 import { OpenAIEmbeddingProvider } from '../dist/infrastructure/index.js';
 import { OpenAILLMProvider } from '../dist/infrastructure/index.js';
@@ -135,19 +135,34 @@ async function mapConcurrent(items, concurrency, fn) {
  * Process a single document: chunk → extract → build graph data
  * Returns { nodes, edges, facts, passages, documentId } or null on error.
  */
-async function processDocument(filePath, corpusDir, corpusId, extractionAgent, concurrency) {
+async function processDocument(filePath, corpusDir, corpusId, extractionAgent, concurrency, sidecar) {
   const documentId = normalizeDocumentId(corpusDir, filePath);
   const markdown = readFileSync(filePath, 'utf8');
   if (!markdown.trim()) return { documentId, nodes: [], edges: [], facts: [], passages: [] };
+
+  // Detect language from content
+  const isJapanese = /[\u3040-\u30ff\u4e00-\u9fff]/.test(markdown);
+  const language = isJapanese ? 'ja' : 'en';
 
   const request = {
     corpusId, documentId,
     title: basename(filePath, '.md'),
     sourceUrl: '',
     markdown,
-    language: 'en',
+    language,
   };
-  const chunks = chunkMarkdownDocument(request);
+
+  // Use GINZA-based chunking for Japanese if sidecar is available
+  let chunks;
+  if (isJapanese && sidecar) {
+    try {
+      chunks = await chunkMarkdownDocumentWithGinza(request, sidecar);
+    } catch {
+      chunks = chunkMarkdownDocument(request);
+    }
+  } else {
+    chunks = chunkMarkdownDocument(request);
+  }
   if (chunks.length === 0) return { documentId, nodes: [], edges: [], facts: [], passages: [] };
 
   const extractionChunks = chunks.map(c => toExtractionChunk(corpusId, c, request));
@@ -345,6 +360,25 @@ async function main() {
   const llmProvider = new OpenAILLMProvider({ apiKey, model: config?.indexing?.model || config?.providers?.llm?.model || 'gpt-4.1-mini' });
   const extractionAgent = new LLMExtractionAgent(llmProvider, 'en');
 
+  // Start Python sidecar for GINZA-based Japanese chunking/NER
+  let sidecar = null;
+  try {
+    sidecar = new PythonSidecarExtractor({
+      requestTimeoutMs: 30_000,
+      healthcheckTimeoutMs: 10_000,
+    });
+    const health = await sidecar.healthCheck();
+    if (health.healthy) {
+      console.log(`[agdb-ingest-parallel] GINZA sidecar: ACTIVE (JA sentence chunking enabled)`);
+    } else {
+      console.warn(`[agdb-ingest-parallel] GINZA sidecar: UNHEALTHY (${health.message}), falling back to paragraph chunking`);
+      sidecar = null;
+    }
+  } catch (err) {
+    console.warn(`[agdb-ingest-parallel] GINZA sidecar: UNAVAILABLE (${err.message}), falling back to paragraph chunking`);
+    sidecar = null;
+  }
+
   // Enumerate .md files
   const mdFiles = readdirSync(corpusDir, { recursive: true })
     .filter(f => f.endsWith('.md'))
@@ -381,7 +415,7 @@ async function main() {
     const batch = mdFiles.slice(batchStart, batchStart + BATCH_SIZE);
 
     const results = await Promise.allSettled(
-      batch.map(f => processDocument(f, corpusDir, corpusId, extractionAgent, opts.concurrency))
+      batch.map(f => processDocument(f, corpusDir, corpusId, extractionAgent, opts.concurrency, sidecar))
     );
 
     // Serialize graph writes for this batch
@@ -472,6 +506,7 @@ async function main() {
   console.log(`[agdb-ingest-parallel] Time: ${totalTime}s (${(totalTime / Math.max(indexed, 1)).toFixed(1)}s/doc)`);
   console.log(`[agdb-ingest-parallel] Graph: ${allFacts.length} facts, ${allPassages.length} passages`);
 
+  if (sidecar) await sidecar.shutdown();
   await client.close();
   releaseLock(lockPath);
 }

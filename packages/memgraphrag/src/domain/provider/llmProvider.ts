@@ -87,3 +87,16 @@ export interface INLPExtractor {
   extract(request: NlpExtractionRequest): Promise<NlpExtractionResponse>;
   healthCheck(): Promise<ProviderHealth>;
 }
+
+/** Sentence-level chunk produced by NLP-based sentence splitting */
+export interface SentenceChunk {
+  readonly text: string;
+  readonly sentenceCount: number;
+  readonly estimatedTokens: number;
+}
+
+/** Port for NLP-based sentence chunking (e.g., GINZA for Japanese) */
+export interface ISentenceChunker {
+  chunkSentences(text: string, maxTokens?: number): Promise<readonly SentenceChunk[]>;
+  extractEntitiesJa(text: string): Promise<NlpExtractionResponse>;
+}

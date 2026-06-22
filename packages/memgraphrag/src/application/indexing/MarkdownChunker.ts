@@ -1,6 +1,7 @@
 import type { DocumentMetadata } from '../../domain/memory/passage.js';
 import type { ExtractionChunk } from '../../domain/agent/index.js';
 import type { LanguageCode } from '../../domain/memory/types.js';
+import type { ISentenceChunker } from '../../domain/provider/llmProvider.js';
 import { detectLanguage } from '../../domain/language/index.js';
 import { JapaneseLanguageStrategy } from '../../domain/language/index.js';
 import { EnglishLanguageStrategy } from '../../domain/language/index.js';
@@ -197,6 +198,108 @@ export function chunkMarkdownDocument(request: ChunkDocumentRequest): readonly M
   }
 
   return rawChunks;
+}
+
+/**
+ * GINZA-based Japanese chunking using Python sidecar.
+ * Splits text into sentence-aware chunks that respect linguistic boundaries.
+ * Falls back to paragraph-based splitting if sidecar is unavailable.
+ */
+export async function chunkMarkdownDocumentWithGinza(
+  request: ChunkDocumentRequest,
+  sidecar: ISentenceChunker,
+): Promise<readonly MarkdownChunk[]> {
+  if (request.markdown.trim().length === 0) {
+    return [];
+  }
+
+  const lang = detectLanguage(request.markdown);
+
+  // Only use GINZA for Japanese; delegate English to the sync version
+  if (lang !== 'ja') {
+    return chunkMarkdownDocument(request);
+  }
+
+  const maxTokens = MAX_TOKENS_JA;
+  const matches = [...request.markdown.matchAll(/^(#{1,6})\s+(.*)$/gm)];
+
+  // Extract sections (heading-based)
+  const sections: Array<{ heading: string; level: number; text: string; start: number; end: number }> = [];
+  if (matches.length === 0) {
+    sections.push({ heading: '', level: 0, text: request.markdown.trim(), start: 0, end: request.markdown.length });
+  } else {
+    for (let i = 0; i < matches.length; i++) {
+      const match = matches[i]!;
+      const level = match[1]!.length;
+      const heading = match[2]?.trim() ?? '';
+      const start = match.index!;
+      const end = matches[i + 1]?.index ?? request.markdown.length;
+      const text = request.markdown.slice(start, end).trim();
+      if (text.length > 0) {
+        sections.push({ heading, level, text, start, end });
+      }
+    }
+  }
+
+  const result: MarkdownChunk[] = [];
+  const sectionStack: string[] = [];
+
+  for (const section of sections) {
+    if (section.level > 0) {
+      sectionStack.splice(section.level - 1);
+      sectionStack[section.level - 1] = section.heading;
+    }
+
+    const sectionTokens = jaStrategy.estimateTokens(section.text);
+
+    if (sectionTokens <= maxTokens) {
+      // Section fits in one chunk
+      result.push({
+        chunkId: `${request.documentId}:${result.length}`,
+        text: section.text,
+        normalizedText: normalizeChunkText(section.text),
+        sectionPath: [...sectionStack],
+        chunkIndex: result.length,
+        offsetStart: section.start,
+        offsetEnd: section.end,
+        features: detectFeatures(section.text, sectionStack),
+      });
+    } else {
+      // Use GINZA sentence splitting for oversized sections
+      try {
+        const chunks = await sidecar.chunkSentences(section.text, maxTokens);
+        for (const chunk of chunks) {
+          result.push({
+            chunkId: `${request.documentId}:${result.length}`,
+            text: chunk.text,
+            normalizedText: normalizeChunkText(chunk.text),
+            sectionPath: [...sectionStack],
+            chunkIndex: result.length,
+            offsetStart: section.start,
+            offsetEnd: section.end,
+            features: detectFeatures(chunk.text, sectionStack),
+          });
+        }
+      } catch {
+        // Fallback to paragraph-based splitting if sidecar fails
+        const parts = fallbackParagraphSplit(section.text, maxTokens);
+        for (const part of parts) {
+          result.push({
+            chunkId: `${request.documentId}:${result.length}`,
+            text: part,
+            normalizedText: normalizeChunkText(part),
+            sectionPath: [...sectionStack],
+            chunkIndex: result.length,
+            offsetStart: section.start,
+            offsetEnd: section.end,
+            features: detectFeatures(part, sectionStack),
+          });
+        }
+      }
+    }
+  }
+
+  return result;
 }
 
 export function toExtractionChunk(

@@ -11,9 +11,11 @@ import type {
 } from 'node:child_process';
 import type {
   INLPExtractor,
+  ISentenceChunker,
   NlpExtractionRequest,
   NlpExtractionResponse,
   ProviderHealth,
+  SentenceChunk,
 } from '../../domain/provider/llmProvider.js';
 
 interface PythonSidecarExtractorOptions {
@@ -57,7 +59,7 @@ interface PendingRequest {
 const DEFAULT_REQUEST_TIMEOUT_MS = 5_000;
 const DEFAULT_HEALTHCHECK_TIMEOUT_MS = 1_000;
 
-export class PythonSidecarExtractor implements INLPExtractor {
+export class PythonSidecarExtractor implements INLPExtractor, ISentenceChunker {
   private readonly pythonCommand: string;
   private readonly scriptPath: string;
   private readonly requestTimeoutMs: number;
@@ -92,6 +94,40 @@ export class PythonSidecarExtractor implements INLPExtractor {
 
     return {
       language: request.language,
+      entities: result.entities,
+      nounPhrases: result.nounPhrases,
+    };
+  }
+
+  /**
+   * Split Japanese text into sentence-aware chunks using GINZA.
+   * Each chunk respects sentence boundaries and stays within maxTokens.
+   */
+  public async chunkSentences(
+    text: string,
+    maxTokens = 500,
+  ): Promise<readonly SentenceChunk[]> {
+    const result = await this.callRpc<{ chunks: SentenceChunk[] }>(
+      'chunk_sentences',
+      { text, maxTokens },
+      this.requestTimeoutMs * 3, // longer timeout for large docs
+    );
+    return result.chunks;
+  }
+
+  /**
+   * Extract NER entities and noun phrases from Japanese text using GINZA.
+   */
+  public async extractEntitiesJa(
+    text: string,
+  ): Promise<NlpExtractionResponse> {
+    const result = await this.callRpc<ExtractResult>(
+      'extract_entities_ja',
+      { text },
+      this.requestTimeoutMs * 2,
+    );
+    return {
+      language: 'ja',
       entities: result.entities,
       nounPhrases: result.nounPhrases,
     };

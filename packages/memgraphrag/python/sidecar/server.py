@@ -15,6 +15,9 @@ MODEL_NAMES = {
     "ja": "ja_ginza_electra",
 }
 
+# Ordered fallback list for Japanese
+JA_MODEL_FALLBACKS = ["ja_ginza_electra", "ja_ginza", "ja_core_news_lg", "ja_core_news_sm"]
+
 _loaded_models: Dict[str, Any] = {}
 
 
@@ -22,12 +25,27 @@ def get_nlp(language: str):
     if language in _loaded_models:
         return _loaded_models[language]
 
-    model_name = MODEL_NAMES[language]
+    if language == "ja":
+        # Try each JA model in order
+        for model_name in JA_MODEL_FALLBACKS:
+            try:
+                nlp = spacy.load(model_name)
+                _loaded_models[language] = nlp
+                return nlp
+            except Exception:
+                continue
+        # Final fallback: blank JA with sentencizer
+        nlp = spacy.blank("ja")
+        if "sentencizer" not in nlp.pipe_names:
+            nlp.add_pipe("sentencizer")
+        _loaded_models[language] = nlp
+        return nlp
+
+    model_name = MODEL_NAMES.get(language, f"{language}_core_web_sm")
     try:
         nlp = spacy.load(model_name)
     except Exception:
-        blank_lang = "ja" if language == "ja" else "en"
-        nlp = spacy.blank(blank_lang)
+        nlp = spacy.blank(language)
         if "sentencizer" not in nlp.pipe_names:
             nlp.add_pipe("sentencizer")
     _loaded_models[language] = nlp
@@ -122,6 +140,96 @@ def error_response(request_id: Any, code: int, message: str) -> Dict[str, Any]:
     }
 
 
+def chunk_sentences_ja(text: str, max_tokens: int = 500) -> List[Dict[str, Any]]:
+    """Split Japanese text into sentence-aware chunks using GINZA.
+
+    Groups GINZA-detected sentences into chunks that don't exceed max_tokens.
+    Token count is estimated as len(text) * 0.5 (consistent with JapaneseLanguageStrategy).
+    """
+    nlp = get_nlp("ja")
+    doc = nlp(text)
+    sentences = list(doc.sents)
+
+    chunks: List[Dict[str, Any]] = []
+    current_sents: List[str] = []
+    current_tokens = 0
+
+    for sent in sentences:
+        sent_text = sent.text.strip()
+        if not sent_text:
+            continue
+        sent_tokens = int(len(sent_text) * 0.5)
+
+        if current_tokens + sent_tokens > max_tokens and current_sents:
+            chunk_text = "".join(current_sents)
+            chunks.append({
+                "text": chunk_text,
+                "sentenceCount": len(current_sents),
+                "estimatedTokens": current_tokens,
+            })
+            # Overlap: keep last sentence for context continuity
+            overlap_sent = current_sents[-1]
+            current_sents = [overlap_sent]
+            current_tokens = int(len(overlap_sent) * 0.5)
+
+        current_sents.append(sent_text)
+        current_tokens += sent_tokens
+
+    if current_sents:
+        chunk_text = "".join(current_sents)
+        chunks.append({
+            "text": chunk_text,
+            "sentenceCount": len(current_sents),
+            "estimatedTokens": current_tokens,
+        })
+
+    return chunks
+
+
+def extract_entities_ja(text: str) -> Dict[str, Any]:
+    """Extract NER entities and noun phrases from Japanese text using GINZA."""
+    nlp = get_nlp("ja")
+    doc = nlp(text)
+
+    entities = []
+    for ent in doc.ents:
+        entities.append({
+            "text": ent.text,
+            "label": ent.label_,
+            "start": ent.start_char,
+            "end": ent.end_char,
+        })
+
+    # Extract noun phrases
+    noun_phrases: List[str] = []
+    try:
+        import ginza
+        for span in ginza.bunsetu_spans(doc):
+            if span.root.pos_ in ("NOUN", "PROPN"):
+                noun_phrases.append(span.text)
+    except (ImportError, AttributeError, Exception):
+        # Fallback: use noun_chunks or token-based extraction
+        try:
+            for chunk in doc.noun_chunks:
+                noun_phrases.append(chunk.text)
+        except Exception:
+            # Token-based fallback for blank models
+            current_phrase: List[str] = []
+            for token in doc:
+                if token.pos_ in ("NOUN", "PROPN"):
+                    current_phrase.append(token.text)
+                elif current_phrase:
+                    noun_phrases.append("".join(current_phrase))
+                    current_phrase = []
+            if current_phrase:
+                noun_phrases.append("".join(current_phrase))
+
+    return {
+        "entities": entities,
+        "nounPhrases": list(dict.fromkeys(noun_phrases)),
+    }
+
+
 def handle_request(payload: Dict[str, Any]) -> Dict[str, Any]:
     request_id = payload.get("id")
     method = payload.get("method")
@@ -134,6 +242,13 @@ def handle_request(payload: Dict[str, Any]) -> Dict[str, Any]:
             text = str(params.get("text", ""))
             language = str(params.get("language", "en"))
             return success_response(request_id, extract(text, language))
+        if method == "chunk_sentences":
+            text = str(params.get("text", ""))
+            max_tokens = int(params.get("maxTokens", 500))
+            return success_response(request_id, {"chunks": chunk_sentences_ja(text, max_tokens)})
+        if method == "extract_entities_ja":
+            text = str(params.get("text", ""))
+            return success_response(request_id, extract_entities_ja(text))
         return error_response(request_id, -32601, f"Method not found: {method}")
     except Exception as exc:  # pragma: no cover
         return error_response(request_id, -32000, str(exc))
