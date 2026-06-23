@@ -64,16 +64,16 @@ npx aira-synapse mcp --db ./your-research.agdb
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│ Interface Layer (CLI / MCP Server)                   │
+│ Interface Layer (CLI / MCP Server)                  │
 ├─────────────────────────────────────────────────────┤
-│ Application Layer                                    │
+│ Application Layer                                   │
 │   IndexingPipeline → QueryService → AnswerGenerator │
 ├─────────────────────────────────────────────────────┤
-│ Domain Layer                                         │
+│ Domain Layer                                        │
 │   ThreeLayerMemory │ SchemaStabilizer │ PPR Walker  │
 ├─────────────────────────────────────────────────────┤
-│ Infrastructure Layer                                 │
-│   aira-graphdb │ OpenAI │ Docling │ GINZA          │
+│ Infrastructure Layer                                │
+│   aira-graphdb │ OpenAI │ Docling │ GINZA           │
 └─────────────────────────────────────────────────────┘
 ```
 
