@@ -12,15 +12,15 @@ updated_at: '2026-06-23'
 
 # 学術論文のためのRAGシステム — aira-synapse と専用グラフDB aira-graphdb をゼロから作った話
 
-> **TL;DR**
+> **この記事の要点**
 > - 学術論文の知見を統合する RAG を作るとき、Classic RAG では **マルチホップ推論・エンティティ同一性・矛盾検出** で力不足
-> - Microsoft GraphRAG はコミュニティ要約が強いが Factoid QA に弱い (HotpotQA Str-Acc 51.6%)
+> - Microsoft GraphRAG はコミュニティ要約が強いが Factoid QA に弱い (HotpotQA 正解率 51.6%)
 > - 論文 MemGraphRAG (KDD 2026) を TypeScript でクリーンルーム実装したのが **aira-synapse**
 > - 当初は Neo4j (Docker 必須) / LadybugDB (WAL バグで頓挫) を試したが、研究者が個人 PC で完結できる構成を諦められず **専用グラフDB `aira-graphdb` を Rust でゼロから開発**
-> - **HotpotQA 500問で Str-Acc 89.4% / LLM-Acc 91.2%** を達成。論文 GPT-4o-mini 71.6% に対し **+19.6pt**
-> - 日本語版にも GINZA 統合で対応し、**LLM-Acc 70.8%**（Neo4j baseline 58.5% から +12.3pt）
+> - **HotpotQA 500問で正解率 89.4% / 意味一致正解率 91.2%** を達成。論文 GPT-4o-mini 71.6% に対し **+19.6pt**
+> - 日本語版にも GINZA 統合で対応し、**意味一致正解率 70.8%**（Neo4j 基準値 58.5% から +12.3pt）
 >
-> **用語**: Str-Acc = 文字列一致ベースの正解率、LLM-Acc = LLM Judge による意味同等判定を含む正解率。HotpotQA の問題は Bridge（2文書を橋渡しして推論）と Comparison（2エンティティを比較して判断）の2種に分類される。PPR = Personalized PageRank、RRF = Reciprocal Rank Fusion。
+> **用語**: Str-Acc (文字列一致正解率) = 正解文字列との完全一致ベース、LLM-Acc (意味一致正解率) = LLM による意味同等判定を含む正解率。HotpotQA の問題は Bridge（2文書を橋渡しして推論）と Comparison（2エンティティを比較して判断）の2種に分類される。PPR = Personalized PageRank（個人化ページランク）、RRF = Reciprocal Rank Fusion（逆順位融合）。
 
 :::note info
 #### こんな研究者・エンジニアに読んでほしい
@@ -471,6 +471,47 @@ LLM が新しい（GPT-5.4-mini）こと、Hybrid RRF など独自改善が効�
 
 これが Docker なし・JVM なし・単一バイナリ + 2ファイルの DB で動く。
 
+## 7.1 研究者の利用シーン — 何ができるのか
+
+実際の研究ワークフローでの使い方を示す。
+
+### シーン 1: サーベイ論文の横断検索
+
+```
+あなた: 「Personalized PageRank を Graph RAG に応用した論文で、
+         HotpotQA 以外のベンチマークで評価しているものは？」
+
+aira-synapse: PPR を Graph RAG に応用した研究として以下が該当します:
+  - Xiang et al. (2026) MemGraphRAG — HotpotQA + MuSiQue + 2WikiMultihopQA
+  - ...
+  [根拠: passage-1234 (Xiang2026, Section 4.2), passage-5678 (...)]]
+```
+
+Classic RAG では「PPR」「Personalized PageRank」「Topic-Sensitive PageRank」が同じ概念だと認識できず、該当論文を取りこぼす。aira-synapse はスキーマ安定化とシソーラスでこれらを同一エンティティに統合済み。
+
+### シーン 2: 矛盾するファクトの検出
+
+```
+あなた: 「手法 X の精度について、論文間で食い違いがないか？」
+
+aira-synapse: 手法 X について矛盾するファクトを検出しました:
+  - 論文 A: 「F1 = 95.2%」(passage-2345)
+  - 論文 B: 「F1 = 80.1%」(passage-6789)
+  差異の原因: データセットが異なる (SQuAD vs NaturalQuestions)
+```
+
+### シーン 3: MCP 経由で Claude Desktop / VS Code から直接質問
+
+```bash
+# 論文 PDF を投入（Docling で Markdown 化 → ナレッジグラフ構築）
+aira-synapse index --input ./papers/*.pdf
+
+# MCP サーバー起動 → Claude Desktop / VS Code Copilot に接続
+aira-synapse mcp --db ./my-research.agdb
+```
+
+Claude Desktop の設定に MCP サーバーを追加すれば、普段のチャットから「この論文群の中で〜」と質問できる。根拠パッセージ付きで回答が返るため、ハルシネーションを検証可能。
+
 ---
 
 # 8. まとめ
@@ -494,7 +535,20 @@ LLM が新しい（GPT-5.4-mini）こと、Hybrid RRF など独自改善が効�
 6. Fact密度を3.4倍にしても精度は+0.2pt。**検索品質ではなくLLM推論力が天井**
 7. 日英ギャップの主因は **Bridge問題での推論チェーン断絶**（コーパスの日英混在＋LLMの日本語推論力の限界）
 
-aira-synapse / aira-graphdb のソースは順次公開予定。精度改善の全履歴と ADR は [aira-graphdb-accuracy-journey.md](https://github.com/nahisaho/aira-synapse/blob/main/docs/aira-graphdb-accuracy-journey.md) を参照。
+aira-synapse / aira-graphdb のソースは [GitHub (nahisaho/aira-synapse)](https://github.com/nahisaho/aira-synapse) で公開中。精度改善の全履歴と ADR は [aira-graphdb-accuracy-journey.md](https://github.com/nahisaho/aira-synapse/blob/main/docs/aira-graphdb-accuracy-journey.md) を参照。
+
+:::note info
+#### 試してみたい方へ
+```bash
+git clone https://github.com/nahisaho/aira-synapse.git
+cd aira-synapse && npm install && npm run build
+# 論文 PDF を投入してナレッジグラフ構築
+aira-synapse index --input ./your-papers/*.pdf
+# MCP サーバーを起動して Claude Desktop / VS Code Copilot に接続
+aira-synapse mcp --db ./your-research.agdb
+```
+Issue / PR / Star 歓迎。特に **自分の研究分野の論文コーパスでの精度報告** をいただけると、多言語・多分野への汎化に大きく貢献します。
+:::
 
 ---
 
