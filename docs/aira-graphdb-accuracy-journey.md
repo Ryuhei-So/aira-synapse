@@ -560,12 +560,13 @@ DB サイズ: 202MB + vblob
 | 8 | Entity dedup | 89.0% | +0.2 | "the_X"→"X" マージ |
 | 9 | **Hybrid RRF** | **89.4%** | **+0.4** | **Vector+BM25 fusion** |
 
-### 最終構成 (89.4%)
+### 最終構成 (Str-Acc 89.4% / LLM-Acc 91.2%)
 
 ```
 ┌───────────────────────────────────────────────────────────┐
-│ HotpotQA Benchmark: 89.4% (447/500)                       │
-│ Bridge: 89.3% (357/400), Comparison: 90.0% (90/100)       │
+│ HotpotQA Benchmark                                         │
+│   Str-Acc: 89.4% (447/500), LLM-Acc: 91.2% (456/500)      │
+│   Bridge: 89.3% (357/400), Comparison: 90.0% (90/100)     │
 ├───────────────────────────────────────────────────────────┤
 │ LLM: GPT-5.4-mini (reasoning_effort=high, verbosity=low)  │
 │ Retrieval: HybridMemoryFilter (Vector + BM25 RRF K=60)    │
