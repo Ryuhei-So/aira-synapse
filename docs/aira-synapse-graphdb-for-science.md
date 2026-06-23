@@ -19,6 +19,8 @@ updated_at: '2026-06-23'
 > - 当初は Neo4j (Docker 必須) / LadybugDB (WAL バグで頓挫) を試したが、研究者が個人 PC で完結できる構成を諦められず **専用グラフDB `aira-graphdb` を Rust でゼロから開発**
 > - **HotpotQA 500問で Str-Acc 89.4% / LLM-Acc 91.2%** を達成。論文 GPT-4o-mini 71.6% に対し **+19.6pt**
 > - 日本語版にも GINZA 統合で対応し、**LLM-Acc 70.8%**（Neo4j baseline 58.5% から +12.3pt）
+>
+> **用語**: Str-Acc = 文字列一致ベースの正解率、LLM-Acc = LLM Judge による意味同等判定を含む正解率。HotpotQA の問題は Bridge（2文書を橋渡しして推論）と Comparison（2エンティティを比較して判断）の2種に分類される。PPR = Personalized PageRank、RRF = Reciprocal Rank Fusion。
 
 :::note info
 #### こんな研究者・エンジニアに読んでほしい
@@ -53,6 +55,11 @@ Classic RAG（埋め込みベクトル + top-k 検索 + LLM 生成）は、**「
 :::
 
 論文 [HotpotQA](https://hotpotqa.github.io/) はこのマルチホップ Factoid QA の代表的ベンチマークで、**2ホップ以上の推論を強制する** ように作られている。Classic RAG は HotpotQA で 50% 台に届かないことが多い。
+
+:::note warn
+#### HotpotQA は学術論文RAGの proxy benchmark
+HotpotQA のコーパスは英語 Wikipedia であり、学術論文そのものではない。しかし **マルチホップ推論・エンティティ同一性・複数文書からの情報統合** という要件は学術論文 RAG と共通しており、システムの推論能力を評価する proxy として広く使われている。本記事の精度数値は、学術論文コーパスへの直接評価ではなく、この proxy benchmark での結果である点に留意されたい。
+:::
 
 ---
 
@@ -149,7 +156,7 @@ Query Response
 | 矛盾検出 | × | × | ✓ | ✓ |
 | PPR | × | × | ✓ | ✓ (hub 抑制付き) |
 | ハイブリッド検索 | × | × | × | **✓ (Vector + BM25 RRF)** |
-| グラフ DB | FAISS | — | NetworkX | **aira-graphdb (Rust)** |
+| Graph/Index backend | FAISS (vector) | — | NetworkX (in-memory) | **aira-graphdb (Rust, 永続化)** |
 | 日本語 | × | × | × | **✓ (GINZA)** |
 | HotpotQA Str-Acc | 51.6% | 52.7% | 67.2% | **89.4%** |
 | HotpotQA LLM-Acc | — | — | 71.6% | **91.2%** |
@@ -158,7 +165,7 @@ Query Response
 
 # 4. aira-synapse が目指したもの
 
-aira-synapse は MemGraphRAG 論文のアルゴリズムを **TypeScript で完全クリーンルーム実装** したライブラリ + MCP サーバーである。
+aira-synapse は MemGraphRAG 論文のアルゴリズムを **TypeScript で完全クリーンルーム実装** したライブラリ + MCP サーバーである。ここでの「クリーンルーム実装」とは、論文の記述（アルゴリズム・数式・図）のみを参照し、**公式 Python 実装のソースコードは一切参照せずにゼロから書き直した** ことを意味する。
 
 設計の根本にあるのは以下3つ:
 
@@ -264,7 +271,7 @@ aira-synapse の心臓部は「ナレッジグラフを永続化・検索する�
 | **単一 `.agdb` + `.vblob`** | バックアップは2ファイルコピー。Docker 不要 |
 | **ドメイン固有 RPC を維持** | `get_adjacent` 等はインデックス済みで O(1)。Cypher より速い |
 | **Cypher は補助** | アドホックなパターンマッチング用にだけ提供 |
-| **f64 vector + SIMD** | 98K ベクトルなら brute-force でも数 ms |
+| **f64 vector + SIMD** | 98K × 1536次元ベクトルで brute-force cosine が p95 < 5ms (Apple M3 Max) |
 | **HNSW (v0.3.0)** | 大規模化に備えて段階的に有効化 |
 | **vblob 分離 (v0.3.0)** | ベクトルを外部バイナリに分離して DB サイズを1/3に削減 |
 
@@ -273,7 +280,7 @@ aira-synapse の心臓部は「ナレッジグラフを永続化・検索する�
 - **精度バグを自分で直せる**: フィールド名の不一致 (`vector` vs `values`) で全ベクトルがゼロベクトル化されていた重大バグを発見・修正できた（後述）
 - **RPC を任意に追加できる**: `memory_save_file` のような独自 RPC を必要に応じて生やせる
 - **永続化フォーマットを制御できる**: vblob / WAL / 増分 persist など最適化が自由
-- **依存ゼロでバンドル可能**: 研究者は `npm install` だけで使える
+- **依存ゼロでバンドル可能**: 英語パイプラインは Rust バイナリ同梱で `npm install` だけで動く。日本語パイプラインでは追加で Python + GINZA / spaCy の sidecar が必要
 
 ---
 
@@ -283,22 +290,36 @@ aira-synapse の心臓部は「ナレッジグラフを永続化・検索する�
 
 ## 6.1 改善の積み上げ（英語版）
 
-| # | バージョン | Str-Acc | LLM-Acc | 改善 | 主な変更 |
-|---|-----------|---------|---------|------|---------|
-| 1 | Neo4j baseline | 88.4% | — | — | 基準値 |
-| 2 | aira-graphdb 初期 | 55% | — | — | ID ミスマッチ |
-| 3 | ID 修正 | 64.8% | — | +9.8 | バッチベース ID 統一 |
-| 4 | スコアリング修正 | 84.6% | — | +19.8 | normalizedContains |
-| 5 | v0.3.0 + ベクトル補完 | 84.6% | — | ±0 | 全 namespace sync |
-| 6 | eval関数統一 | 87.4% | — | +2.8 | Rules 5-9 追加 |
-| 7 | Answer matcher 15種 | 88.8% | — | +1.4 | 数詞変換等 |
-| 8 | Entity dedup | 89.0% | — | +0.2 | "the_X"→"X" マージ |
-| 9 | **Hybrid RRF** | **89.4%** | — | +0.4 | **Vector+BM25 fusion** |
-| 10 | **LLM-Acc 評価** | 89.4% | **91.2%** | — | LLM Judge 導入 |
+改善を **システム改善**（検索・生成の実質向上）と **評価補正**（採点ルールの統一・拡充）に分けて示す。
+
+**システム改善（検索・生成が実際に変わったもの）:**
+
+| # | バージョン | Str-Acc | 改善 | 主な変更 |
+|---|-----------|---------|------|---------|
+| 1 | Neo4j baseline | 88.4% | — | 基準値 |
+| 2 | aira-graphdb 初期 | 55% | — | ID ミスマッチ（バグ） |
+| 3 | ID 修正 | 64.8% | +9.8 | バッチベース ID 統一 |
+| 8 | Entity dedup | +0.2pt | — | "the_X"→"X" マージ (238ペア) |
+| 9 | **Hybrid RRF** | +0.4pt | — | **Vector+BM25 fusion** |
+
+**評価補正（採点ルールの統一・拡充、実回答は変わっていない）:**
+
+| # | バージョン | Str-Acc | 改善 | 主な変更 |
+|---|-----------|---------|------|---------|
+| 4 | normalizedContains 補正 | 84.6% | +19.8 | ⚠️ 旧 eval が過剰に厳しかった補正 |
+| 6 | eval関数統一 (Rules 5-9) | 87.4% | +2.8 | ニックネーム・国名等のルール追加 |
+| 7 | Answer matcher 15種 | 88.8% | +1.4 | 数詞変換等 |
+| 10 | **LLM-Acc 評価** | 89.4% → **91.2%** | +1.8 | LLM Judge 導入 |
+
+> ⚠️ **重要**: #4 の `64.8% → 84.6%` は検索精度が上がったのではなく、旧 eval 関数が部分一致を不正解にしていたバグの補正。実回答の内容は同一。バックエンド間の比較では **eval 関数を統一してから比較すべき** という教訓。
+
+**最終結果**: Str-Acc **89.4%** (447/500), LLM-Acc **91.2%** (456/500)
+
+> 📊 500問評価では 1問 = 0.2pt のため、+0.2〜+0.8pt の差は統計的には小さい（95%信頼区間 ±約2.7pt）。小幅 ablation は大きな方向性を見る目的で解釈している。Bridge subset は 400/500問 (80%)、Comparison は 100/500問 (20%) で構成。
 
 ## 6.2 効いた改善の中身
 
-### Vector + BM25 RRF (Bridge +1.8pt)
+### Vector + BM25 RRF (Bridge +1.8pt, Overall +0.4pt)
 
 ベクトル検索と BM25 を並列実行し、Reciprocal Rank Fusion で統合:
 
@@ -307,6 +328,8 @@ $$\text{RRF}(d) = \sum_{r \in R} \frac{1}{K + r(d)}, \quad K = 60$$
 - **Vector**: 意味的類似度（"米国" → "アメリカ" も拾える）
 - **BM25**: 固有名詞・年号の exact match（"1958年" を確実に取れる）
 - **BM25-only 結果は係数 0.7 で減衰**（過信を防ぐ）
+
+> Bridge subset (400問) では +1.8pt の改善だが、Comparison subset (100問) ではほぼ変化なく、全体 (500問) では **+0.4pt** に希釈されている。Bridge に固有名詞の橋渡しが多いため、BM25 の exact match が効いた。
 
 ### Entity Deduplication
 
@@ -327,9 +350,17 @@ Pure-agdb が低く見えていた 18 件の失敗のうち、**13 件はベー�
 
 > 教訓: **異なる eval 関数で比較すると 3pt 以上の偽の精度差** が生じる。バックエンド比較の前に eval を統一せよ。
 
-## 6.3 LLM-Acc で回収された9問
+## 6.3 LLM-Acc: LLM Judge による意味同等判定
 
-Str-Acc 89.4% から LLM Judge (GPT-5.4-mini) で **+1.8pt → 91.2%** に到達。
+Str-Acc（文字列完全一致ベース）では同義語・表記揺れで取りこぼす問題がある。これを補うため、**LLM Judge** による意味同等判定を導入した。
+
+**LLM Judge の設定:**
+- **Judge model**: GPT-5.4-mini（回答生成と同一モデル、ただし独立した別リクエスト）
+- **Temperature**: 0（決定的判定）
+- **判定基準**: gold answer と LLM 回答が「事実として同じ対象を指しているか」を yes/no で判定
+- **Ambiguous case**: 「部分的に正しい」は不正解扱い（保守的判定）
+
+EN では Str-Acc 89.4% → LLM-Acc **91.2%** (+1.8pt, 9問回収)。
 
 | Gold Answer | LLM 回答 | 回収理由 |
 |-------------|---------|---------|
@@ -351,6 +382,8 @@ Str-Acc 89.4% から LLM Judge (GPT-5.4-mini) で **+1.8pt → 91.2%** に到達
 
 LLM が新しい（GPT-5.4-mini）こと、Hybrid RRF など独自改善が効いていること、eval 関数を統一していること等の総合効果。
 
+> ⚠️ **公平性に関する注記**: 本比較はモデル世代（GPT-4o-mini vs GPT-5.4-mini）・評価関数・answer matcher が完全には一致していないため、純粋なアルゴリズム差ではなく、**実装改善・検索改善・モデル差・評価関数差を含む総合比較** である。同一 LLM での比較は今後の課題。
+
 ## 6.5 日本語版
 
 英語版の知見を日本語にも適用:
@@ -361,9 +394,11 @@ LLM が新しい（GPT-5.4-mini）こと、Hybrid RRF など独自改善が効�
 | aira-graphdb + GINZA 文分割 | 64.3% | — | 形態素ベースのチャンキング |
 | v2 (4 施策統合) | 70.8% | — | tokenize + entity expand + dedup + matcher |
 | v3 (JA 強制プロンプト) | 67.3% | — | ❌ -3.5pt 棄却 |
-| **v2 + LLM-Acc** | **70.8%** | **70.8%** | 21問回収 |
-| v3 DB (76K facts, 密度3.4倍) | 71.0% | — | +0.2pt（誤差範囲） |
+| **v2 + LLM-Acc** | **70.8%** | **70.8%** | LLM Judge で回収 0問（Str-Acc = LLM-Acc） |
+| v3 DB (76K facts, 密度3.4倍) | 71.0% | — | +0.2pt（誤差範囲、v2 を採用） |
 | v3 + o4-mini | ~64.5% | — | ❌ gpt-5.4-miniより-6.3pt |
+
+> 📝 JA では LLM Judge による回収が 0問だった。これは JA の失敗が同義語・表記揺れではなく、**根本的に異なるエンティティを回答する推論エラー** であることを意味する。EN では 9問回収できたのとは対照的。
 
 英語と日本語で **チャンキング戦略を別物に作り直した** ことが鍵。日本語は GINZA の sentencizer + 文字数×0.5 でのトークン推定が必須で、英語と同じ `\n\n` 分割を流用すると 1 段落 2,000–5,000 文字の巨大チャンクができてしまう。
 
@@ -383,11 +418,13 @@ LLM が新しい（GPT-5.4-mini）こと、Hybrid RRF など独自改善が効�
 
 **7施策全てが効果なしまたは逆効果**。失敗116問の分析で、96%が「具体的だが誤り」（LLM推論エラー）、検索失敗は4%のみであることが判明した。
 
+> 📝 **分類基準**: 各失敗問に対し、gold answer の根拠となる supporting fact が retrieved context に含まれているかを確認。含まれているのに不正解 → 「LLM 推論エラー」、含まれていない → 「検索失敗」と分類。116問中 111問は必要な情報を取得できていたが LLM が誤った回答を生成していた。
+
 ## 6.7 EN vs JA ギャップの根本原因
 
 | 指標 | EN | JA | Gap |
 |------|-----|-----|-----|
-| **Overall** | 89.4% | 71.0% | **18.4pt** |
+| **Overall** | 89.4% | 70.8% | **18.6pt** |
 | Bridge | 89.3% | 68.5% | **20.8pt** |
 | Comparison | 90.0% | 80.2% | **9.8pt** |
 
@@ -398,7 +435,7 @@ LLM が新しい（GPT-5.4-mini）こと、Hybrid RRF など独自改善が効�
 3. **コーパス品質の差** — EN は英語 Wikipedia オリジナル（エンティティ表記が統一）、JA は翻訳記事が多く表記揺れが大きい（ヴィ/ビ、ー/長音省略等）
 4. **評価の厳しさ** — カタカナ変換の揺れで取りこぼしが発生し、LLM Judge でも回収不能（応答自体が別エンティティ）
 
-**結論**: JA 70.8% は現アーキテクチャ（single-shot RAG + gpt-5.4-mini）の実質的上限。これはコーパスの構造的問題と LLM の日本語推論力の限界に起因し、アーキテクチャ変更では解決困難である。
+**結論**: JA 70.8% は現在の実装・評価設定（single-shot RAG + gpt-5.4-mini）では実質的な頭打ちと考えられる。7つの異なる改善策を試行していずれも効果がなかったことから、コーパスの構造的問題と LLM の日本語推論力の限界が支配的要因であり、RAG パイプライン側の改善だけでは大幅な向上は困難と判断した。
 
 ---
 
@@ -427,7 +464,7 @@ LLM が新しい（GPT-5.4-mini）こと、Hybrid RRF など独自改善が効�
 
 研究者の個人 PC で:
 
-1. 論文 PDF を Dockling で Markdown 化
+1. 論文 PDF を Docling で Markdown 化
 2. `aira-synapse index` でナレッジグラフに投入
 3. MCP 経由で Claude Desktop / VS Code Copilot から自然言語で質問
 4. 根拠パッセージ付き回答が返る
@@ -445,7 +482,7 @@ LLM が新しい（GPT-5.4-mini）こと、Hybrid RRF など独自改善が効�
 - グラフ DB は Neo4j (運用重い) → LadybugDB (WAL バグ) → **aira-graphdb を Rust で自作** に至った
 - 結果: HotpotQA **Str-Acc 89.4% / LLM-Acc 91.2%**（論文 +19.6pt 改善）
 - 日本語版も GINZA 統合で LLM-Acc 70.8%（Neo4j baseline +12.3pt）
-- JA は7つの改善策を徹底検証し、70.8% が現アーキテクチャの上限であることを実験的に確認
+- JA は7つの改善策を徹底検証し、70.8% が現在の実装・評価設定では実質的な頭打ちであることを実験的に確認
 
 **得られた知見**:
 
@@ -457,7 +494,7 @@ LLM が新しい（GPT-5.4-mini）こと、Hybrid RRF など独自改善が効�
 6. Fact密度を3.4倍にしても精度は+0.2pt。**検索品質ではなくLLM推論力が天井**
 7. 日英ギャップの主因は **Bridge問題での推論チェーン断絶**（コーパスの日英混在＋LLMの日本語推論力の限界）
 
-aira-synapse / aira-graphdb のソースは順次公開予定。コードベースの構造や ADR は [`docs/aira-graphdb-accuracy-journey.md`](https://github.com/nahisaho/aira-synapse) を参照。
+aira-synapse / aira-graphdb のソースは順次公開予定。精度改善の全履歴と ADR は [aira-graphdb-accuracy-journey.md](https://github.com/nahisaho/aira-synapse/blob/main/docs/aira-graphdb-accuracy-journey.md) を参照。
 
 ---
 
