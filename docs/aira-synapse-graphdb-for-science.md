@@ -1,5 +1,5 @@
 ---
-title: '学術論文のためのRAGシステム — aira-synapse と専用グラフDB aira-graphdb をゼロから作った話'
+title: '論文の海から知を掘り出す — 精度91%のGraph RAGと専用DBをゼロから作った話'
 tags:
   - GraphRAG
   - RAG
@@ -10,7 +10,7 @@ private: false
 updated_at: '2026-06-23'
 ---
 
-# 学術論文のためのRAGシステム — aira-synapse と専用グラフDB aira-graphdb をゼロから作った話
+# 論文の海から知を掘り出す — 精度91%のGraph RAGと専用DBをゼロから作った話
 
 > **この記事の要点**
 > - 学術論文の知見を統合する RAG を作るとき、Classic RAG では **マルチホップ推論・エンティティ同一性・矛盾検出** で力不足
