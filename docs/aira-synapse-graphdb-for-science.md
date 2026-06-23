@@ -450,7 +450,7 @@ LLM が新しい（GPT-5.4-mini）こと、Hybrid RRF など独自改善が効�
 
 ## 6.6 JA 精度改善の徹底検証
 
-日本語 70.8% を超えるため、以下を全て試行した:
+日本語 70.8% を超えるため、以下を全て試行した。
 
 | 施策 | 効果 | 理由 |
 |------|------|------|
@@ -468,7 +468,7 @@ LLM が新しい（GPT-5.4-mini）こと、Hybrid RRF など独自改善が効�
 
 ### GPT-5.5 への切り替え — LLM 推論力がボトルネックだった
 
-7施策の失敗から「RAG パイプラインではなく LLM の推論力がボトルネック」と仮説を立て、**GPT-5.5** で同一条件の再実験を実施した:
+7施策の失敗から「RAG パイプラインではなく LLM の推論力がボトルネック」と仮説を立て、**GPT-5.5** で同一条件の再実験を実施した。
 
 | 指標 | gpt-5.4-mini | GPT-5.5 | 差分 |
 |------|-------------|---------|------|
@@ -510,7 +510,7 @@ GPT-5.5 により **Comparison は EN を超え**、Gap は 18.6pt → 11.1pt �
 │   Bridge:  EN 89.3% / JA 74.8% (Gap: 14.5pt)              │
 │   Compare: EN 90.0% / JA 90.7% (JA が EN を超過!)          │
 ├───────────────────────────────────────────────────────────┤
-│ LLM: GPT-5.4-mini / GPT-5.5 (reasoning_effort=high)      │
+│ LLM: GPT-5.4-mini / GPT-5.5 (reasoning_effort=high)       │
 │ Retrieval: HybridMemoryFilter (Vector + BM25 RRF, K=60)   │
 │ Graph: AiraGraphDbGraphProjection (206K nodes, 448K edges)│
 │ Vector: AiraGraphDbVectorIndex (98K vectors, f64)         │
@@ -523,7 +523,7 @@ GPT-5.5 により **Comparison は EN を超え**、Gap は 18.6pt → 11.1pt �
 └───────────────────────────────────────────────────────────┘
 ```
 
-研究者の個人 PC で:
+研究者の個人 PC で、
 
 1. 論文 PDF を Docling で Markdown 化
 2. `aira-synapse index` でナレッジグラフに投入
@@ -577,24 +577,46 @@ Claude Desktop の設定に MCP サーバーを追加すれば、普段のチャ
 
 # 8. まとめ
 
-- 学術論文 RAG では Classic RAG（ベクトル + top-k）は **マルチホップ・エンティティ同一性・矛盾検出** で力不足
-- Microsoft GraphRAG はグローバル要約に強いが、Factoid QA では 51.6% にとどまる
-- MemGraphRAG (KDD 2026) の三層メモリ + マルチエージェントは方向性として正しい
-- これを TypeScript でクリーンルーム実装したのが **aira-synapse**
-- グラフ DB は Neo4j (運用重い) → LadybugDB (WAL バグ) → **aira-graphdb を Rust で自作** に至った
-- 結果: HotpotQA **Str-Acc 89.4% / LLM-Acc 91.2%**（論文 +19.6pt 改善）
-- 日本語版も GINZA 統合で LLM-Acc 70.8%（Neo4j baseline +12.3pt）
-- JA は7つの改善策を徹底検証し、70.8% が現在の実装・評価設定では実質的な頭打ちであることを実験的に確認
+学術論文から知見を引き出す RAG を本気で作ると、何が必要で何が効かないのか。本記事の全実験から得られた結論を整理する。
 
-**得られた知見**:
+## なぜ専用の Graph RAG が必要なのか
 
-1. グラフ品質を上げる最大の打ち手は「コミュニティ検出」ではなく **メモリベースの抽出 + スキーマ安定化**
-2. Vector と BM25 は **相補的**。RRF で統合すると Bridge +1.8pt
-3. ベンチマークで重要なのは **eval 関数の統一**。バックエンドより eval で 3pt 動く
-4. 多言語対応は **チャンキング層から作り直す** 必要がある
-5. 研究者の手元で動く RAG を作るには、**DB を含めて自作する覚悟** が要る
-6. Fact密度を3.4倍にしても精度は+0.2pt。**検索品質ではなくLLM推論力が天井**
-7. 日英ギャップの主因は **Bridge問題での推論チェーン断絶**（コーパスの日英混在＋LLMの日本語推論力の限界）
+| アプローチ | HotpotQA | 限界 |
+|-----------|----------|------|
+| Classic RAG (Vector + top-k) | ~50% 以下 | マルチホップ推論・エンティティ同一性・矛盾検出が不可能 |
+| Microsoft GraphRAG | 51.6% | コミュニティ要約型。Factoid QA に弱く、論文追加のたびに全再構築 |
+| MemGraphRAG 論文 (GPT-4o-mini) | 71.6% | 三層メモリ＋マルチエージェント。方向性は正しいが未最適化 |
+| **aira-synapse (本実装)** | **91.2%** | 論文比 +19.6pt。クリーンルーム実装＋独自拡張 |
+
+## 達成した精度
+
+| 言語 | モデル | Str-Acc | LLM-Acc | vs 論文 |
+|------|--------|---------|---------|---------|
+| EN | GPT-5.4-mini | 89.4% (447/500) | **91.2%** (456/500) | **+19.6pt** |
+| JA | GPT-5.4-mini | 70.8% (283/400) | 70.8% | baseline |
+| JA | GPT-5.5 | **78.3%** (313/400) | 78.3% | **+7.5pt** vs mini |
+
+日本語 Comparison は **90.7%** で英語の 90.0% を超えた。
+
+## 得られた7つの知見
+
+1. **メモリベースの抽出 + スキーマ安定化 がグラフ品質の鍵** — コミュニティ検出ではなく、Fact 単位の品質管理が精度を決める
+2. **Vector と BM25 は相補的** — RRF 統合で Bridge +1.8pt。どちらか一方では取りこぼす
+3. **eval 関数の統一がベンチマークの前提条件** — バックエンドより eval で 3pt 動く。比較前に必ず統一せよ
+4. **多言語対応はチャンキング層から作り直す** — 英語の `\n\n` 分割を流用すると巨大チャンクが生まれ精度が崩壊する
+5. **研究者の手元で動く RAG には DB 自作の覚悟が要る** — Neo4j は重く、LadybugDB はバグで頓挫し、Rust で aira-graphdb を書いた
+6. **Fact 密度を 3.4 倍にしても +0.2pt** — 検索品質ではなく LLM 推論力が天井。GPT-5.5 で +7.5pt がその証拠
+7. **ボトルネックの正確な特定が最も重要** — 7つの RAG 改善策が全て無効だった原因は LLM 側にあった。GPT-5.5 への切替だけで Comparison は EN を超えた
+
+## 技術選定の判断軸
+
+| 判断 | 選んだもの | 理由 |
+|------|-----------|------|
+| グラフ構築 | 三層メモリ + マルチエージェント | コミュニティ要約型より Factoid QA に強い |
+| 検索 | Hybrid RRF (Vector + BM25) | 単独では取りこぼす情報を相補的にカバー |
+| DB | aira-graphdb (Rust 自作) | Docker不要・単一ファイル・研究者の手元で完結 |
+| 日本語チャンキング | GINZA sentencizer | 文境界で切らないと固有名詞が分断される |
+| LLM | GPT-5.4-mini (デフォルト) / GPT-5.5 (高精度) | コスト vs 精度のトレードオフで選択可能 |
 
 aira-synapse / aira-graphdb のソースは [GitHub (nahisaho/aira-synapse)](https://github.com/nahisaho/aira-synapse) で公開中。精度改善の全履歴と ADR は [aira-graphdb-accuracy-journey.md](https://github.com/nahisaho/aira-synapse/blob/main/docs/aira-graphdb-accuracy-journey.md) を参照。
 
