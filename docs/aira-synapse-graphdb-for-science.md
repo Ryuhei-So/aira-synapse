@@ -623,13 +623,23 @@ aira-synapse / aira-graphdb のソースは [GitHub (nahisaho/aira-synapse)](htt
 :::note info
 #### 試してみたい方へ
 ```bash
+# 1. aira-graphdb (Rust 製グラフDB) をビルド
+git clone https://github.com/nahisaho/aira-graphdb.git
+cd aira-graphdb && cargo build --release
+# PATH に追加（または cp target/release/aira-graphdb /usr/local/bin/）
+
+# 2. aira-synapse (Graph RAG エンジン) をセットアップ
 git clone https://github.com/nahisaho/aira-synapse.git
 cd aira-synapse && npm install && npm run build
-# 論文 PDF を投入してナレッジグラフ構築
+
+# 3. 論文 PDF を投入してナレッジグラフ構築
 aira-synapse index --input ./your-papers/*.pdf
-# MCP サーバーを起動して Claude Desktop / VS Code Copilot に接続
+
+# 4. MCP サーバーを起動して Claude Desktop / VS Code Copilot に接続
 aira-synapse mcp --db ./your-research.agdb
 ```
+> **前提**: Rust toolchain (`rustup`), Node.js 20+, Docling (PDF→Markdown 変換) が必要です。
+
 Issue / PR / Star 歓迎。特に **自分の研究分野の論文コーパスでの精度報告** をいただけると、多言語・多分野への汎化に大きく貢献します。
 :::
 
