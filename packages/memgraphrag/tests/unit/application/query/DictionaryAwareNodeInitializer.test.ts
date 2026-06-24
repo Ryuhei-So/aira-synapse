@@ -90,7 +90,7 @@ describe('DictionaryAwareNodeInitializer', () => {
 
     const result = await init.initialize({
       query: { corpusId: 'test-corpus', text: 'test query', topK: 10, topM: 5, threshold: 0.5, contextTokenLimit: 4000 },
-      candidates: { ontology: [], facts: [], passages: [], expandedTerms: [], fallbackRequired: false },
+      candidates: { ontology: [], facts: [], passages: [], expandedTerms: [], fallbackRequired: false, queryVector: [] },
     });
 
     expect(result).toEqual(base);
@@ -108,7 +108,7 @@ describe('DictionaryAwareNodeInitializer', () => {
 
     const result = await init.initialize({
       query: { corpusId: 'test-corpus', text: 'Einstein', topK: 10, topM: 5, threshold: 0.5, contextTokenLimit: 4000 },
-      candidates: { ontology: [], facts: [], passages: [], expandedTerms: [], fallbackRequired: false },
+      candidates: { ontology: [], facts: [], passages: [], expandedTerms: [], fallbackRequired: false, queryVector: [] },
     });
 
     expect(result).toEqual(base);
@@ -129,7 +129,7 @@ describe('DictionaryAwareNodeInitializer', () => {
 
     const result = await init.initialize({
       query: { corpusId: 'test-corpus', text: 'Einstein', topK: 10, topM: 5, threshold: 0.5, contextTokenLimit: 4000 },
-      candidates: { ontology: [], facts: [], passages: [], expandedTerms: [], fallbackRequired: false },
+      candidates: { ontology: [], facts: [], passages: [], expandedTerms: [], fallbackRequired: false, queryVector: [] },
     });
 
     expect(result.injectedCount).toBe(1);
@@ -155,7 +155,7 @@ describe('DictionaryAwareNodeInitializer', () => {
 
     const result = await init.initialize({
       query: { corpusId: 'test-corpus', text: 'Einstein', topK: 10, topM: 5, threshold: 0.5, contextTokenLimit: 4000 },
-      candidates: { ontology: [], facts: [], passages: [], expandedTerms: [], fallbackRequired: false },
+      candidates: { ontology: [], facts: [], passages: [], expandedTerms: [], fallbackRequired: false, queryVector: [] },
     });
 
     // Default MAX_PER_ENTITY=3, so only 3 injected

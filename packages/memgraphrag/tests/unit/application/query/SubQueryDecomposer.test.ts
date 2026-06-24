@@ -49,7 +49,7 @@ function mockProjection(): IGraphProjection {
 
 const makeRequest = (text: string) => ({
   query: { corpusId: 'test', text, topK: 10, topM: 5, threshold: 0.5, contextTokenLimit: 4000 },
-  candidates: { ontology: [], facts: [], passages: [], expandedTerms: [], fallbackRequired: false },
+  candidates: { ontology: [], facts: [], passages: [], expandedTerms: [], fallbackRequired: false, queryVector: [] },
 });
 
 describe('SubQueryDecomposer', () => {

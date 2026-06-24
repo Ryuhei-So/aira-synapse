@@ -16,6 +16,7 @@ aira-synapse is a **MemGraphRAG clean-room implementation** with proprietary ext
 
 - **91.2% LLM-Acc** on HotpotQA 500 questions (paper baseline: 71.6%)
 - **78.3% JA accuracy** with GPT-5.5 (Comparison: 90.7%, surpassing EN)
+- **Federated Query**: Query across multiple .agdb databases with RRF-based result merging
 - **Hybrid retrieval**: Vector + BM25 with Reciprocal Rank Fusion
 - **Three-layer memory**: Episodic → Semantic → Procedural with schema stabilization
 - **Multi-agent extraction**: Schema Agent + Contradiction Detector + Quality Gate
@@ -68,6 +69,7 @@ npx aira-synapse mcp --db ./your-research.agdb
 ├─────────────────────────────────────────────────────┤
 │ Application Layer                                   │
 │   IndexingPipeline → QueryService → AnswerGenerator │
+│   FederatedQueryService → RRF Merger                │
 ├─────────────────────────────────────────────────────┤
 │ Domain Layer                                        │
 │   ThreeLayerMemory │ SchemaStabilizer │ PPR Walker  │
@@ -84,12 +86,38 @@ npx aira-synapse mcp --db ./your-research.agdb
 | `aira-synapse init` | Initialize a new knowledge base |
 | `aira-synapse index` | Index PDF/Markdown documents |
 | `aira-synapse query` | Query the knowledge graph |
+| `aira-synapse query --db` | Federated query across multiple databases |
 | `aira-synapse stats` | Show graph statistics |
 | `aira-synapse mcp` | Start MCP server |
 | `aira-synapse visualize` | Visualize graph structure |
 | `aira-synapse conflicts` | Show detected contradictions |
 | `aira-synapse dictionary` | Manage domain dictionary |
 | `aira-synapse thesaurus` | Manage thesaurus |
+
+## Federated Query
+
+Query across multiple knowledge bases simultaneously with automatic result merging:
+
+```bash
+# Query across EN papers and JP papers databases
+npx aira-synapse query \
+  --db ./en-papers.agdb \
+  --db ./jp-papers.agdb \
+  --text "What is the relationship between X and Y?"
+```
+
+**How it works:**
+1. Query is prepared once (normalization, dictionary expansion, comparison detection)
+2. Embedding is computed once and shared across all databases
+3. Each database is queried in parallel with soft timeout
+4. Results are merged using Reciprocal Rank Fusion (RRF) with deduplication
+5. A unified answer is generated from the merged context
+
+**Features:**
+- Per-database weight configuration
+- Contribution cap to prevent single-DB dominance (default: 70%)
+- Graceful partial failure — returns results even if some DBs fail
+- Citation namespacing — traceable back to source database
 
 ## Project Structure
 

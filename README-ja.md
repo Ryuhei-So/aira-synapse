@@ -16,6 +16,7 @@ aira-synapse は **MemGraphRAG（KDD 2026）のクリーンルーム実装 + 独
 
 - **91.2% LLM-Acc** — HotpotQA 500問（論文ベースライン: 71.6%）
 - **日本語 78.3%** — GPT-5.5 使用。Comparison 90.7% で英語版を超過
+- **Federated Query**: 複数の .agdb を横断クエリ、RRF でマージ
 - **ハイブリッド検索**: Vector + BM25 を Reciprocal Rank Fusion で統合
 - **三層メモリ**: Episodic → Semantic → Procedural + スキーマ安定化
 - **マルチエージェント抽出**: Schema Agent + 矛盾検出 + 品質ゲート
@@ -68,6 +69,7 @@ npx aira-synapse mcp --db ./your-research.agdb
 ├─────────────────────────────────────────────────────┤
 │ Application Layer                                   │
 │   IndexingPipeline → QueryService → AnswerGenerator │
+│   FederatedQueryService → RRF Merger                │
 ├─────────────────────────────────────────────────────┤
 │ Domain Layer                                        │
 │   ThreeLayerMemory │ SchemaStabilizer │ PPR Walker  │
@@ -84,12 +86,38 @@ npx aira-synapse mcp --db ./your-research.agdb
 | `aira-synapse init` | ナレッジベースを初期化 |
 | `aira-synapse index` | PDF/Markdown ドキュメントをインデックス |
 | `aira-synapse query` | ナレッジグラフに質問 |
+| `aira-synapse query --db` | 複数データベースを横断クエリ |
 | `aira-synapse stats` | グラフ統計を表示 |
 | `aira-synapse mcp` | MCP サーバーを起動 |
 | `aira-synapse visualize` | グラフ構造を可視化 |
 | `aira-synapse conflicts` | 検出された矛盾を表示 |
 | `aira-synapse dictionary` | 専門用語辞書を管理 |
 | `aira-synapse thesaurus` | シソーラスを管理 |
+
+## Federated Query（横断クエリ）
+
+複数のナレッジベースを同時に検索し、結果を自動的にマージ:
+
+```bash
+# 英語論文DBと日本語論文DBを横断クエリ
+npx aira-synapse query \
+  --db ./en-papers.agdb \
+  --db ./jp-papers.agdb \
+  --text "X と Y の関係は？"
+```
+
+**動作原理:**
+1. クエリを1回だけ前処理（正規化、辞書展開、比較検出）
+2. Embedding を1回計算し全DBで共有
+3. 各データベースに並列クエリ（ソフトタイムアウト付き）
+4. Reciprocal Rank Fusion (RRF) で結果をマージ＋重複除去
+5. マージされたコンテキストから統一回答を生成
+
+**特徴:**
+- DB ごとの重み付け設定
+- 貢献上限で単一 DB の支配を防止（デフォルト: 70%）
+- 部分障害許容 — 一部 DB が失敗しても他の結果を返却
+- 引用名前空間 — 元データベースまでトレース可能
 
 ## プロジェクト構成
 

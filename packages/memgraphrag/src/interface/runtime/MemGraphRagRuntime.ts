@@ -40,6 +40,7 @@ import type {
   IThesaurus,
   IVectorIndex,
   QueryRequest,
+  RetrievedQueryContext,
 } from '../../domain/index.js';
 import {
   FileVectorIndex,
@@ -270,6 +271,22 @@ class QueryServiceFacade implements QueryService {
       hyperParams: hp,
     });
     return service.query(request);
+  }
+
+  public async retrieve(request: QueryRequest, precomputedVector?: readonly number[]): Promise<RetrievedQueryContext> {
+    const dictionary = new SQLiteLexiconStore(this.db, request.corpusId);
+    const thesaurus = new SQLiteLexiconStore(this.db, request.corpusId);
+    const service = new DefaultQueryService({
+      dictionary,
+      expansionPolicy: new ThesaurusExpansionPolicy(thesaurus),
+      memoryFilter: new VectorMemoryFilter(this.embeddingProvider, this.vectorIndex, this.memoryStore, this.graphStore),
+      nodeInitializer: new SimpleNodeInitializer(this.memoryStore),
+      ppr: new SimplePPR(),
+      projection: this.graphProjection,
+      contextBuilder: new SimpleContextBuilder(this.memoryStore),
+      llm: this.llm,
+    });
+    return service.retrieve(request, precomputedVector);
   }
 }
 

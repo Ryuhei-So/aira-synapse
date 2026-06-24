@@ -34,7 +34,7 @@ describe('TASK-MG-058: local-only fallback e2e', () => {
     const service = new DefaultQueryService({
       dictionary: { ...createNotImplementedStub<ITermDictionary>('ITermDictionary'), match: vi.fn().mockResolvedValue([]) },
       expansionPolicy: { expandQuery: vi.fn().mockResolvedValue({ originalQuery: 'graph retrieval', rewrittenQuery: 'graph retrieval', expandedTerms: [] }) },
-      memoryFilter: { ...createNotImplementedStub<IMemoryFilter>('IMemoryFilter'), filter: vi.fn().mockResolvedValue({ ontology: [], facts: [], passages: [], expandedTerms: [], fallbackRequired: true }) },
+      memoryFilter: { ...createNotImplementedStub<IMemoryFilter>('IMemoryFilter'), filter: vi.fn().mockResolvedValue({ ontology: [], facts: [], passages: [], expandedTerms: [], fallbackRequired: true, queryVector: [] }) },
       nodeInitializer: { ...createNotImplementedStub<INodeInitializer>('INodeInitializer'), initialize: vi.fn().mockResolvedValue({ scores: {}, fallbackTriggered: true }) },
       ppr: { ...createNotImplementedStub<IPPR>('IPPR'), run: vi.fn().mockResolvedValue({ rankedPassages: [], rankedEntities: [], iterations: 1, converged: true, l1Delta: 0 }) },
       projection: createNotImplementedStub<IGraphProjection>('IGraphProjection'),

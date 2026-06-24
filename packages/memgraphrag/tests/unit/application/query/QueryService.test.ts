@@ -53,7 +53,7 @@ describe('TASK-MG-034: DefaultQueryService', () => {
     const expansionPolicy = new ThesaurusExpansionPolicy(thesaurus);
     const memoryFilter = {
       ...createNotImplementedStub<IMemoryFilter>('IMemoryFilter'),
-      filter: vi.fn<IMemoryFilter['filter']>().mockResolvedValue({ ontology: [], facts: [], passages: [], expandedTerms: ['citation network'], fallbackRequired: false }),
+      filter: vi.fn<IMemoryFilter['filter']>().mockResolvedValue({ ontology: [], facts: [], passages: [], expandedTerms: ['citation network'], fallbackRequired: false, queryVector: [] }),
     } satisfies IMemoryFilter;
     const nodeInitializer = {
       ...createNotImplementedStub<INodeInitializer>('INodeInitializer'),
@@ -100,7 +100,7 @@ describe('TASK-MG-034: DefaultQueryService', () => {
     const service = new DefaultQueryService({
       dictionary,
       expansionPolicy: { expandQuery: vi.fn().mockResolvedValue({ originalQuery: 'GNN for citation graphs', expandedTerms: [], rewrittenQuery: 'GNN for citation graphs' }) },
-      memoryFilter: { ...createNotImplementedStub<IMemoryFilter>('IMemoryFilter'), filter: vi.fn<IMemoryFilter['filter']>().mockResolvedValue({ ontology: [], facts: [], passages: [], expandedTerms: [], fallbackRequired: true }) },
+      memoryFilter: { ...createNotImplementedStub<IMemoryFilter>('IMemoryFilter'), filter: vi.fn<IMemoryFilter['filter']>().mockResolvedValue({ ontology: [], facts: [], passages: [], expandedTerms: [], fallbackRequired: true, queryVector: [] }) },
       nodeInitializer: { ...createNotImplementedStub<INodeInitializer>('INodeInitializer'), initialize: vi.fn<INodeInitializer['initialize']>().mockResolvedValue({ scores: {}, fallbackTriggered: true }) },
       ppr: { ...createNotImplementedStub<IPPR>('IPPR'), run: vi.fn<IPPR['run']>().mockResolvedValue(ranking) },
       projection: createNotImplementedStub<IGraphProjection>('IGraphProjection'),
@@ -109,7 +109,7 @@ describe('TASK-MG-034: DefaultQueryService', () => {
     });
 
     await service.query({ ...createQueryRequest(), text: '  GNN\nfor citation graphs  ' });
-    expect(service['dependencies'].memoryFilter.filter).toHaveBeenCalledWith(expect.objectContaining({ text: 'GNN for citation graphs' }));
+    expect(service['dependencies'].memoryFilter.filter).toHaveBeenCalledWith(expect.objectContaining({ text: 'GNN for citation graphs' }), undefined);
   });
 
   it('ContextBuilderService resolves ranked node ids into prompt context', async () => {
@@ -131,7 +131,7 @@ describe('TASK-MG-034: DefaultQueryService', () => {
     const service = new DefaultQueryService({
       dictionary: { ...createNotImplementedStub<ITermDictionary>('ITermDictionary'), match: vi.fn<ITermDictionary['match']>().mockResolvedValue([]) },
       expansionPolicy: { expandQuery: vi.fn().mockResolvedValue({ originalQuery: 'x', expandedTerms: [], rewrittenQuery: 'x' }) },
-      memoryFilter: { ...createNotImplementedStub<IMemoryFilter>('IMemoryFilter'), filter: vi.fn<IMemoryFilter['filter']>().mockResolvedValue({ ontology: [], facts: [], passages: [], expandedTerms: [], fallbackRequired: true }) },
+      memoryFilter: { ...createNotImplementedStub<IMemoryFilter>('IMemoryFilter'), filter: vi.fn<IMemoryFilter['filter']>().mockResolvedValue({ ontology: [], facts: [], passages: [], expandedTerms: [], fallbackRequired: true, queryVector: [] }) },
       nodeInitializer: { ...createNotImplementedStub<INodeInitializer>('INodeInitializer'), initialize: vi.fn<INodeInitializer['initialize']>().mockResolvedValue({ scores: {}, fallbackTriggered: true }) },
       ppr: { ...createNotImplementedStub<IPPR>('IPPR'), run: vi.fn<IPPR['run']>().mockResolvedValue({ ...ranking, converged: false }) },
       projection: createNotImplementedStub<IGraphProjection>('IGraphProjection'),

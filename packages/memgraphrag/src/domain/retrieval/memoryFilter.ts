@@ -29,6 +29,7 @@ export interface FilteredMemoryCandidates {
   readonly passages: readonly MemoryCandidate<Passage>[];
   readonly expandedTerms: readonly string[];
   readonly fallbackRequired: boolean;
+  readonly queryVector: readonly number[];
 }
 
 export interface NodeInitializationVector {
@@ -43,7 +44,7 @@ export interface NodeInitializationRequest {
 }
 
 export interface IMemoryFilter {
-  filter(request: QueryRequest): Promise<FilteredMemoryCandidates>;
+  filter(request: QueryRequest, precomputedVector?: readonly number[]): Promise<FilteredMemoryCandidates>;
 }
 
 export interface INodeInitializer {

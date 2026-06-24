@@ -41,7 +41,7 @@ describe('TASK-MG-049: TemplateResponseGenerator', () => {
     const service = new DefaultQueryService({
       dictionary: { ...createNotImplementedStub<ITermDictionary>('ITermDictionary'), match: vi.fn().mockResolvedValue([]) },
       expansionPolicy: { expandQuery: vi.fn().mockResolvedValue({ originalQuery: 'graph retrieval', rewrittenQuery: 'graph retrieval', expandedTerms: [] }) },
-      memoryFilter: { ...createNotImplementedStub<IMemoryFilter>('IMemoryFilter'), filter: vi.fn().mockResolvedValue({ ontology: [], facts: [], passages: [], expandedTerms: [], fallbackRequired: false }) },
+      memoryFilter: { ...createNotImplementedStub<IMemoryFilter>('IMemoryFilter'), filter: vi.fn().mockResolvedValue({ ontology: [], facts: [], passages: [], expandedTerms: [], fallbackRequired: false, queryVector: [] }) },
       nodeInitializer: { ...createNotImplementedStub<INodeInitializer>('INodeInitializer'), initialize: vi.fn().mockResolvedValue({ scores: {}, fallbackTriggered: false }) },
       ppr: { ...createNotImplementedStub<IPPR>('IPPR'), run: vi.fn().mockResolvedValue({ rankedPassages: [], rankedEntities: [], iterations: 2, converged: true, l1Delta: 0 }) },
       projection: createNotImplementedStub<IGraphProjection>('IGraphProjection'),

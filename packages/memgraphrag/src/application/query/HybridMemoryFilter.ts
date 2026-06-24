@@ -34,11 +34,17 @@ export class HybridMemoryFilter implements IMemoryFilter {
     _graphStore: unknown,
   ) {}
 
-  public async filter(request: QueryRequest): Promise<FilteredMemoryCandidates> {
-    const { vectors } = await this.embeddingProvider.embed({ texts: [request.text] });
-    const queryVector = vectors[0];
-    if (!queryVector || queryVector.length === 0) {
-      return { ontology: [], facts: [], passages: [], expandedTerms: [], fallbackRequired: true };
+  public async filter(request: QueryRequest, precomputedVector?: readonly number[]): Promise<FilteredMemoryCandidates> {
+    let queryVector: readonly number[];
+    if (precomputedVector && precomputedVector.length > 0) {
+      queryVector = precomputedVector;
+    } else {
+      const { vectors } = await this.embeddingProvider.embed({ texts: [request.text] });
+      const v = vectors[0];
+      if (!v || v.length === 0) {
+        return { ontology: [], facts: [], passages: [], expandedTerms: [], fallbackRequired: true, queryVector: [] };
+      }
+      queryVector = v;
     }
 
     // Run vector and lexical searches in parallel
@@ -147,6 +153,7 @@ export class HybridMemoryFilter implements IMemoryFilter {
       passages,
       expandedTerms: [],
       fallbackRequired,
+      queryVector: [...queryVector],
     };
   }
 }

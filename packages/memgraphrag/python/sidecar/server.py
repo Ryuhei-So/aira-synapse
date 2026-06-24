@@ -230,6 +230,28 @@ def extract_entities_ja(text: str) -> Dict[str, Any]:
     }
 
 
+def tokenize_ja(text: str) -> Dict[str, Any]:
+    """Tokenize Japanese text using GINZA for BM25 search."""
+    nlp = get_nlp("ja")
+    if nlp is None:
+        # Fallback: character bigrams
+        chars = text.strip()
+        tokens = [chars[i:i+2] for i in range(len(chars)-1)]
+        return {"tokens": tokens, "method": "bigram_fallback"}
+
+    doc = nlp(text)
+    tokens = []
+    for token in doc:
+        # Skip punctuation, symbols, spaces
+        if token.pos_ in ("PUNCT", "SYM", "SPACE", "X"):
+            continue
+        # Use lemma for content words
+        lemma = token.lemma_.strip()
+        if len(lemma) >= 1:
+            tokens.append(lemma)
+    return {"tokens": tokens, "method": "ginza"}
+
+
 def handle_request(payload: Dict[str, Any]) -> Dict[str, Any]:
     request_id = payload.get("id")
     method = payload.get("method")
@@ -249,6 +271,9 @@ def handle_request(payload: Dict[str, Any]) -> Dict[str, Any]:
         if method == "extract_entities_ja":
             text = str(params.get("text", ""))
             return success_response(request_id, extract_entities_ja(text))
+        if method == "tokenize_ja":
+            text = str(params.get("text", ""))
+            return success_response(request_id, tokenize_ja(text))
         return error_response(request_id, -32601, f"Method not found: {method}")
     except Exception as exc:  # pragma: no cover
         return error_response(request_id, -32000, str(exc))

@@ -16,6 +16,7 @@ import type { Fact } from '../../domain/memory/fact.js';
 import type { Passage } from '../../domain/memory/passage.js';
 import type { QueryFeatureFlags } from '../../domain/config/featureFlags.js';
 import type { IMultiHopReasoner } from '../../domain/retrieval/multiHop.js';
+import type { PreparedQuery, RetrievedQueryContext } from '../../domain/retrieval/federation.js';
 import { DEFAULT_QUERY_FLAGS } from '../../domain/config/featureFlags.js';
 import { ThesaurusExpansionPolicy } from './ThesaurusExpansionPolicy.js';
 import { TemplateResponseGenerator } from './TemplateResponseGenerator.js';
@@ -30,6 +31,7 @@ export interface CitationDto {
   readonly title: string;
   readonly sourceUrl: string;
   readonly snippet: string;
+  readonly dbId?: string;
 }
 
 export interface EntityHit {
@@ -68,6 +70,14 @@ export interface QueryMetrics {
   readonly hop2PassageIds?: readonly string[];
   readonly multiHopFallbackReason?: import('../../domain/retrieval/multiHop.js').MultiHopFallbackReason;
   readonly multiHopLatencyMs?: number;
+  // Federation additions (DES-FED-007)
+  readonly federationEnabled?: boolean;
+  readonly federatedDbCount?: number;
+  readonly federatedSuccessCount?: number;
+  readonly federatedFailureCount?: number;
+  readonly perDbMetrics?: readonly import('./federationTypes.js').FederatedDbMetric[];
+  readonly rrfMergedCount?: number;
+  readonly rrfDeduplicatedCount?: number;
 }
 
 export interface QueryResponse {
@@ -75,10 +85,12 @@ export interface QueryResponse {
   readonly citations: readonly CitationDto[];
   readonly entities: readonly EntityHit[];
   readonly metrics: QueryMetrics;
+  readonly warnings?: readonly string[];
 }
 
 export interface QueryService {
   query(request: QueryRequest): Promise<QueryResponse>;
+  retrieve(request: QueryRequest, precomputedVector?: readonly number[]): Promise<RetrievedQueryContext>;
 }
 
 /** Tunable hyperparameters for query pipeline optimization. */
@@ -129,6 +141,16 @@ function toEntityHits(matches: readonly DictionaryMatch[]): readonly EntityHit[]
   }));
 }
 
+function toCitationsFromPassages(passages: readonly import('../../domain/retrieval/federation.js').RankedPassage[]): readonly CitationDto[] {
+  return passages.map((rp) => ({
+    passageId: rp.passage.passageId,
+    title: rp.passage.metadata.title,
+    sourceUrl: rp.passage.metadata.sourceUrl,
+    snippet: rp.passage.text,
+    dbId: rp.dbId,
+  }));
+}
+
 function toCitations(bundle: ContextBundle): readonly CitationDto[] {
   return bundle.citedPassages.map((passage) => ({
     passageId: passage.passageId,
@@ -158,12 +180,11 @@ export class DefaultQueryService implements QueryService {
     this.flags = dependencies.featureFlags ?? DEFAULT_QUERY_FLAGS;
   }
 
-  public async query(request: QueryRequest): Promise<QueryResponse> {
-    const startTime = Date.now();
+  /** Preprocess: normalize, dictionary match, thesaurus expand, comparison detect, dict enrich. */
+  public async prepare(request: QueryRequest): Promise<PreparedQuery> {
     const normalizedText = normalizeQueryText(request.text);
     const matches = await this.dependencies.dictionary.match(normalizedText, 'unknown');
 
-    // Thesaurus expansion (controlled by flag)
     let expansion: { expandedTerms: readonly string[]; rewrittenQuery: string; originalQuery: string };
     if (this.flags.enableThesaurusExpansion) {
       expansion = await this.dependencies.expansionPolicy.expandQuery(normalizedText);
@@ -171,51 +192,106 @@ export class DefaultQueryService implements QueryService {
       expansion = { expandedTerms: [], rewrittenQuery: normalizedText, originalQuery: normalizedText };
     }
 
-    const expandedRequest: QueryRequest = {
-      ...request,
-      text: expansion.rewrittenQuery,
-    };
-    const candidates = await this.dependencies.memoryFilter.filter(expandedRequest);
-    const initRequest = { query: expandedRequest, candidates };
-    let initialVector = await this.dependencies.nodeInitializer.initialize(initRequest);
-
-    // Sub-query decomposition for bridge questions
-    let subQueryDecomposed = false;
-    let hop1FactCount = 0;
-    let hop2FactCount = 0;
-    if (this.flags.enableSubQueryDecomposition && this.dependencies.subQueryDecomposer) {
-      const subResult = await this.dependencies.subQueryDecomposer.decompose(initRequest, initialVector);
-      initialVector = subResult.mergedVector;
-      subQueryDecomposed = subResult.decomposed;
-      hop1FactCount = subResult.hop1FactCount;
-      hop2FactCount = subResult.hop2FactCount;
-    }
-
-    const ranking = await this.dependencies.ppr.run({
-      corpusId: request.corpusId,
-      initialVector,
-      teleportProbability: this.hp.teleportProbability,
-      convergenceEpsilon: 1e-6,
-      maxIterations: 100,
-      topK: request.topK,
-      topM: request.topM,
-    }, this.dependencies.projection);
-
+    const expandedRequest: QueryRequest = { ...request, text: expansion.rewrittenQuery };
     const isComparison = isComparisonQuery(expandedRequest.text);
-    const context = await this.dependencies.contextBuilder.build(expandedRequest, ranking);
-    const entities = toEntityHits(matches);
 
-    // Dictionary context enrichment (v0.3.0 revised: enrich context, not teleport vector)
     let dictionaryHints = '';
-    let dictionaryHintCount = 0;
     if (this.flags.enableDictionaryInjection) {
       const enricher = new DictionaryContextEnricher(this.dependencies.dictionary);
       const hints = await enricher.getHints(normalizedText);
       dictionaryHints = enricher.formatHints(hints);
-      dictionaryHintCount = hints.length;
     }
 
-    const enrichedContext = dictionaryHints + context.promptContext;
+    return {
+      normalizedText,
+      expandedRequest,
+      entityHits: toEntityHits(matches).map((e) => ({ term: e.term, matchedText: e.matchedText, boostFactor: e.boostFactor })),
+      dictionaryHints,
+      isComparison,
+    };
+  }
+
+  /** Execute retrieval using pre-processed query. No normalization/expansion. */
+  public async retrievePrepared(
+    prepared: PreparedQuery,
+    precomputedVector?: readonly number[],
+  ): Promise<RetrievedQueryContext> {
+    const startTime = Date.now();
+    const { expandedRequest } = prepared;
+
+    const candidates = await this.dependencies.memoryFilter.filter(expandedRequest, precomputedVector);
+    const initRequest = { query: expandedRequest, candidates };
+    let initialVector = await this.dependencies.nodeInitializer.initialize(initRequest);
+
+    if (this.flags.enableSubQueryDecomposition && this.dependencies.subQueryDecomposer) {
+      const subResult = await this.dependencies.subQueryDecomposer.decompose(initRequest, initialVector);
+      initialVector = subResult.mergedVector;
+    }
+
+    const ranking = await this.dependencies.ppr.run({
+      corpusId: expandedRequest.corpusId,
+      initialVector,
+      teleportProbability: this.hp.teleportProbability,
+      convergenceEpsilon: 1e-6,
+      maxIterations: 100,
+      topK: expandedRequest.topK,
+      topM: expandedRequest.topM,
+    }, this.dependencies.projection);
+
+    const context = await this.dependencies.contextBuilder.build(expandedRequest, ranking);
+
+    // Build RankedPassage[] and RankedFact[] from PPR results
+    const passages: import('../../domain/retrieval/federation.js').RankedPassage[] =
+      context.citedPassages.map((passage, idx) => {
+        const pprNode = ranking.rankedPassages[idx];
+        return { passage, score: pprNode?.score ?? 0, rank: idx + 1 };
+      });
+
+    const facts: import('../../domain/retrieval/federation.js').RankedFact[] =
+      context.citedFacts.map((fact, idx) => {
+        const pprNode = ranking.rankedEntities[idx];
+        return { fact, score: pprNode?.score ?? 0, rank: idx + 1 };
+      });
+
+    return {
+      passages,
+      facts,
+      pprResult: ranking,
+      contextBundle: context,
+      normalizedText: prepared.normalizedText,
+      expandedRequest,
+      entityHits: prepared.entityHits,
+      dictionaryHints: prepared.dictionaryHints,
+      isComparison: prepared.isComparison,
+      queryVector: [...candidates.queryVector],
+      metrics: {
+        dictionaryMatchCount: prepared.entityHits.length,
+        expandedTerms: candidates.expandedTerms,
+        fallbackTriggered: candidates.fallbackRequired || initialVector.fallbackTriggered,
+        pprIterations: ranking.iterations,
+        pprConverged: ranking.converged,
+        citedPassageCount: context.citedPassages.length,
+        latencyMs: Date.now() - startTime,
+      },
+    };
+  }
+
+  /** Full retrieve: prepare + retrievePrepared. */
+  public async retrieve(
+    request: QueryRequest,
+    precomputedVector?: readonly number[],
+  ): Promise<RetrievedQueryContext> {
+    const prepared = await this.prepare(request);
+    return this.retrievePrepared(prepared, precomputedVector);
+  }
+
+  /** Generate answer from retrieved context. */
+  public async answer(_request: QueryRequest, ctx: RetrievedQueryContext): Promise<QueryResponse> {
+    const startTime = Date.now();
+    const enrichedContext = ctx.dictionaryHints + ctx.contextBundle.promptContext;
+    const entities: readonly EntityHit[] = ctx.entityHits.map((e) => ({
+      term: e.term, matchedText: e.matchedText, boostFactor: e.boostFactor,
+    }));
 
     let responseText: string;
     let llmInputTokens = 0;
@@ -236,18 +312,15 @@ export class DefaultQueryService implements QueryService {
     let mhFallbackReason: import('../../domain/retrieval/multiHop.js').MultiHopFallbackReason | undefined;
     let mhLatencyMs: number | undefined;
 
-    // Multi-hop reasoning branch (before standard LLM)
     let multiHopHint = '';
-    if (this.flags.enableMultiHopReasoning && this.dependencies.multiHopReasoner && !isComparison) {
+    if (this.flags.enableMultiHopReasoning && this.dependencies.multiHopReasoner && !ctx.isComparison) {
       multiHopEnabled = true;
-      const passagesForMH = context.citedPassages.map((p) => ({
-        id: p.passageId,
-        text: p.text,
+      const passagesForMH = ctx.contextBundle.citedPassages.map((p) => ({
+        id: p.passageId, text: p.text,
       }));
 
       const mhResult = await this.dependencies.multiHopReasoner.reason(
-        expandedRequest.text,
-        passagesForMH,
+        ctx.expandedRequest.text, passagesForMH,
       );
 
       mhQuestionType = mhResult.questionType;
@@ -255,26 +328,17 @@ export class DefaultQueryService implements QueryService {
       llmInputTokens += mhResult.usage.inputTokens;
       llmOutputTokens += mhResult.usage.outputTokens;
 
-      if (mhResult.hop1) {
-        mhHop1Answer = mhResult.hop1.answer;
-        mhHop1PassageIds = mhResult.hop1.passageIds;
-      }
-      if (mhResult.hop2) {
-        mhHop2Answer = mhResult.hop2.answer;
-        mhHop2PassageIds = mhResult.hop2.passageIds;
-      }
-      if (mhResult.fallbackReason) {
-        mhFallbackReason = mhResult.fallbackReason;
-      }
+      if (mhResult.hop1) { mhHop1Answer = mhResult.hop1.answer; mhHop1PassageIds = mhResult.hop1.passageIds; }
+      if (mhResult.hop2) { mhHop2Answer = mhResult.hop2.answer; mhHop2PassageIds = mhResult.hop2.passageIds; }
+      if (mhResult.fallbackReason) { mhFallbackReason = mhResult.fallbackReason; }
 
-      // Inject multi-hop reasoning as a hint ONLY when fully grounded (no fallback)
       if (!mhResult.fellBack && mhResult.answer) {
         multiHopHint = `\n\n[Chain-of-thought hint: intermediate reasoning suggests "${mhResult.hop1?.answer ?? ''}" leads to "${mhResult.answer}". Verify against context before using.]`;
       }
     }
 
     try {
-      const prompt = isComparison
+      const prompt = ctx.isComparison
         ? `You are answering a comparison or yes/no question about two or more entities.
 
 Step-by-step:
@@ -291,7 +355,7 @@ Rules:
 - If the context seems insufficient, give your best answer based on available information — NEVER refuse to answer
 - Your last line MUST be: FINAL: <your answer>
 
-Question: ${expandedRequest.text}
+Question: ${ctx.expandedRequest.text}
 
 Context:
 ${enrichedContext}${multiHopHint}
@@ -314,32 +378,27 @@ Rules:
 - Your last line MUST be: FINAL: <your answer>
 - The answer should be a complete name, title, or phrase that precisely matches what is asked
 
-Question: ${expandedRequest.text}
+Question: ${ctx.expandedRequest.text}
 
 Context:
 ${enrichedContext}${multiHopHint}
 
 Reasoning and answer:`;
 
-      // Self-consistency: generate N samples and take majority vote
       const scTemp = this.hp.scTemperature;
       const scN = this.hp.scSamples;
 
       const samplePromises = [
         this.dependencies.llm.generate({
-          prompt,
-          temperature: 0.0,
-          reasoningEffort: this.hp.reasoningEffort,
-          verbosity: this.hp.verbosity,
+          prompt, temperature: 0.0,
+          reasoningEffort: this.hp.reasoningEffort, verbosity: this.hp.verbosity,
         }),
       ];
       for (let i = 1; i < scN; i++) {
         samplePromises.push(
           this.dependencies.llm.generate({
-            prompt,
-            temperature: scTemp,
-            reasoningEffort: this.hp.reasoningEffort,
-            verbosity: this.hp.verbosity,
+            prompt, temperature: scTemp,
+            reasoningEffort: this.hp.reasoningEffort, verbosity: this.hp.verbosity,
           }),
         );
       }
@@ -355,50 +414,44 @@ Reasoning and answer:`;
       scVotes = votes;
       responseText = DefaultQueryService.majorityVote(votes);
 
-      // Comparison verification
-      if (isComparison && this.flags.enableComparisonVerification && this.dependencies.comparisonVerifier) {
+      if (ctx.isComparison && this.flags.enableComparisonVerification && this.dependencies.comparisonVerifier) {
         const rawResponse = results[0]?.text ?? '';
         const verifyResult = await this.dependencies.comparisonVerifier.verify(
-          responseText, rawResponse, expandedRequest.text, context.promptContext,
+          responseText, rawResponse, ctx.expandedRequest.text, ctx.contextBundle.promptContext,
           { reasoningEffort: this.hp.reasoningEffort, verbosity: this.hp.verbosity },
         );
         responseText = verifyResult.response;
         comparisonVerified = verifyResult.verified;
       }
     } catch (error) {
-      if (!shouldUseTemplateFallback(error)) {
-        throw error;
-      }
+      if (!shouldUseTemplateFallback(error)) { throw error; }
       responseText = this.responseGenerator.generate({
-        ...context,
+        ...ctx.contextBundle,
         entities: entities.map((entity) => entity.term),
       });
       templateFallbackTriggered = true;
     }
 
     const totalLatencyMs = Date.now() - startTime;
+    const hasDbId = ctx.passages.some((rp) => rp.dbId !== undefined);
 
     return {
       response: responseText,
-      citations: toCitations(context),
+      citations: hasDbId ? toCitationsFromPassages(ctx.passages) : toCitations(ctx.contextBundle),
       entities,
       metrics: {
-        dictionaryMatchCount: matches.length,
-        expandedTerms: candidates.expandedTerms,
-        fallbackTriggered: candidates.fallbackRequired || initialVector.fallbackTriggered || templateFallbackTriggered,
-        pprIterations: ranking.iterations,
-        pprConverged: ranking.converged,
-        citedPassageCount: context.citedPassages.length,
+        dictionaryMatchCount: ctx.metrics.dictionaryMatchCount,
+        expandedTerms: ctx.metrics.expandedTerms,
+        fallbackTriggered: ctx.metrics.fallbackTriggered || templateFallbackTriggered,
+        pprIterations: ctx.metrics.pprIterations,
+        pprConverged: ctx.metrics.pprConverged,
+        citedPassageCount: ctx.metrics.citedPassageCount,
         llmInputTokens,
         llmOutputTokens,
         scVotes,
-        dictionaryHintCount: dictionaryHintCount > 0 ? dictionaryHintCount : undefined,
-        aliasHintCount: context.metadata?.aliasHintCount,
-        thesaurusExpandedTerms: expansion.expandedTerms.length > 0 ? expansion.expandedTerms : undefined,
-        subQueryDecomposed: subQueryDecomposed || undefined,
-        hop1FactCount: hop1FactCount > 0 ? hop1FactCount : undefined,
-        hop2FactCount: hop2FactCount > 0 ? hop2FactCount : undefined,
-        comparisonVerified: comparisonVerified,
+        dictionaryHintCount: ctx.dictionaryHints.length > 0 ? undefined : undefined, // preserved from retrieval
+        aliasHintCount: ctx.contextBundle.metadata?.aliasHintCount,
+        comparisonVerified,
         totalLatencyMs,
         multiHopEnabled,
         questionType: mhQuestionType,
@@ -412,6 +465,12 @@ Reasoning and answer:`;
         multiHopLatencyMs: mhLatencyMs,
       },
     };
+  }
+
+  /** Full query pipeline: prepare → retrieve → answer. */
+  public async query(request: QueryRequest): Promise<QueryResponse> {
+    const ctx = await this.retrieve(request);
+    return this.answer(request, ctx);
   }
 
   /**

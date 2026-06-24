@@ -29,3 +29,12 @@ export {
   type MultiHopOptions,
   type IMultiHopReasoner,
 } from './multiHop.js';
+
+export {
+  type RankedPassage,
+  type RankedFact,
+  type RetrievalMetrics,
+  type PreparedQuery,
+  type EntityHitInfo,
+  type RetrievedQueryContext,
+} from './federation.js';
