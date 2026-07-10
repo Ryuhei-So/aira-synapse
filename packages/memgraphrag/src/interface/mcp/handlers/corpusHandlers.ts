@@ -1,7 +1,7 @@
 import type { CorpusManager } from '../../../application/index.js';
 import type { MemGraphRagRuntime } from '../../runtime/MemGraphRagRuntime.js';
 import { SERVICE_TOKENS } from '../../runtime/MemGraphRagRuntime.js';
-import { asRecord, jsonResult, optionalString, requiredString } from '../handlerUtils.js';
+import { asRecord, jsonResult, optionalString, requiredIdentifier, requiredString } from '../handlerUtils.js';
 
 function getCorpusManager(runtime: MemGraphRagRuntime): CorpusManager {
   return runtime.getService<CorpusManager>(SERVICE_TOKENS.CORPUS_MANAGER);
@@ -34,7 +34,7 @@ export async function handleDeleteCorpus(
 ) {
   const input = asRecord(params);
   const manager = getCorpusManager(runtime);
-  const result = await manager.delete(requiredString(input, 'corpus_id'));
+  const result = await manager.delete(requiredIdentifier(input, 'corpus_id'));
 
   return jsonResult({
     corpus_id: result.corpusId,

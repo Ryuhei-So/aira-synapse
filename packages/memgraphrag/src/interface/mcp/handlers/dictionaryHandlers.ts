@@ -7,6 +7,7 @@ import {
   jsonResult,
   optionalString,
   requiredArray,
+  requiredIdentifier,
   requiredString,
   toDictionaryEntry,
 } from '../handlerUtils.js';
@@ -48,7 +49,7 @@ export async function handleManageDictionary(
   }
 
   const result = await service.handle({
-    corpusId: requiredString(input, 'corpus_id'),
+    corpusId: requiredIdentifier(input, 'corpus_id'),
     action,
     entry,
     query,
@@ -71,7 +72,7 @@ export async function handleBuildDictionaryFromApi(
   }
 
   const result = await service.buildFromApi(
-    requiredString(input, 'corpus_id'),
+    requiredIdentifier(input, 'corpus_id'),
     domains.map((domain) => {
       if (typeof domain !== 'string' || domain.trim().length === 0) {
         throw invalidParams('domains must contain non-empty strings', 'domains');

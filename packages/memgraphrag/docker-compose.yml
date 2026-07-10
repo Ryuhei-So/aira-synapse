@@ -5,10 +5,12 @@ services:
     image: neo4j:5.26-community
     container_name: memgraphrag-neo4j
     ports:
-      - "7474:7474"   # HTTP (Browser)
-      - "7687:7687"   # Bolt
+      # Bind to localhost only — this is a local dev stack, not for network exposure.
+      - "127.0.0.1:7474:7474"   # HTTP (Browser)
+      - "127.0.0.1:7687:7687"   # Bolt
     environment:
-      - NEO4J_AUTH=neo4j/memgraphrag
+      # Dev default; override via NEO4J_PASSWORD for anything shared.
+      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD:-memgraphrag}
       - NEO4J_PLUGINS=["apoc"]
       - NEO4J_dbms_security_procedures_unrestricted=apoc.*
     volumes:

@@ -5,6 +5,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { resolveWithin } from './pathSafety.js';
 import type {
   IVectorIndex,
   VectorRecord,
@@ -180,7 +181,7 @@ export class FileVectorIndex implements IVectorIndex {
   }
 
   private getNamespaceDir(corpusId: string, namespace: string): string {
-    return resolve(this.baseDir, corpusId, namespace);
+    return resolveWithin(this.baseDir, corpusId, namespace);
   }
 
   private loadManifest(nsDir: string): Manifest {

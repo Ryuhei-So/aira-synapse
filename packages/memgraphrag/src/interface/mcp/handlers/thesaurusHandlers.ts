@@ -7,6 +7,7 @@ import {
   jsonResult,
   optionalString,
   requiredArray,
+  requiredIdentifier,
   requiredString,
   toThesaurusRelation,
 } from '../handlerUtils.js';
@@ -49,7 +50,7 @@ export async function handleManageThesaurus(
   }
 
   const result = await service.handle({
-    corpusId: requiredString(input, 'corpus_id'),
+    corpusId: requiredIdentifier(input, 'corpus_id'),
     action,
     relation,
     term,

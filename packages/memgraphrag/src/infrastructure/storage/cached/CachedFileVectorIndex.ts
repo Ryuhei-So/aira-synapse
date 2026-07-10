@@ -10,6 +10,7 @@
  */
 import { resolve } from 'node:path';
 import { readFileSync, existsSync } from 'node:fs';
+import { resolveWithin } from '../pathSafety.js';
 import type {
   IVectorIndex,
   VectorRecord,
@@ -56,7 +57,7 @@ export class CachedFileVectorIndex implements IVectorIndex {
     const key = `${corpusId}:${namespace}`;
     if (this.nsCache.has(key)) return this.nsCache.get(key)!;
 
-    const nsDir = resolve(this.baseDir, corpusId, namespace);
+    const nsDir = resolveWithin(this.baseDir, corpusId, namespace);
     if (!existsSync(nsDir)) {
       this.nsCache.set(key, null);
       return null;

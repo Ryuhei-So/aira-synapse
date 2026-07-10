@@ -3,8 +3,10 @@ import type { MemGraphRagRuntime } from '../../runtime/MemGraphRagRuntime.js';
 import { SERVICE_TOKENS } from '../../runtime/MemGraphRagRuntime.js';
 import {
   asRecord,
+  boundedNumber,
   jsonResult,
   optionalNumber,
+  requiredIdentifier,
   requiredString,
 } from '../handlerUtils.js';
 
@@ -28,7 +30,7 @@ export async function handleQuery(
   const contextTokenLimit = optionalNumber(input, 'context_token_limit', 8000);
 
   const result = await queryService.query({
-    corpusId: requiredString(input, 'corpus_id'),
+    corpusId: requiredIdentifier(input, 'corpus_id'),
     text: requiredString(input, 'query'),
     topK,
     topM,
@@ -71,7 +73,7 @@ export async function handleGetStats(
 ) {
   const input = asRecord(params);
   const manager = getCorpusManager(runtime);
-  const result = await manager.getStats(requiredString(input, 'corpus_id'));
+  const result = await manager.getStats(requiredIdentifier(input, 'corpus_id'));
 
   return jsonResult({
     memory: result.memory,
@@ -91,7 +93,7 @@ export async function handleAnalyzeConflicts(
 ) {
   const input = asRecord(params);
   const manager = getCorpusManager(runtime);
-  const result = await manager.analyzeConflicts(requiredString(input, 'corpus_id'));
+  const result = await manager.analyzeConflicts(requiredIdentifier(input, 'corpus_id'));
 
   return jsonResult({
     conflicts: result.conflicts.map((conflict) => ({
@@ -111,10 +113,10 @@ export async function handleExportGraph(
   const input = asRecord(params);
   const manager = getCorpusManager(runtime);
   const result = await manager.exportGraph(
-    requiredString(input, 'corpus_id'),
+    requiredIdentifier(input, 'corpus_id'),
     requiredString(input, 'format') as 'graphml' | 'json',
-    optionalNumber(input, 'offset', 0),
-    optionalNumber(input, 'limit', 10000),
+    boundedNumber(input, 'offset', 0, 0, Number.MAX_SAFE_INTEGER),
+    boundedNumber(input, 'limit', 10000, 0, 100000),
   );
 
   return jsonResult({

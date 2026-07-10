@@ -15,12 +15,16 @@ function snakeToCamel(str: string): string {
   );
 }
 
+/** Keys that would mutate the prototype chain if assigned. */
+const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
 function transformKeys(obj: unknown): unknown {
   if (obj === null || typeof obj !== 'object') return obj;
   if (Array.isArray(obj)) return obj.map(transformKeys);
 
-  const result: Record<string, unknown> = {};
+  const result: Record<string, unknown> = Object.create(null);
   for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
+    if (FORBIDDEN_KEYS.has(key)) continue;
     result[snakeToCamel(key)] = transformKeys(value);
   }
   return result;

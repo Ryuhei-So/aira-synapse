@@ -51,6 +51,28 @@ export function requiredString(
   return value.trim();
 }
 
+/**
+ * Identifiers that are used as path segments (corpus_id, job_id, document_id)
+ * must be confined to a strict allowlist so they cannot escape the storage
+ * root via `..` / absolute paths. Mirrors the corpus IDs actually issued
+ * (UUIDs) and the `isValidDbId` allowlist used for federation.
+ */
+const IDENTIFIER_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+
+export function requiredIdentifier(
+  params: Record<string, unknown>,
+  field: string,
+): string {
+  const value = requiredString(params, field);
+  if (!IDENTIFIER_PATTERN.test(value)) {
+    throw invalidParams(
+      `${field} must match [A-Za-z0-9_-] (1-128 chars)`,
+      field,
+    );
+  }
+  return value;
+}
+
 export function optionalString(
   params: Record<string, unknown>,
   field: string,
@@ -76,6 +98,23 @@ export function optionalNumber(
   }
   if (typeof value !== 'number' || Number.isNaN(value)) {
     throw invalidParams(`${field} must be a number`, field);
+  }
+  return value;
+}
+
+export function boundedNumber(
+  params: Record<string, unknown>,
+  field: string,
+  fallback: number,
+  min: number,
+  max: number,
+): number {
+  const value = optionalNumber(params, field, fallback);
+  if (value < min) {
+    return min;
+  }
+  if (value > max) {
+    return max;
   }
   return value;
 }

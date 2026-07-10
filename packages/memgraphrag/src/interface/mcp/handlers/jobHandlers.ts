@@ -6,6 +6,7 @@ import {
   jsonResult,
   optionalString,
   requiredArray,
+  requiredIdentifier,
   requiredString,
 } from '../handlerUtils.js';
 
@@ -20,7 +21,7 @@ function getCorpusManager(runtime: MemGraphRagRuntime): CorpusManager {
 function toDocumentInput(value: unknown) {
   const record = asRecord(value);
   return {
-    documentId: requiredString(record, 'document_id'),
+    documentId: requiredIdentifier(record, 'document_id'),
     markdown: requiredString(record, 'markdown'),
     title: requiredString(record, 'title'),
     sourceUrl: requiredString(record, 'source_url'),
@@ -50,7 +51,7 @@ export async function handleIndexDocuments(
   const indexingService = getIndexingService(runtime);
   const documents = requiredArray(input, 'documents').map(toDocumentInput);
   const result = await indexingService.start({
-    corpusId: requiredString(input, 'corpus_id'),
+    corpusId: requiredIdentifier(input, 'corpus_id'),
     documents,
   });
 
@@ -63,7 +64,7 @@ export async function handleGetJobStatus(
 ) {
   const input = asRecord(params);
   const manager = getCorpusManager(runtime);
-  const result = await manager.getJobStatus(requiredString(input, 'job_id'));
+  const result = await manager.getJobStatus(requiredIdentifier(input, 'job_id'));
 
   return jsonResult({
     job_id: result.jobId,
@@ -89,7 +90,7 @@ export async function handleCancelJob(
 ) {
   const input = asRecord(params);
   const manager = getCorpusManager(runtime);
-  const result = await manager.cancelJob(requiredString(input, 'job_id'));
+  const result = await manager.cancelJob(requiredIdentifier(input, 'job_id'));
 
   return jsonResult({ job_id: result.jobId, status: result.status });
 }
@@ -101,8 +102,8 @@ export async function handleDeleteDocument(
   const input = asRecord(params);
   const indexingService = getIndexingService(runtime);
   const result = await indexingService.deleteDocument(
-    requiredString(input, 'corpus_id'),
-    requiredString(input, 'document_id'),
+    requiredIdentifier(input, 'corpus_id'),
+    requiredIdentifier(input, 'document_id'),
   );
 
   return jsonResult({
