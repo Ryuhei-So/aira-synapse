@@ -154,13 +154,22 @@ export class StageIExtractor {
       };
     };
 
-    // Process chunks with bounded concurrency
-    const records: CompositeExtractionRecord[] = [];
-    for (let i = 0; i < chunks.length; i += concurrency) {
-      const batch = chunks.slice(i, i + concurrency);
-      const batchResults = await Promise.all(batch.map(processChunk));
-      records.push(...batchResults);
-    }
+    // Process chunks with a sliding window: keep `concurrency` requests in
+    // flight at all times. The previous fixed-batch barrier let one slow
+    // chunk idle every other slot in its batch (~20-30% lost throughput).
+    const records: CompositeExtractionRecord[] = new Array(chunks.length);
+    let nextIndex = 0;
+    const workers = Array.from(
+      { length: Math.max(1, Math.min(concurrency, chunks.length)) },
+      async () => {
+        for (;;) {
+          const i = nextIndex++;
+          if (i >= chunks.length) break;
+          records[i] = await processChunk(chunks[i]!);
+        }
+      },
+    );
+    await Promise.all(workers);
 
     return records;
   }

@@ -321,6 +321,7 @@ class RuntimeImpl implements MemGraphRagRuntime {
     let vectorIndex: IVectorIndex;
     let memoryStore: IMemoryStore;
     let graphProjection: IGraphProjection;
+    let storageBatch: StorageAdapters['batch'];
 
     if (backend === 'aira-graphdb') {
       const storageAdapters: StorageAdapters = await createAiraGraphDbAdapters({
@@ -330,6 +331,7 @@ class RuntimeImpl implements MemGraphRagRuntime {
       vectorIndex = storageAdapters.vectorIndex;
       memoryStore = storageAdapters.memoryStore;
       graphProjection = storageAdapters.graphProjection;
+      storageBatch = storageAdapters.batch;
       this.storageClose = storageAdapters.close;
     } else {
       const sqliteGraphStore = new SQLiteGraphStore(this.db);
@@ -386,6 +388,7 @@ class RuntimeImpl implements MemGraphRagRuntime {
       this.db,
       memoryStore,
       pipeline,
+      storageBatch,
     );
     const indexingService = new DefaultIndexingService(this.db, jobRunner, deleteDocumentService);
     const corpusManager = new CorpusManagerFacade(this.db, graphStore, vectorIndex);

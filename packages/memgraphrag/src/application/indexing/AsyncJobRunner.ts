@@ -16,6 +16,13 @@ export interface DocumentIndexingPipeline {
   ): Promise<ProcessDocumentResult>;
 }
 
+export interface StorageWriteBatch {
+  readonly begin: () => Promise<void>;
+  readonly commit: () => Promise<void>;
+}
+
+const BATCH_COMMIT_EVERY_DOCS = 5;
+
 export class AsyncJobRunner {
   private readonly jobs = new Map<string, IndexDocumentsCommand>();
   private readonly cancelled = new Set<string>();
@@ -24,6 +31,7 @@ export class AsyncJobRunner {
     private readonly db: Database.Database,
     private readonly memoryStore: IMemoryStore,
     private readonly pipeline: DocumentIndexingPipeline,
+    private readonly storageBatch?: StorageWriteBatch,
   ) {}
 
   public registerJob(jobId: string, command: IndexDocumentsCommand): void {
@@ -64,6 +72,12 @@ export class AsyncJobRunner {
       `UPDATE jobs SET status = 'running', total = ?, processed = ?, updated_at = ? WHERE job_id = ?`,
     ).run(command.documents.length, processed.size, new Date().toISOString(), jobId);
 
+    // Defer backend persistence to one write per BATCH_COMMIT_EVERY_DOCS
+    // documents (aira-graphdb rewrites its whole file on every mutating RPC
+    // otherwise). Data and checkpoints commit together, so a crash simply
+    // replays the last uncommitted documents.
+    await this.storageBatch?.begin();
+    let sinceCommit = 0;
     try {
       let addedNodes = 0;
       let addedEdges = 0;
@@ -116,6 +130,13 @@ export class AsyncJobRunner {
         this.db.prepare(
           `UPDATE jobs SET processed = ?, updated_at = ? WHERE job_id = ?`,
         ).run(processed.size, new Date().toISOString(), jobId);
+
+        sinceCommit += 1;
+        if (this.storageBatch && sinceCommit >= BATCH_COMMIT_EVERY_DOCS) {
+          await this.storageBatch.commit();
+          await this.storageBatch.begin();
+          sinceCommit = 0;
+        }
       }
 
       this.db.prepare(
@@ -136,6 +157,12 @@ export class AsyncJobRunner {
       this.db.prepare(
         `UPDATE jobs SET status = 'failed', errors_json = ?, updated_at = ? WHERE job_id = ?`,
       ).run(JSON.stringify([message]), new Date().toISOString(), jobId);
+    } finally {
+      try {
+        await this.storageBatch?.commit();
+      } catch (err) {
+        console.log(`  [job ${jobId}] final storage commit failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
     }
   }
 

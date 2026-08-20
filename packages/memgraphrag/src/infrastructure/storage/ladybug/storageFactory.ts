@@ -15,6 +15,11 @@ export interface StorageAdapters {
   readonly graphProjection: IGraphProjection;
   readonly lexicalRetriever: ILexicalRetriever;
   readonly close: () => Promise<void>;
+  /** Optional write-batching: defer backend persistence between begin/commit. */
+  readonly batch?: {
+    readonly begin: () => Promise<void>;
+    readonly commit: () => Promise<void>;
+  };
 }
 
 export interface LadybugStorageOptions {
@@ -201,6 +206,10 @@ export async function createAiraGraphDbAdapters(
   } = await import('../aira-graphdb/AiraGraphDbAdapters.js');
 
   const client = new AiraGraphDbNativeClient(opts.dbPath);
+  const batch = {
+    begin: async () => { await client.request('batch_begin', {}); },
+    commit: async () => { await client.request('batch_commit', {}); },
+  };
   const graphStore = new AiraGraphDbGraphStore(client);
   const vectorIndex = new AiraGraphDbVectorIndex(client);
   const memoryStore = new AiraGraphDbMemoryStore(client);
@@ -208,6 +217,7 @@ export async function createAiraGraphDbAdapters(
   const lexicalRetriever = new AiraGraphDbLexicalRetriever(client);
 
   return {
+    batch,
     graphStore,
     vectorIndex,
     memoryStore,
