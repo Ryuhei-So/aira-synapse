@@ -132,7 +132,20 @@ export class AiraGraphDbMemoryStore implements IMemoryStore {
       // No existing snapshot (or unreadable) — save as-is.
     }
     this.snapshotCache.set(snapshot.corpusId, merged);
-    await this.client.request('memory_save', { snapshot: merged });
+    try {
+      // Send only this call's delta; the native side merges (O(delta) RPC
+      // payload and WAL growth instead of O(corpus) per document).
+      await this.client.request('memory_upsert', {
+        corpusId: snapshot.corpusId,
+        passages: snapshot.passages ?? [],
+        facts: snapshot.facts ?? [],
+        schemas: snapshot.schemas ?? [],
+        exportedAt: snapshot.exportedAt,
+      });
+    } catch {
+      // Older native binaries without memory_upsert: full-snapshot fallback.
+      await this.client.request('memory_save', { snapshot: merged });
+    }
   }
 
   public async saveCheckpoint(checkpoint: JobCheckpoint): Promise<void> {
