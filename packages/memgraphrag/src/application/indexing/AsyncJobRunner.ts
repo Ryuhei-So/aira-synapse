@@ -71,6 +71,13 @@ export class AsyncJobRunner {
       const documentErrors: string[] = [];
 
       for (const document of command.documents) {
+        // Honor cancellations recorded in the DB (e.g. by an operator or
+        // another process) — without this the process keeps working as a
+        // zombie on a job whose row already says cancelled.
+        const dbRow = this.db.prepare('SELECT status FROM jobs WHERE job_id = ?').get(jobId) as { status?: string } | undefined;
+        if (dbRow?.status === 'cancelled') {
+          this.cancelled.add(jobId);
+        }
         if (this.cancelled.has(jobId)) {
           this.db.prepare(
             `UPDATE jobs SET status = 'cancelled', updated_at = ? WHERE job_id = ?`,
