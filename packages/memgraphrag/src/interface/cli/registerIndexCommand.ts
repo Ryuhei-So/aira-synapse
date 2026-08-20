@@ -27,6 +27,9 @@ export function registerIndexCommand(program: Command, context: CliContext = {})
         language: 'unknown' as const,
       }));
       const result = await indexingService.start({ corpusId: options.corpusId, documents });
+      // Run the enqueued job to completion; without this the CLI exits and the
+      // shutdown hook cancels the still-pending job.
+      await indexingService.resume(result.jobId);
       renderOutput({ job_id: result.jobId, document_count: documents.length }, options.json);
     }, options.config);
   });

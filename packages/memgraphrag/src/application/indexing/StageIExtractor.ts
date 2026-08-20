@@ -119,7 +119,7 @@ export class StageIExtractor {
   public async extractChunks(
     corpusId: string,
     input: IndexDocumentInput,
-    concurrency: number = 5,
+    concurrency: number = Number(process.env.MEMGRAPHRAG_EXTRACT_CONCURRENCY ?? 5),
   ): Promise<readonly CompositeExtractionRecord[]> {
     const chunks = this.chunkDocument(corpusId, input);
     const quality = this.validateMarkdownQuality(this.preprocessMarkdown(input.markdown));

@@ -70,10 +70,17 @@ function parseLLMResponse(text: string): LLMExtractionResult {
   const cleaned = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
   try {
     const parsed = JSON.parse(cleaned) as LLMExtractionResult;
-    return {
-      entities: Array.isArray(parsed.entities) ? parsed.entities : [],
-      relations: Array.isArray(parsed.relations) ? parsed.relations : [],
-    };
+    // LLMs (especially small local models) sometimes emit items with missing
+    // fields; drop them here so downstream canonicalization never sees them.
+    const entities = (Array.isArray(parsed.entities) ? parsed.entities : []).filter(
+      (e) => typeof e?.name === 'string' && typeof e?.type === 'string',
+    );
+    const relations = (Array.isArray(parsed.relations) ? parsed.relations : []).filter(
+      (r) => typeof r?.head === 'string' && typeof r?.headType === 'string'
+        && typeof r?.relation === 'string' && typeof r?.tail === 'string'
+        && typeof r?.tailType === 'string',
+    );
+    return { entities, relations };
   } catch {
     return { entities: [], relations: [] };
   }

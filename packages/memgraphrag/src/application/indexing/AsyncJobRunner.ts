@@ -30,6 +30,11 @@ export class AsyncJobRunner {
     this.jobs.set(jobId, command);
   }
 
+  /** Job ids owned by this process (for scoped shutdown cancellation). */
+  public ownedJobIds(): readonly string[] {
+    return [...this.jobs.keys()];
+  }
+
   public async enqueue(jobId: string): Promise<void> {
     const command = this.jobs.get(jobId);
     if (!command) {
@@ -63,6 +68,7 @@ export class AsyncJobRunner {
       let addedNodes = 0;
       let addedEdges = 0;
       let conflicts = 0;
+      const documentErrors: string[] = [];
 
       for (const document of command.documents) {
         if (this.cancelled.has(jobId)) {
@@ -75,7 +81,19 @@ export class AsyncJobRunner {
           continue;
         }
 
-        const result = await this.pipeline.processDocument(command.corpusId, document);
+        let result: ProcessDocumentResult;
+        try {
+          result = await this.pipeline.processDocument(command.corpusId, document);
+        } catch (error) {
+          // Isolate per-document failures: one malformed document must not
+          // abort the whole job. Record and continue.
+          const message = error instanceof Error
+            ? `${error.message}\n${(error.stack ?? '').split('\n').slice(1, 4).join('\n')}`
+            : String(error);
+          documentErrors.push(`[${document.documentId}] ${message}`);
+          console.log(`  [${document.title}] FAILED (skipping): ${message.split('\n')[0]}`);
+          continue;
+        }
         processed.add(result.processedDocumentId);
         addedNodes += result.addedNodes;
         addedEdges += result.addedEdges;
@@ -94,15 +112,20 @@ export class AsyncJobRunner {
       }
 
       this.db.prepare(
-        `UPDATE jobs SET status = 'completed', processed = ?, summary = ?, updated_at = ? WHERE job_id = ?`,
+        `UPDATE jobs SET status = 'completed', processed = ?, summary = ?, errors_json = ?, updated_at = ? WHERE job_id = ?`,
       ).run(
         processed.size,
-        JSON.stringify({ addedNodes, addedEdges, conflictCount: conflicts, skippedCount: command.documents.length - processed.size }),
+        JSON.stringify({ addedNodes, addedEdges, conflictCount: conflicts, skippedCount: command.documents.length - processed.size, documentErrorCount: documentErrors.length }),
+        JSON.stringify(documentErrors),
         new Date().toISOString(),
         jobId,
       );
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      // Record the stack, not just the message — message-only errors made
+      // pipeline failures undiagnosable.
+      const message = error instanceof Error
+        ? `${error.message}\n${(error.stack ?? '').split('\n').slice(1, 6).join('\n')}`
+        : String(error);
       this.db.prepare(
         `UPDATE jobs SET status = 'failed', errors_json = ?, updated_at = ? WHERE job_id = ?`,
       ).run(JSON.stringify([message]), new Date().toISOString(), jobId);

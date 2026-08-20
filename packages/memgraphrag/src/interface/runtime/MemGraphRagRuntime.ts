@@ -294,6 +294,7 @@ class RuntimeImpl implements MemGraphRagRuntime {
   private readonly services = new Map<symbol, unknown>();
   private db?: Database.Database;
   private storageClose: (() => Promise<void>) | undefined;
+  private jobRunner: AsyncJobRunner | undefined;
   private started = false;
 
   public constructor(private readonly config: MemGraphRagConfig) {}
@@ -347,6 +348,7 @@ class RuntimeImpl implements MemGraphRagRuntime {
       : new OpenAILLMProvider({
         apiKey,
         model: this.config.providers.llm.model,
+        baseUrl: process.env['OPENAI_BASE_URL'],
       });
 
     const embeddingProvider: IEmbeddingProvider = this.config.localOnly
@@ -354,6 +356,7 @@ class RuntimeImpl implements MemGraphRagRuntime {
       : new OpenAIEmbeddingProvider({
         apiKey,
         model: this.config.providers.embedding.model,
+        baseUrl: process.env['OPENAI_EMBEDDING_BASE_URL'] ?? process.env['OPENAI_BASE_URL'],
       });
 
     const nlpExtractor: INLPExtractor = this.config.providers.nlp.backend === 'python-sidecar'
@@ -379,7 +382,7 @@ class RuntimeImpl implements MemGraphRagRuntime {
         dictionary: sharedLexiconStore as ITermDictionary,
         dictionaryFactory: (cid: string) => new SQLiteLexiconStore(this.db!, cid) as ITermDictionary,
       });
-    const jobRunner = new AsyncJobRunner(
+    const jobRunner = this.jobRunner = new AsyncJobRunner(
       this.db,
       memoryStore,
       pipeline,
@@ -414,9 +417,15 @@ class RuntimeImpl implements MemGraphRagRuntime {
     }
 
     if (this.db) {
-      this.db.prepare(
-        `UPDATE jobs SET status = 'cancelled', updated_at = ? WHERE status IN ('pending', 'running')`,
-      ).run(new Date().toISOString());
+      // Cancel only jobs owned by THIS process. A global cancel here killed
+      // other processes' running jobs whenever any CLI invocation exited.
+      const owned = this.jobRunner?.ownedJobIds() ?? [];
+      if (owned.length > 0) {
+        const placeholders = owned.map(() => '?').join(',');
+        this.db.prepare(
+          `UPDATE jobs SET status = 'cancelled', updated_at = ? WHERE job_id IN (${placeholders}) AND status IN ('pending', 'running')`,
+        ).run(new Date().toISOString(), ...owned);
+      }
     }
 
     const nlpExtractor = this.services.get(SERVICE_TOKENS.NLP_EXTRACTOR) as

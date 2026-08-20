@@ -91,7 +91,9 @@ function detectFeatures(text: string, sectionPath: readonly string[]): MarkdownC
     hasCodeBlock: /```/.test(text),
     hasTable: /\|.+\|/.test(text),
     hasReferences:
-      sectionPath.some((section) => section.toLowerCase().includes('reference'))
+      // sectionPath can contain non-string entries for malformed headings
+      sectionPath.some((section) => typeof section === 'string'
+        && section.toLowerCase().includes('reference'))
       || /(^|\n)\[[0-9]+\]/.test(normalized),
   };
 }

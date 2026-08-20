@@ -1,5 +1,10 @@
 import { Command } from 'commander';
+import { Agent, setGlobalDispatcher } from 'undici';
 import { registerConflictsCommand } from './registerConflictsCommand.js';
+
+// Local OpenAI-compatible backends (shared Ollama) can take >5min per call
+// under load; undici's default 300s headersTimeout would abort them.
+setGlobalDispatcher(new Agent({ headersTimeout: 30 * 60 * 1000, bodyTimeout: 30 * 60 * 1000 }));
 import { registerDictionaryCommand } from './registerDictionaryCommand.js';
 import { registerIndexCommand } from './registerIndexCommand.js';
 import { registerInitCommand } from './registerInitCommand.js';

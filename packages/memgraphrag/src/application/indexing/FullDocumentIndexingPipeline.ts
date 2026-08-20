@@ -63,7 +63,9 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
     );
 
     // Stage I: Extract chunks, entities, schemas, facts
+    const tStart = Date.now();
     const records = await this.stageI.extractChunks(corpusId, document);
+    const tStageI = Date.now();
 
     if (records.length === 0) {
       return { processedDocumentId: document.documentId, addedNodes: 0, addedEdges: 0, conflicts: 0 };
@@ -80,6 +82,9 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
     const allFacts: Fact[] = [];
     for (const record of records) {
       for (const candidate of record.candidateFacts) {
+        // LLM extractors occasionally omit type/relation fields; skip such
+        // malformed candidates instead of crashing the whole document job.
+        if (!candidate.headType || !candidate.relation || !candidate.tailType) continue;
         const normHead = candidate.headType.toLowerCase().trim();
         const normRel = candidate.relation.toLowerCase().trim();
         const normTail = candidate.tailType.toLowerCase().trim();
@@ -155,6 +160,7 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
       schemaVersion: snapshot.schemaVersion ?? 1,
     });
 
+    const tMemSave = Date.now();
     // Stage IV: Project graph and upsert vectors
     const { nodes, edges } = await projectGraph(
       this.options.graphStore, allFacts, schemas, passages,
@@ -180,6 +186,9 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
       );
       console.log(
         `  [${document.title}] Stage V: dict=${lexResult.dictionaryEntries} thesaurus=${lexResult.thesaurusRelations} ambiguous=${lexResult.ambiguousExcluded}`,
+      );
+      console.log(
+        `  [${document.title}] timings_ms: stageI(extract+embed)=${tStageI - tStart} memSave=${tMemSave - tStageI} graphProject+rest=${Date.now() - tMemSave}`,
       );
     }
 

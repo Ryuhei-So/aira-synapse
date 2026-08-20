@@ -82,14 +82,57 @@ export class AiraGraphDbVectorIndex implements IVectorIndex {
 }
 
 export class AiraGraphDbMemoryStore implements IMemoryStore {
+  // Per-corpus snapshot cache: the merged state lives here between saves, so
+  // each per-document save costs one write RPC instead of a full round-trip
+  // load of an ever-growing snapshot (which made indexing O(n^2)).
+  private readonly snapshotCache = new Map<string, MemorySnapshot>();
+
   public constructor(private readonly client: AiraGraphDbNativeClient) {}
 
   public async load(corpusId: string): Promise<MemorySnapshot> {
-    return this.client.request('memory_load', { corpusId });
+    const cached = this.snapshotCache.get(corpusId);
+    if (cached) {
+      return cached;
+    }
+    const loaded = await this.client.request<MemorySnapshot>('memory_load', { corpusId });
+    if (loaded) {
+      this.snapshotCache.set(corpusId, loaded);
+    }
+    return loaded;
   }
 
   public async save(snapshot: MemorySnapshot): Promise<void> {
-    await this.client.request('memory_save', { snapshot });
+    // The native memory_save replaces the whole snapshot, but callers
+    // (FullDocumentIndexingPipeline) save per-document increments and the
+    // SQLite implementation upserts them. Merge with the stored snapshot so
+    // earlier documents' passages/facts/schemas survive.
+    let merged = snapshot;
+    try {
+      const existing = await this.load(snapshot.corpusId);
+      if (existing) {
+        const byId = <T>(items: readonly T[] | undefined, key: (item: T) => string): Map<string, T> => {
+          const map = new Map<string, T>();
+          for (const item of items ?? []) map.set(key(item), item);
+          return map;
+        };
+        const passages = byId(existing.passages, (p: Passage) => p.passageId);
+        for (const p of snapshot.passages ?? []) passages.set(p.passageId, p);
+        const facts = byId(existing.facts, (f) => f.factId);
+        for (const f of snapshot.facts ?? []) facts.set(f.factId, f);
+        const schemas = byId(existing.schemas, (s) => s.schemaId);
+        for (const s of snapshot.schemas ?? []) schemas.set(s.schemaId, s);
+        merged = {
+          ...snapshot,
+          passages: [...passages.values()],
+          facts: [...facts.values()],
+          schemas: [...schemas.values()],
+        };
+      }
+    } catch {
+      // No existing snapshot (or unreadable) — save as-is.
+    }
+    this.snapshotCache.set(snapshot.corpusId, merged);
+    await this.client.request('memory_save', { snapshot: merged });
   }
 
   public async saveCheckpoint(checkpoint: JobCheckpoint): Promise<void> {
