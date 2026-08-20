@@ -21,7 +21,7 @@ export interface StorageWriteBatch {
   readonly commit: () => Promise<void>;
 }
 
-const BATCH_COMMIT_EVERY_DOCS = 5;
+const BATCH_COMMIT_EVERY_DOCS = 15;
 
 export class AsyncJobRunner {
   private readonly jobs = new Map<string, IndexDocumentsCommand>();
