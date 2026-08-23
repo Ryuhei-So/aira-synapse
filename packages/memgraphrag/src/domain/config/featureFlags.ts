@@ -14,6 +14,24 @@ export interface QueryFeatureFlags {
   readonly enableMultiHopReasoning: boolean;
 }
 
+/**
+ * Canonical v15 support witness for every query feature flag.
+ *
+ * The mapped-type `satisfies` clause makes adding a QueryFeatureFlags field
+ * without classifying it here a compile error.  The retrieval plan derives
+ * its runtime unsupported set from this map rather than maintaining a second
+ * hand-written key list.
+ */
+export const V15_QUERY_FEATURE_SUPPORT = {
+  enableAliasHints: false,
+  enableComparisonVerification: false,
+  enableDictionaryInjection: false,
+  enableHypernymExpansion: false,
+  enableMultiHopReasoning: false,
+  enableSubQueryDecomposition: false,
+  enableThesaurusExpansion: false,
+} as const satisfies { readonly [K in keyof QueryFeatureFlags]: boolean };
+
 export interface EvalFeatureFlags {
   readonly enableEvalAliasNormalization: boolean;
 }

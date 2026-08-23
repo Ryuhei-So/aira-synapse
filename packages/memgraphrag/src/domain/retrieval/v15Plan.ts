@@ -16,7 +16,10 @@ import type {
   QueryRequest,
 } from './memoryFilter.js';
 import type { RankedNode, TransitionEntry } from './ppr.js';
-import type { QueryFeatureFlags } from '../config/featureFlags.js';
+import {
+  V15_QUERY_FEATURE_SUPPORT,
+  type QueryFeatureFlags,
+} from '../config/featureFlags.js';
 
 export const V15_RETRIEVAL_PLAN_VERSION = 'V15RetrievalRequestPlan@1' as const;
 export const V15_RETRIEVAL_PROFILE = 'v15' as const;
@@ -136,21 +139,40 @@ export class V15RetrievalPlanValidationError extends Error {
   }
 }
 
-export type V15UnsupportedFeature = keyof QueryFeatureFlags;
+type V15FeatureSupportKey = keyof typeof V15_QUERY_FEATURE_SUPPORT;
+export type V15UnsupportedFeature = {
+  [K in V15FeatureSupportKey]: typeof V15_QUERY_FEATURE_SUPPORT[K] extends false ? K : never
+}[V15FeatureSupportKey];
 
-const V15_FEATURE_FLAG_KEYS: readonly V15UnsupportedFeature[] = [
-  'enableAliasHints',
-  'enableComparisonVerification',
-  'enableDictionaryInjection',
-  'enableHypernymExpansion',
-  'enableMultiHopReasoning',
-  'enableSubQueryDecomposition',
-  'enableThesaurusExpansion',
-];
+const V15_FEATURE_FLAG_KEYS = Object.keys(V15_QUERY_FEATURE_SUPPORT) as V15FeatureSupportKey[];
+const V15_UNSUPPORTED_FEATURE_KEYS = Object.entries(V15_QUERY_FEATURE_SUPPORT)
+  .filter(([, supported]) => !supported)
+  .map(([key]) => key as V15UnsupportedFeature);
+
+function assertCompleteQueryFeatureFlags(flags: QueryFeatureFlags): void {
+  const knownKeys = new Set<string>(V15_FEATURE_FLAG_KEYS);
+  const unknownKeys = Object.keys(flags).filter((key) => !knownKeys.has(key));
+  const missingKeys = V15_FEATURE_FLAG_KEYS.filter(
+    (key) => !Object.prototype.hasOwnProperty.call(flags, key),
+  );
+  const invalidKeys = V15_FEATURE_FLAG_KEYS.filter((key) => typeof flags[key] !== 'boolean');
+  if (unknownKeys.length > 0 || missingKeys.length > 0 || invalidKeys.length > 0) {
+    const details = [
+      unknownKeys.length > 0 ? `unknown: ${unknownKeys.join(', ')}` : '',
+      missingKeys.length > 0 ? `missing: ${missingKeys.join(', ')}` : '',
+      invalidKeys.length > 0 ? `non-boolean: ${invalidKeys.join(', ')}` : '',
+    ].filter(Boolean).join('; ');
+    throw new V15RetrievalPlanValidationError(
+      'UNSUPPORTED_PROFILE',
+      `v15 query feature flags are not exhaustive: ${details}`,
+    );
+  }
+}
 
 /** Returns active flags for which no bounded v1 plan exists. */
 export function unsupportedV15Features(flags: QueryFeatureFlags): V15UnsupportedFeature[] {
-  return V15_FEATURE_FLAG_KEYS.filter((key) => flags[key] === true);
+  assertCompleteQueryFeatureFlags(flags);
+  return V15_UNSUPPORTED_FEATURE_KEYS.filter((key) => flags[key] === true);
 }
 
 /** Fail closed before a bounded plan can be advertised or sent to an owner. */

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Fact } from '../../../../src/domain/memory/fact.js';
 import type { Passage } from '../../../../src/domain/memory/passage.js';
-import type { QueryFeatureFlags } from '../../../../src/domain/config/featureFlags.js';
+import { V15_QUERY_FEATURE_SUPPORT, type QueryFeatureFlags } from '../../../../src/domain/config/featureFlags.js';
+import { isComparisonQuery } from '../../../../src/application/query/comparisonDetector.js';
 import type { FilteredMemoryCandidates, QueryRequest } from '../../../../src/domain/retrieval/memoryFilter.js';
 import type { RankedNode, TransitionEntry } from '../../../../src/domain/retrieval/ppr.js';
 import {
@@ -123,6 +124,18 @@ describe('V15RetrievalPlan and shared parity helpers', () => {
     expect(normalizeV15Entity('ÄLPHA')).toBe('älpha');
   });
 
+  it('uses the shared comparison authority for bounded expansion mode', () => {
+    const bridgeText = 'Which method was used?';
+    const comparisonText = 'Are Alpha and Beta from the same country?';
+    const bridgeMode = isComparisonQuery(bridgeText);
+    const comparisonMode = isComparisonQuery(comparisonText);
+
+    expect(bridgeMode).toBe(false);
+    expect(comparisonMode).toBe(true);
+    expect(buildV15FactExpansionPlan(candidates(), bridgeMode)).toBeNull();
+    expect(buildV15FactExpansionPlan(candidates(), comparisonMode)).not.toBeNull();
+  });
+
   it('uses canonical graph and rank orders independent of insertion order', () => {
     const transitions: TransitionEntry[] = [
       { sourceNodeId: 'fact:z', targetNodeId: 'passage:b', weight: 1 },
@@ -188,6 +201,15 @@ describe('V15RetrievalPlan and shared parity helpers', () => {
       ...plan,
       candidateSearch: { slots: plan.candidateSearch.slots.slice(1) },
     })).toThrowError(/passage, fact, and schema/);
+  });
+
+  it('fails closed for an unregistered runtime query flag', () => {
+    expect(Object.keys(V15_QUERY_FEATURE_SUPPORT).sort()).toEqual(Object.keys(flags).sort());
+    const unregistered = {
+      ...flags,
+      enableUnregisteredFeature: true,
+    } as QueryFeatureFlags & Record<string, boolean>;
+    expect(() => assertV15FeatureProfile(unregistered)).toThrowError(/unknown: enableUnregisteredFeature/);
   });
 
   it('does not silently construct comparison expansion without the candidate stage', () => {

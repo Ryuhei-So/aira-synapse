@@ -79,6 +79,32 @@ describe('v15 legacy path parity hardenings', () => {
     expect(Object.keys(result.scores)).toEqual(['fact:f-seed', 'fact:f-a', 'fact:f-z']);
   });
 
+  it('uses the shared comparison authority for legacy entity expansion', async () => {
+    const seed = makeFact('f-seed');
+    const expanded = { ...makeFact('f-expanded'), tailEntity: 'Gamma' };
+    const initializer = new SimpleNodeInitializer(makeMemoryStore({ passages: [], schemas: [], facts: [seed, expanded] }));
+    const candidates = {
+      ontology: [],
+      passages: [],
+      facts: [{ layer: 'fact' as const, item: seed, similarity: 0.5 }],
+      expandedTerms: [],
+      fallbackRequired: false,
+      queryVector: [1, 0],
+    };
+
+    const bridge = await initializer.initialize({
+      query: { ...query, text: 'Which method was used?' },
+      candidates,
+    });
+    const comparison = await initializer.initialize({
+      query: { ...query, text: 'Are Alpha and Beta from the same country?' },
+      candidates,
+    });
+
+    expect(Object.keys(bridge.scores)).toEqual(['fact:f-seed']);
+    expect(comparison.scores['fact:f-expanded']).toBeCloseTo(0.15);
+  });
+
   it('canonicalizes graph and ranked ties while retaining algebraic signed seed normalization', async () => {
     const transitions: TransitionEntry[] = [
       { sourceNodeId: 'fact:a', targetNodeId: 'passage:z', weight: 1 },

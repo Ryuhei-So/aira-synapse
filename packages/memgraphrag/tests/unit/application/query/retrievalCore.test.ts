@@ -137,9 +137,21 @@ describe('retrieval-core behavioral boundaries', () => {
     const ranking = { rankedPassages: [{ nodeId: 'passage:p1', score: 1, layer: 'passage' as const }], rankedEntities: [{ nodeId: 'fact:f1', score: 1, layer: 'fact' as const }], iterations: 1, converged: true, l1Delta: 0 };
     const bridge = await builder.build({ ...request, text: 'How does it work?' }, ranking);
     expect(bridge.promptContext.indexOf('Relevant Passages')).toBeLessThan(bridge.promptContext.indexOf('Key Facts'));
-    const comparison = await builder.build(request, ranking);
+    const comparison = await builder.build({ ...request, text: 'Are Alpha and Beta from the same country?' }, ranking);
     expect(comparison.promptContext.indexOf('Key Facts')).toBeLessThan(comparison.promptContext.indexOf('Relevant Passages'));
     expect(comparison.confidence).toBeGreaterThan(0);
+  });
+
+  it('uses the shared comparison authority for context ordering', async () => {
+    const store = memoryStore(snapshot([passage('p1', 'passage evidence')], [fact('f1')], []));
+    const builder = new SimpleContextBuilder(store);
+    const ranking = { rankedPassages: [{ nodeId: 'passage:p1', score: 1, layer: 'passage' as const }], rankedEntities: [{ nodeId: 'fact:f1', score: 1, layer: 'fact' as const }], iterations: 1, converged: true, l1Delta: 0 };
+
+    const bridge = await builder.build({ ...request, text: 'Which method was used?' }, ranking);
+    const comparison = await builder.build({ ...request, text: 'Are Alpha and Beta from the same country?' }, ranking);
+
+    expect(bridge.promptContext.indexOf('Relevant Passages')).toBeLessThan(bridge.promptContext.indexOf('Key Facts'));
+    expect(comparison.promptContext.indexOf('Key Facts')).toBeLessThan(comparison.promptContext.indexOf('Relevant Passages'));
   });
 
   it('ignores missing ranked nodes', async () => {

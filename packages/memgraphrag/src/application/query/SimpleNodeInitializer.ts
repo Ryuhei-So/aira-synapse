@@ -20,8 +20,7 @@ import {
   compileV15FactExpansionEvaluator,
   orderV15ScoreThenId,
 } from '../../domain/retrieval/v15Plan.js';
-
-const COMPARISON_PATTERNS = /\b(which|who is (more|less|taller|shorter|older|younger|bigger|smaller|larger|heavier|lighter)|(compare|comparison|differ|difference|between)\b.*\b(and|or|vs)\b|both\b)/i;
+import { isComparisonQuery } from './comparisonDetector.js';
 
 export class SimpleNodeInitializer implements INodeInitializer {
   constructor(private readonly memoryStore?: IMemoryStore) {}
@@ -32,7 +31,7 @@ export class SimpleNodeInitializer implements INodeInitializer {
 
     // 2. Entity expansion — only for comparison queries where entity
     //    bridging improves coverage of both compared entities.
-    const isComparison = COMPARISON_PATTERNS.test(query.text);
+    const isComparison = isComparisonQuery(query.text);
     const expansionPlan = buildV15FactExpansionPlan(candidates, isComparison);
     if (expansionPlan && this.memoryStore) {
       const snapshot = await this.memoryStore.load(query.corpusId);
