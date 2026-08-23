@@ -13,7 +13,10 @@ import { fileURLToPath } from 'node:url';
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const vitest = resolve(packageRoot, '../../node_modules/.bin/vitest');
-const resourcePattern = /ladybug|native|aira[-_]graphdb/i;
+const resourceManifestPath = resolve(
+  packageRoot,
+  'tests/contract/ci/vitest-resource-partitions.json',
+);
 let blobSequence = 0;
 let activeChild;
 let receivedSignal;
@@ -34,21 +37,66 @@ function listFiles(config) {
     .map((file) => resolve(packageRoot, file));
 }
 
+function listTests(config) {
+  const args = ['list', '--json', '--includeTaskLocation'];
+  if (config) args.push('--config', config);
+  const output = execFileSync(vitest, args, {
+    cwd: packageRoot,
+    encoding: 'utf8',
+    env: process.env,
+  });
+  const tests = JSON.parse(output);
+  if (!Array.isArray(tests)) throw new Error('Vitest test inventory is not an array');
+  return tests.map((test) => {
+    if (!test || typeof test.name !== 'string' || typeof test.file !== 'string'
+        || !Number.isSafeInteger(test.location?.line) || test.location.line < 1) {
+      throw new Error('Vitest test inventory contains an invalid entry');
+    }
+    return { name: test.name, file: resolve(test.file), line: test.location.line };
+  });
+}
+
+function readResourceManifest() {
+  const manifest = JSON.parse(readFileSync(resourceManifestPath, 'utf8'));
+  if (!manifest || manifest.version !== 1
+      || !Array.isArray(manifest.freshProcessPerFile)
+      || !Array.isArray(manifest.freshProcessPerTest)) {
+    throw new Error('Vitest resource partition manifest is invalid');
+  }
+  return manifest;
+}
+
 function partition(files) {
   const seen = new Set();
-  const regular = [];
-  const resource = [];
+  const inventory = new Map();
   for (const file of files) {
     const key = file.toLowerCase();
     if (seen.has(key)) throw new Error(`Vitest inventory contains duplicate file: ${file}`);
     seen.add(key);
-    const authority = `${file}\n${readFileSync(file, 'utf8')}`;
-    (resourcePattern.test(authority) ? resource : regular).push(file);
+    inventory.set(key, file);
   }
-  if (regular.length + resource.length !== files.length) {
+  const manifest = readResourceManifest();
+  const resolveEntries = (entries, mode) => entries.map((entry) => {
+    if (typeof entry !== 'string' || entry.length === 0) {
+      throw new Error(`Vitest resource partition ${mode} contains an invalid path`);
+    }
+    const absolute = resolve(packageRoot, entry);
+    const inventoried = inventory.get(absolute.toLowerCase());
+    if (!inventoried) throw new Error(`Vitest resource partition is not in inventory: ${entry}`);
+    return inventoried;
+  });
+  const resourceFile = resolveEntries(manifest.freshProcessPerFile, 'freshProcessPerFile');
+  const resourceCaseFiles = resolveEntries(manifest.freshProcessPerTest, 'freshProcessPerTest');
+  const resourceKeys = [...resourceFile, ...resourceCaseFiles].map((file) => file.toLowerCase());
+  if (new Set(resourceKeys).size !== resourceKeys.length) {
+    throw new Error('Vitest resource partition manifest contains duplicate or overlapping paths');
+  }
+  const resourceSet = new Set(resourceKeys);
+  const regular = files.filter((file) => !resourceSet.has(file.toLowerCase()));
+  if (regular.length + resourceFile.length + resourceCaseFiles.length !== files.length) {
     throw new Error('Vitest partition lost files');
   }
-  return { regular, resource };
+  return { regular, resourceFile, resourceCaseFiles };
 }
 
 function runVitest(files, { coverage, blobDir, config }) {
@@ -95,15 +143,34 @@ async function main() {
   const config = configIndex >= 0 ? process.argv[configIndex + 1] : 'vitest.config.ts';
   const files = listFiles(config);
   const groups = partition(files);
-  if (new Set([...groups.regular, ...groups.resource].map((file) => file.toLowerCase())).size !== files.length) {
+  const resource = [...groups.resourceFile, ...groups.resourceCaseFiles];
+  if (new Set([...groups.regular, ...resource].map((file) => file.toLowerCase())).size !== files.length) {
     throw new Error('Vitest partition is not a complete set-union');
   }
+  const caseFileSet = new Set(groups.resourceCaseFiles.map((file) => file.toLowerCase()));
+  const resourceTests = listTests(config).filter((test) => caseFileSet.has(test.file.toLowerCase()));
+  const testKeys = resourceTests.map((test) => `${test.file.toLowerCase()}\0${test.line}`);
+  if (new Set(testKeys).size !== testKeys.length) {
+    throw new Error('Resource test locations must be unique within each file');
+  }
+  for (const file of groups.resourceCaseFiles) {
+    if (!resourceTests.some((test) => test.file.toLowerCase() === file.toLowerCase())) {
+      throw new Error(`Resource case file has no tests: ${file}`);
+    }
+  }
+  const invocations = [
+    { files: groups.regular },
+    ...groups.resourceFile.map((file) => ({ files: [file] })),
+    ...resourceTests.map((test) => ({ files: [`${test.file}:${test.line}`], test })),
+  ];
 
   if (process.argv.includes('--print-partition')) {
     process.stdout.write(`${JSON.stringify({
       files,
       ...groups,
-      invocations: [groups.regular, ...groups.resource.map((file) => [file])],
+      resource,
+      resourceTests,
+      invocations,
       coverageMerge: true,
     })}\n`);
     return;
@@ -122,8 +189,11 @@ async function main() {
   process.once('SIGTERM', onSignal);
   try {
     await runVitest(groups.regular, { coverage, blobDir, config });
-    for (const file of groups.resource) {
+    for (const file of groups.resourceFile) {
       await runVitest([file], { coverage, blobDir, config });
+    }
+    for (const test of resourceTests) {
+      await runVitest([`${test.file}:${test.line}`], { coverage, blobDir, config });
     }
     if (coverage) {
       const merge = spawn(vitest, ['--merge-reports', blobDir, '--coverage', '--config', config], {
