@@ -280,11 +280,11 @@ export class DefaultQueryService implements QueryService {
       : undefined;
 
     // Build RankedPassage[] and RankedFact[] from PPR results
-    const passages: import('../../domain/retrieval/federation.js').RankedPassage[] =
+    const passages: RankedPassage[] =
       associateV15RankedPassages(ranking.rankedPassages, context.citedPassages)
         .map(({ item: passage, node, rank }) => ({ passage, score: node.score, rank }));
 
-    const facts: import('../../domain/retrieval/federation.js').RankedFact[] =
+    const facts: RankedFact[] =
       associateV15RankedFacts(ranking.rankedEntities, context.citedFacts)
         .map(({ item: fact, node, rank }) => ({ fact, score: node.score, rank }));
 

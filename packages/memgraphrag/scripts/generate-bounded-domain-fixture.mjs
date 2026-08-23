@@ -239,11 +239,21 @@ async function writeSyncedTemp(targetPath, text) {
 
 async function syncDirectory(path) {
   const handle = await open(path, 'r');
+  let syncError;
   try {
     await handle.sync();
-  } finally {
-    await handle.close();
+  } catch (error) {
+    syncError = error;
   }
+  try {
+    await handle.close();
+  } catch (closeError) {
+    if (syncError) {
+      throw new AggregateError([syncError, closeError], `failed to sync and close ${path}`);
+    }
+    throw closeError;
+  }
+  if (syncError) throw syncError;
 }
 
 async function removeOwnedTemp(path) {
