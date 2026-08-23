@@ -80,6 +80,7 @@ describe('TASK-MG-040: MemGraphRagRuntime', () => {
     await runtime.shutdown();
   });
 
+  // Hosted runners may compile the Rust native backend on the first request.
   it('routes graph operations to native aira-graphdb backend', async () => {
     const baseDir = resolve(artifactRoot, 'native-backend');
     const runtime = createMemGraphRagRuntime(createConfig('native-backend', {
@@ -113,7 +114,7 @@ describe('TASK-MG-040: MemGraphRagRuntime', () => {
     }])).rejects.toThrow('mutation requires an active batch');
 
     await runtime.shutdown();
-  });
+  }, 30_000);
 
   it('uses degraded providers in local-only mode', async () => {
     const runtime = createMemGraphRagRuntime(createConfig('local-only', { localOnly: true }));
