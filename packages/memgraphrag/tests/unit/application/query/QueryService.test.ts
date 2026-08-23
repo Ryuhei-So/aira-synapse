@@ -5,7 +5,12 @@ import type { IMemoryFilter, INodeInitializer, QueryRequest } from '../../../../
 import type { IContextBuilder, IGraphProjection, IPPR, PPRResult, ContextBundle } from '../../../../src/domain/retrieval/ppr.js';
 import type { RetrievedQueryContext } from '../../../../src/domain/retrieval/federation.js';
 import { createNotImplementedStub } from '../../../setup/testDoubles.js';
-import { ContextBuilderService, DefaultQueryService, DEFAULT_HYPER_PARAMS } from '../../../../src/application/query/QueryService.js';
+import {
+  ContextBuilderService,
+  DEFAULT_HYPER_PARAMS,
+  DefaultQueryService,
+} from '../../../../src/application/query/QueryService.js';
+import { SimplePPR } from '../../../../src/application/query/SimplePPR.js';
 import { ThesaurusExpansionPolicy } from '../../../../src/application/query/ThesaurusExpansionPolicy.js';
 
 const dictionaryEntry = {
@@ -111,6 +116,63 @@ describe('TASK-MG-034: DefaultQueryService', () => {
 
     await service.query({ ...createQueryRequest(), text: '  GNN\nfor citation graphs  ' });
     expect(service['dependencies'].memoryFilter.filter).toHaveBeenCalledWith(expect.objectContaining({ text: 'GNN for citation graphs' }), undefined);
+  });
+
+  it('uses one injected hub threshold for legacy PPR execution and the bounded plan', async () => {
+    const transitions = [
+      { sourceNodeId: 'fact:seed', targetNodeId: 'schema:hub', weight: 1 },
+      { sourceNodeId: 'fact:other', targetNodeId: 'schema:hub', weight: 1 },
+      { sourceNodeId: 'schema:hub', targetNodeId: 'passage:p1', weight: 1 },
+    ];
+    const projection: IGraphProjection = {
+      getTransitions: async function* () { for (const edge of transitions) yield edge; },
+      getDanglingNodes: vi.fn().mockResolvedValue([]),
+      getNodeCount: vi.fn().mockResolvedValue(4),
+    };
+    const realPpr = new SimplePPR();
+    const ppr = {
+      run: vi.fn<IPPR['run']>((request, graph) => realPpr.run(request, graph)),
+    } satisfies IPPR;
+    const service = new DefaultQueryService({
+      dictionary: { ...createNotImplementedStub<ITermDictionary>('ITermDictionary'), match: vi.fn().mockResolvedValue([]) },
+      expansionPolicy: { expandQuery: vi.fn() },
+      memoryFilter: {
+        ...createNotImplementedStub<IMemoryFilter>('IMemoryFilter'),
+        filter: vi.fn().mockResolvedValue({
+          ontology: [], facts: [], passages: [], expandedTerms: [],
+          fallbackRequired: false, queryVector: [1],
+        }),
+      },
+      nodeInitializer: {
+        ...createNotImplementedStub<INodeInitializer>('INodeInitializer'),
+        initialize: vi.fn().mockResolvedValue({ scores: { 'fact:seed': 1 }, fallbackTriggered: false }),
+      },
+      ppr,
+      projection,
+      contextBuilder: {
+        ...createNotImplementedStub<IContextBuilder>('IContextBuilder'),
+        build: vi.fn().mockResolvedValue({ promptContext: '', citedPassages: [], citedFacts: [], confidence: 0 }),
+      },
+      llm: createNotImplementedStub<ILLMProvider>('ILLMProvider'),
+      hyperParams: { ...DEFAULT_HYPER_PARAMS, hubDegreeThreshold: 1 },
+    });
+    const request = { ...createQueryRequest(), threshold: -1 };
+    const prepared = {
+      normalizedText: request.text,
+      expandedRequest: request,
+      entityHits: [],
+      dictionaryHints: '',
+      isComparison: false,
+    };
+
+    const result = await service.retrievePrepared(prepared);
+    const executed = vi.mocked(ppr.run).mock.calls[0]![0];
+    expect(executed.hubDegreeThreshold).toBe(1);
+    expect(result.retrievalPlan?.pprPolicy.hubDegreeThreshold).toBe(1);
+
+    const undamped = await realPpr.run({ ...executed, hubDegreeThreshold: 100 }, projection);
+    expect(result.pprResult.rankedPassages[0]?.score)
+      .not.toBe(undamped.rankedPassages[0]?.score);
   });
 
   it('ContextBuilderService resolves ranked node ids into prompt context', async () => {

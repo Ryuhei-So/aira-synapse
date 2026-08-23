@@ -12,6 +12,7 @@ import type {
   IPPR,
   PPRResult,
 } from '../../domain/retrieval/ppr.js';
+import { DEFAULT_HUB_DEGREE_THRESHOLD } from '../../domain/retrieval/ppr.js';
 import type { Fact } from '../../domain/memory/fact.js';
 import type { Passage } from '../../domain/memory/passage.js';
 import type { QueryFeatureFlags } from '../../domain/config/featureFlags.js';
@@ -27,6 +28,13 @@ import { extractFinalAnswer } from './query-utils.js';
 import type { SubQueryDecomposer } from './SubQueryDecomposer.js';
 import type { ComparisonVerifier } from './ComparisonVerifier.js';
 import { DictionaryContextEnricher } from './DictionaryContextEnricher.js';
+import {
+  associateV15RankedFacts,
+  associateV15RankedPassages,
+  buildV15RetrievalRequestPlan,
+  unsupportedV15Features,
+  type V15RetrievalRequestPlan,
+} from '../../domain/retrieval/v15Plan.js';
 
 export interface CitationDto {
   readonly passageId: string;
@@ -109,10 +117,14 @@ export const DEFAULT_HYPER_PARAMS: QueryHyperParams = {
   teleportProbability: 0.5,
   scTemperature: 0.0,
   scSamples: 1,
-  hubDegreeThreshold: 50,
+  hubDegreeThreshold: DEFAULT_HUB_DEGREE_THRESHOLD,
   reasoningEffort: 'high',
   verbosity: 'low',
 };
+
+/** Existing QueryService policy authority for the legacy PPR call. */
+export const DEFAULT_PPR_CONVERGENCE_EPSILON = 1e-6;
+export const DEFAULT_PPR_MAX_ITERATIONS = 100;
 
 export interface QueryServiceDependencies {
   readonly dictionary: ITermDictionary;
@@ -213,6 +225,21 @@ export class DefaultQueryService implements QueryService {
     };
   }
 
+  /** Build the bounded static policy before any candidate or snapshot access. */
+  public createBoundedRetrievalRequestPlan(
+    prepared: PreparedQuery,
+    queryVector: readonly number[],
+  ): V15RetrievalRequestPlan {
+    return buildV15RetrievalRequestPlan(prepared.expandedRequest, queryVector, {
+      comparisonMode: prepared.isComparison,
+      featureFlags: this.flags,
+      teleportProbability: this.hp.teleportProbability,
+      convergenceEpsilon: DEFAULT_PPR_CONVERGENCE_EPSILON,
+      maxIterations: DEFAULT_PPR_MAX_ITERATIONS,
+      hubDegreeThreshold: this.hp.hubDegreeThreshold,
+    });
+  }
+
   /** Execute retrieval using pre-processed query. No normalization/expansion. */
   public async retrievePrepared(
     prepared: PreparedQuery,
@@ -226,7 +253,11 @@ export class DefaultQueryService implements QueryService {
     let initialVector = await this.dependencies.nodeInitializer.initialize(initRequest);
 
     if (this.flags.enableSubQueryDecomposition && this.dependencies.subQueryDecomposer) {
-      const subResult = await this.dependencies.subQueryDecomposer.decompose(initRequest, initialVector);
+      const subResult = await this.dependencies.subQueryDecomposer.decompose(
+        initRequest,
+        initialVector,
+        this.hp.hubDegreeThreshold,
+      );
       initialVector = subResult.mergedVector;
     }
 
@@ -234,26 +265,28 @@ export class DefaultQueryService implements QueryService {
       corpusId: expandedRequest.corpusId,
       initialVector,
       teleportProbability: this.hp.teleportProbability,
-      convergenceEpsilon: 1e-6,
-      maxIterations: 100,
+      convergenceEpsilon: DEFAULT_PPR_CONVERGENCE_EPSILON,
+      maxIterations: DEFAULT_PPR_MAX_ITERATIONS,
+      hubDegreeThreshold: this.hp.hubDegreeThreshold,
       topK: expandedRequest.topK,
       topM: expandedRequest.topM,
     }, this.dependencies.projection);
 
     const context = await this.dependencies.contextBuilder.build(expandedRequest, ranking);
 
+    const retrievalPlan: V15RetrievalRequestPlan | undefined = candidates.queryVector.length > 0
+      && unsupportedV15Features(this.flags).length === 0
+      ? this.createBoundedRetrievalRequestPlan(prepared, candidates.queryVector)
+      : undefined;
+
     // Build RankedPassage[] and RankedFact[] from PPR results
     const passages: RankedPassage[] =
-      context.citedPassages.map((passage, idx) => {
-        const pprNode = ranking.rankedPassages[idx];
-        return { passage, score: pprNode?.score ?? 0, rank: idx + 1 };
-      });
+      associateV15RankedPassages(ranking.rankedPassages, context.citedPassages)
+        .map(({ item: passage, node, rank }) => ({ passage, score: node.score, rank }));
 
     const facts: RankedFact[] =
-      context.citedFacts.map((fact, idx) => {
-        const pprNode = ranking.rankedEntities[idx];
-        return { fact, score: pprNode?.score ?? 0, rank: idx + 1 };
-      });
+      associateV15RankedFacts(ranking.rankedEntities, context.citedFacts)
+        .map(({ item: fact, node, rank }) => ({ fact, score: node.score, rank }));
 
     return {
       passages,
@@ -266,6 +299,7 @@ export class DefaultQueryService implements QueryService {
       dictionaryHints: prepared.dictionaryHints,
       isComparison: prepared.isComparison,
       queryVector: [...candidates.queryVector],
+      retrievalPlan,
       metrics: {
         dictionaryMatchCount: prepared.entityHits.length,
         expandedTerms: candidates.expandedTerms,

@@ -1,0 +1,293 @@
+#!/usr/bin/env node
+
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdir, open, readFile, rename, unlink } from 'node:fs/promises';
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const DIGEST = 'v15-entity-normalization-ecmascript-tolowercase-unicode16.0.0@1';
+const MANIFEST_VERSION = 'V15UnicodeLowercaseManifest@1';
+const FIXTURE_MAGIC = Buffer.from('U16LOW1\0', 'ascii');
+const EXPECTED_INPUT_SHA = Object.freeze({
+  'UnicodeData.txt': 'ff58e5823bd095166564a006e47d111130813dcf8bf234ef79fa51a870edb48f',
+  'SpecialCasing.txt': '8d5de354eef79f2395a54c9c7dcebbaf3d30fc962d0f85611ea97aa973a0c451',
+  'DerivedCoreProperties.txt': '39d35161f2954497f69e08bdb9e701493f476a3d30222de20028feda36c1dabd',
+});
+
+const packageRoot = fileURLToPath(new URL('..', import.meta.url));
+const ucdRoot = fileURLToPath(new URL('../vendor/unicode/16.0.0/ucd/', import.meta.url));
+const generatedTsPath = fileURLToPath(new URL('../src/domain/text/unicode16Lowercase.generated.ts', import.meta.url));
+const generatedRuntimePath = fileURLToPath(new URL('../src/domain/text/unicode16Lowercase.ts', import.meta.url));
+const generatedRustPath = fileURLToPath(new URL('../tests/fixtures/unicode16-lowercase.lookup.rs', import.meta.url));
+const fixturePath = fileURLToPath(new URL('../tests/fixtures/unicode16-lowercase.conformance.bin', import.meta.url));
+const manifestPath = fileURLToPath(new URL('../tests/fixtures/unicode16-lowercase.manifest.json', import.meta.url));
+
+function sha256(value) {
+  return createHash('sha256').update(value).digest('hex');
+}
+
+function canonicalJson(value) {
+  const canonicalize = (item) => {
+    if (Array.isArray(item)) return item.map(canonicalize);
+    if (item !== null && typeof item === 'object') {
+      return Object.fromEntries(Object.keys(item).sort().map((key) => [key, canonicalize(item[key])]));
+    }
+    return item;
+  };
+  return `${JSON.stringify(canonicalize(value), null, 2)}\n`;
+}
+
+function parseCodePointList(value) {
+  return value.trim().split(/\s+/u).filter(Boolean).map((part) => Number.parseInt(part, 16));
+}
+
+function parseUnicodeData(text) {
+  const mappings = new Map();
+  for (const line of text.split(/\r?\n/u)) {
+    if (!line) continue;
+    const fields = line.split(';');
+    if (fields.length < 15) throw new Error(`invalid UnicodeData row: ${line}`);
+    const source = Number.parseInt(fields[0], 16);
+    const lower = fields[13].trim();
+    if (lower) mappings.set(source, [Number.parseInt(lower, 16)]);
+  }
+  return mappings;
+}
+
+function parseSpecialCasing(text, mappings) {
+  const contextualConditions = new Set();
+  for (const rawLine of text.split(/\r?\n/u)) {
+    const line = rawLine.replace(/#.*/u, '').trim();
+    if (!line) continue;
+    const fields = line.split(';').map((field) => field.trim());
+    if (fields.length < 5) throw new Error(`invalid SpecialCasing row: ${rawLine}`);
+    const source = Number.parseInt(fields[0], 16);
+    const lower = parseCodePointList(fields[1]);
+    const conditions = fields[4].split(/\s+/u).filter(Boolean);
+    if (conditions.length === 0) {
+      mappings.set(source, lower);
+      continue;
+    }
+    const localeSpecific = conditions.some((condition) => /^[a-z]{2,3}(?:-[A-Za-z0-9]+)*$/u.test(condition));
+    if (!localeSpecific) {
+      for (const condition of conditions) contextualConditions.add(condition);
+    }
+  }
+  if (contextualConditions.size !== 1 || !contextualConditions.has('Final_Sigma')) {
+    throw new Error(`unexpected non-locale SpecialCasing conditions: ${[...contextualConditions].sort().join(', ')}`);
+  }
+}
+
+function parsePropertyRanges(text) {
+  const properties = new Map([['Cased', []], ['Case_Ignorable', []]]);
+  for (const rawLine of text.split(/\r?\n/u)) {
+    const line = rawLine.replace(/#.*/u, '').trim();
+    if (!line) continue;
+    const [rangeText, propertyText] = line.split(';').map((part) => part.trim());
+    if (!properties.has(propertyText)) continue;
+    const [startText, endText = startText] = rangeText.split('..');
+    properties.get(propertyText).push([Number.parseInt(startText, 16), Number.parseInt(endText, 16)]);
+  }
+  for (const [name, ranges] of properties) {
+    ranges.sort((left, right) => left[0] - right[0]);
+    let previousEnd = -1;
+    for (const [start, end] of ranges) {
+      if (start <= previousEnd) throw new Error(`${name} ranges overlap or are unsorted`);
+      previousEnd = end;
+    }
+  }
+  return properties;
+}
+
+function formatHex(value) {
+  return `0x${value.toString(16).toUpperCase()}`;
+}
+
+function generateTypeScript(mappings, casedRanges, caseIgnorableRanges) {
+  const mappingRows = [...mappings.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([source, output]) => `  [${formatHex(source)}, [${output.map(formatHex).join(', ')}]],`)
+    .join('\n');
+  const formatRanges = (ranges) => ranges.map(([start, end]) => `  [${formatHex(start)}, ${formatHex(end)}],`).join('\n');
+  return `// Generated by scripts/generate-unicode16-lowercase.mjs. Do not edit.\n` +
+    `export const UNICODE16_LOWERCASE_MAPPINGS = [\n${mappingRows}\n] as const;\n\n` +
+    `export const UNICODE16_CASED_RANGES = [\n${formatRanges(casedRanges)}\n] as const;\n\n` +
+    `export const UNICODE16_CASE_IGNORABLE_RANGES = [\n${formatRanges(caseIgnorableRanges)}\n] as const;\n`;
+}
+
+function generateRuntimeTypeScript() {
+  return `// Generated by scripts/generate-unicode16-lowercase.mjs. Do not edit.\n` +
+`import {\n  UNICODE16_CASED_RANGES,\n  UNICODE16_CASE_IGNORABLE_RANGES,\n  UNICODE16_LOWERCASE_MAPPINGS,\n} from './unicode16Lowercase.generated.js';\n\n` +
+`export const UNICODE16_LOWERCASE_DIGEST =\n  '${DIGEST}' as const;\n\n` +
+`const mappings = new Map<number, readonly number[]>(UNICODE16_LOWERCASE_MAPPINGS);\n\n` +
+`function inRanges(value: number, ranges: readonly (readonly [number, number])[]): boolean {\n  let low = 0;\n  let high = ranges.length - 1;\n  while (low <= high) {\n    const middle = (low + high) >>> 1;\n    const [start, end] = ranges[middle]!;\n    if (value < start) high = middle - 1;\n    else if (value > end) low = middle + 1;\n    else return true;\n  }\n  return false;\n}\n\n` +
+`function scalarAt(value: string, index: number): number {\n  const first = value.charCodeAt(index);\n  if (first >= 0xD800 && first <= 0xDBFF) {\n    const second = value.charCodeAt(index + 1);\n    if (!(second >= 0xDC00 && second <= 0xDFFF)) {\n      throw new TypeError('v15 entity normalization rejects an unpaired high surrogate');\n    }\n    return ((first - 0xD800) * 0x400) + (second - 0xDC00) + 0x10000;\n  }\n  if (first >= 0xDC00 && first <= 0xDFFF) {\n    throw new TypeError('v15 entity normalization rejects an unpaired low surrogate');\n  }\n  return first;\n}\n\n` +
+`function scalarWidth(value: string, index: number): number {\n  const first = value.charCodeAt(index);\n  if (first >= 0xD800 && first <= 0xDBFF) {\n    const second = value.charCodeAt(index + 1);\n    if (!(second >= 0xDC00 && second <= 0xDFFF)) {\n      throw new TypeError('v15 entity normalization rejects an unpaired high surrogate');\n    }\n    return 2;\n  }\n  if (first >= 0xDC00 && first <= 0xDFFF) {\n    throw new TypeError('v15 entity normalization rejects an unpaired low surrogate');\n  }\n  return 1;\n}\n\n` +
+`function validateUtf16(value: string): void {\n  for (let index = 0; index < value.length;) index += scalarWidth(value, index);\n}\n\n` +
+`function previousScalarStart(value: string, index: number): number {\n  let start = index - 1;\n  const last = value.charCodeAt(start);\n  if (last >= 0xDC00 && last <= 0xDFFF) start -= 1;\n  return start;\n}\n\n` +
+`function isFinalSigma(value: string, start: number, end: number): boolean {\n  let before = previousScalarStart(value, start);\n  while (before >= 0) {\n    const scalar = scalarAt(value, before);\n    if (!inRanges(scalar, UNICODE16_CASE_IGNORABLE_RANGES)) {\n      if (!inRanges(scalar, UNICODE16_CASED_RANGES)) return false;\n      break;\n    }\n    before = previousScalarStart(value, before);\n  }\n  if (before < 0) return false;\n  let after = end;\n  while (after < value.length) {\n    const scalar = scalarAt(value, after);\n    if (!inRanges(scalar, UNICODE16_CASE_IGNORABLE_RANGES)) {\n      return !inRanges(scalar, UNICODE16_CASED_RANGES);\n    }\n    after += scalar > 0xFFFF ? 2 : 1;\n  }\n  return true;\n}\n\n` +
+`/** Unicode 16.0.0 full lowercase for the v15 entity-comparison contract. */\nexport function unicode16Lowercase(value: string): string {\n  validateUtf16(value);\n  const chunks: string[] = [];\n  const chunk = value.length > 4096 ? new Uint32Array(4096) : undefined;\n  let chunkLength = 0;\n  let smallOutput = '';\n  const flush = (): void => {\n    if (!chunk || chunkLength === 0) return;\n    chunks.push(String.fromCodePoint(...chunk.subarray(0, chunkLength)));\n    chunkLength = 0;\n  };\n  const append = (scalar: number): void => {\n    if (!chunk) {\n      smallOutput += String.fromCodePoint(scalar);\n      return;\n    }\n    if (chunkLength === chunk.length) flush();\n    chunk[chunkLength] = scalar;\n    chunkLength += 1;\n  };\n  for (let index = 0; index < value.length;) {\n    const start = index;\n    const scalar = scalarAt(value, index);\n    const next = index + (scalar > 0xFFFF ? 2 : 1);\n    index = next;\n    if (scalar === 0x03A3 && isFinalSigma(value, start, next)) {\n      append(0x03C2);\n      continue;\n    }\n    const mapping = mappings.get(scalar);\n    if (mapping === undefined) {\n      append(scalar);\n      continue;\n    }\n    for (const mappedScalar of mapping) append(mappedScalar);\n  }\n  flush();\n  return chunk ? chunks.join('') : smallOutput;\n}\n`;
+}
+
+function generateRust(mappings, casedRanges, caseIgnorableRanges) {
+  const mappingRows = [...mappings.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([source, output]) => {
+      if (output.length < 1 || output.length > 3) {
+        throw new Error(`Unicode lowercase mapping ${formatHex(source)} has ${output.length} scalars; Rust artifact supports 1..3`);
+      }
+      const padded = [...output, 0, 0, 0].slice(0, 3);
+      return `    (${formatHex(source)}, ${output.length}, [${padded.map(formatHex).join(', ')}]),`;
+    }).join('\n');
+  const formatRanges = (ranges) => ranges.map(([start, end]) => `    (${formatHex(start)}, ${formatHex(end)}),`).join('\n');
+  return `// Generated by Aira Synapse scripts/generate-unicode16-lowercase.mjs. Do not edit.\n` +
+    `pub const V15_ENTITY_NORMALIZATION_DIGEST: &str = "${DIGEST}";\n` +
+    `pub const LOWERCASE_MAPPINGS: &[(u32, usize, [u32; 3])] = &[\n${mappingRows}\n];\n` +
+    `pub const CASED_RANGES: &[(u32, u32)] = &[\n${formatRanges(casedRanges)}\n];\n` +
+    `pub const CASE_IGNORABLE_RANGES: &[(u32, u32)] = &[\n${formatRanges(caseIgnorableRanges)}\n];\n`;
+}
+
+const FINAL_SIGMA_VECTORS = Object.freeze([
+  { input: 'Σ', output: 'σ' },
+  { input: 'AΣ', output: 'aς' },
+  { input: 'ΣA', output: 'σa' },
+  { input: 'AΣA', output: 'aσa' },
+  { input: 'AΣ\u0301', output: 'aς\u0301' },
+  { input: 'AΣ\u0301A', output: 'aσ\u0301a' },
+]);
+
+function generateFixture(mappings) {
+  const scalarCount = 0x110000 - 0x800;
+  let scalarBytes = scalarCount;
+  for (const output of mappings.values()) scalarBytes += (output.length - 1) * 4;
+  scalarBytes += scalarCount * 4;
+  const vectorBytes = Buffer.from(canonicalJson(FINAL_SIGMA_VECTORS), 'utf8');
+  const fixture = Buffer.allocUnsafe(16 + scalarBytes + 4 + vectorBytes.length);
+  FIXTURE_MAGIC.copy(fixture, 0);
+  fixture.writeUInt32LE(scalarCount, 8);
+  fixture.writeUInt32LE(FINAL_SIGMA_VECTORS.length, 12);
+  let offset = 16;
+  for (let scalar = 0; scalar <= 0x10FFFF; scalar += 1) {
+    if (scalar >= 0xD800 && scalar <= 0xDFFF) continue;
+    const output = mappings.get(scalar) ?? [scalar];
+    fixture.writeUInt8(output.length, offset);
+    offset += 1;
+    for (const value of output) {
+      fixture.writeUInt32LE(value, offset);
+      offset += 4;
+    }
+  }
+  fixture.writeUInt32LE(vectorBytes.length, offset);
+  offset += 4;
+  vectorBytes.copy(fixture, offset);
+  offset += vectorBytes.length;
+  if (offset !== fixture.length) throw new Error(`fixture size mismatch: ${offset} != ${fixture.length}`);
+  return fixture;
+}
+
+async function expectedArtifacts() {
+  const generatorBytes = await readFile(fileURLToPath(import.meta.url));
+  const inputEntries = await Promise.all(Object.entries(EXPECTED_INPUT_SHA).map(async ([name, expectedSha256]) => {
+    const bytes = await readFile(`${ucdRoot}/${name}`);
+    const actualSha256 = sha256(bytes);
+    if (actualSha256 !== expectedSha256) throw new Error(`${name} SHA-256 mismatch: ${actualSha256}`);
+    return [name, { file: `vendor/unicode/16.0.0/ucd/${name}`, sha256: actualSha256, bytes: bytes.length, text: bytes.toString('utf8') }];
+  }));
+  const inputs = Object.fromEntries(inputEntries);
+  const mappings = parseUnicodeData(inputs['UnicodeData.txt'].text);
+  parseSpecialCasing(inputs['SpecialCasing.txt'].text, mappings);
+  for (const [source, output] of mappings) {
+    if (output.length === 1 && output[0] === source) mappings.delete(source);
+  }
+  const properties = parsePropertyRanges(inputs['DerivedCoreProperties.txt'].text);
+  const generatedTs = Buffer.from(generateTypeScript(mappings, properties.get('Cased'), properties.get('Case_Ignorable')), 'utf8');
+  const generatedRuntime = Buffer.from(generateRuntimeTypeScript(), 'utf8');
+  const generatedRust = Buffer.from(generateRust(mappings, properties.get('Cased'), properties.get('Case_Ignorable')), 'utf8');
+  const fixture = generateFixture(mappings);
+  const publicInputs = Object.fromEntries(Object.entries(inputs).map(([name, value]) => [name, { file: value.file, sha256: value.sha256, bytes: value.bytes }]));
+  const manifest = Buffer.from(canonicalJson({
+    manifestVersion: MANIFEST_VERSION,
+    normalizationDigest: DIGEST,
+    unicodeVersion: '16.0.0',
+    generator: { file: 'scripts/generate-unicode16-lowercase.mjs', sha256: sha256(generatorBytes), bytes: generatorBytes.length },
+    inputs: publicInputs,
+    outputs: {
+      generatedTypeScript: { file: 'src/domain/text/unicode16Lowercase.generated.ts', sha256: sha256(generatedTs), bytes: generatedTs.length },
+      generatedRuntimeTypeScript: { file: 'src/domain/text/unicode16Lowercase.ts', sha256: sha256(generatedRuntime), bytes: generatedRuntime.length },
+      nativeRustLookup: { file: 'tests/fixtures/unicode16-lowercase.lookup.rs', sha256: sha256(generatedRust), bytes: generatedRust.length },
+      conformanceFixture: { file: 'tests/fixtures/unicode16-lowercase.conformance.bin', sha256: sha256(fixture), bytes: fixture.length, format: 'U16LOW1' },
+    },
+    counts: {
+      scalarValues: 0x110000 - 0x800,
+      lowercaseMappings: mappings.size,
+      casedRanges: properties.get('Cased').length,
+      caseIgnorableRanges: properties.get('Case_Ignorable').length,
+      finalSigmaVectors: FINAL_SIGMA_VECTORS.length,
+    },
+  }), 'utf8');
+  return { generatedTs, generatedRuntime, generatedRust, fixture, manifest };
+}
+
+async function writeSyncedTemp(targetPath, bytes) {
+  await mkdir(dirname(targetPath), { recursive: true, mode: 0o755 });
+  const temporary = `${targetPath}.tmp-${process.pid}-${randomUUID()}`;
+  const handle = await open(temporary, 'wx', 0o600);
+  try {
+    await handle.writeFile(bytes);
+    await handle.sync();
+    await handle.chmod(0o644);
+  } finally {
+    await handle.close();
+  }
+  return temporary;
+}
+
+async function syncDirectory(path) {
+  const handle = await open(path, 'r');
+  try { await handle.sync(); } finally { await handle.close(); }
+}
+
+async function removeOwned(path) {
+  if (!path) return;
+  try { await unlink(path); } catch (error) { if (error?.code !== 'ENOENT') throw error; }
+}
+
+async function publishArtifacts(artifacts) {
+  const targets = [
+    [generatedTsPath, artifacts.generatedTs],
+    [generatedRuntimePath, artifacts.generatedRuntime],
+    [generatedRustPath, artifacts.generatedRust],
+    [fixturePath, artifacts.fixture],
+    [manifestPath, artifacts.manifest],
+  ];
+  const temporaries = [];
+  try {
+    for (const [target, bytes] of targets) temporaries.push([target, await writeSyncedTemp(target, bytes)]);
+    // The manifest is the publication token. Partial data publication is
+    // detected by its hashes; publish and sync it only after every data file.
+    for (const [target, temporary] of temporaries.slice(0, -1)) await rename(temporary, target);
+    await Promise.all([...new Set(temporaries.slice(0, -1).map(([target]) => dirname(target)))].map(syncDirectory));
+    const [manifestTarget, manifestTemporary] = temporaries.at(-1);
+    await rename(manifestTemporary, manifestTarget);
+    await syncDirectory(dirname(manifestTarget));
+  } catch (error) {
+    const cleanup = await Promise.allSettled(temporaries.map(([, temporary]) => removeOwned(temporary)));
+    const cleanupErrors = cleanup.filter((result) => result.status === 'rejected').map((result) => result.reason);
+    if (cleanupErrors.length) throw new AggregateError([error, ...cleanupErrors], 'unicode artifact publication failed');
+    throw error;
+  }
+}
+
+const check = process.argv.includes('--check');
+const artifacts = await expectedArtifacts();
+if (check) {
+  const actual = await Promise.all([generatedTsPath, generatedRuntimePath, generatedRustPath, fixturePath, manifestPath].map((path) => readFile(path)));
+  const expected = [artifacts.generatedTs, artifacts.generatedRuntime, artifacts.generatedRust, artifacts.fixture, artifacts.manifest];
+  if (actual.some((bytes, index) => !bytes.equals(expected[index]))) {
+    throw new Error('Unicode 16 lowercase artifacts drift detected; run the generator and review the diff');
+  }
+  console.log(`Unicode 16 lowercase artifacts are current (${sha256(artifacts.manifest)})`);
+} else {
+  await publishArtifacts(artifacts);
+  console.log(`wrote Unicode 16 lowercase artifacts (${sha256(artifacts.manifest)})`);
+}

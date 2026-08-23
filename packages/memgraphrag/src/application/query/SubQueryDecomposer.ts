@@ -6,7 +6,11 @@
 
 import type { ILLMProvider } from '../../domain/provider/index.js';
 import type { INodeInitializer, NodeInitializationRequest, NodeInitializationVector } from '../../domain/retrieval/memoryFilter.js';
-import type { IGraphProjection, IPPR, PPRRequest } from '../../domain/retrieval/ppr.js';
+import type {
+  IGraphProjection,
+  IPPR,
+  PPRRequest,
+} from '../../domain/retrieval/ppr.js';
 import { isComparisonQuery, withTimeout } from './query-utils.js';
 
 /** Regex patterns indicating bridge/chain questions */
@@ -59,6 +63,7 @@ export class SubQueryDecomposer {
   public async decompose(
     request: NodeInitializationRequest,
     baseVector: NodeInitializationVector,
+    hubDegreeThreshold: number,
   ): Promise<SubQueryResult> {
     const query = request.query.text;
 
@@ -74,7 +79,7 @@ export class SubQueryDecomposer {
 
     // All steps wrapped in deadline
     const result = await withTimeout(
-      this.executeDecomposition(request, baseVector, query),
+      this.executeDecomposition(request, baseVector, query, hubDegreeThreshold),
       this.deadlineMs,
     );
 
@@ -89,6 +94,7 @@ export class SubQueryDecomposer {
     request: NodeInitializationRequest,
     baseVector: NodeInitializationVector,
     query: string,
+    hubDegreeThreshold: number,
   ): Promise<SubQueryResult> {
     // Step 1: LLM decomposition
     let decomposition: LLMDecomposition;
@@ -121,6 +127,7 @@ export class SubQueryDecomposer {
       teleportProbability: 0.15,
       convergenceEpsilon: 1e-6,
       maxIterations: 50,
+      hubDegreeThreshold,
       topK: request.query.topK,
       topM: request.query.topM,
     };

@@ -8,20 +8,32 @@ import type {
   PPRResult,
   RankedNode,
   IGraphProjection,
+  TransitionEntry,
 } from '../../domain/retrieval/ppr.js';
+import {
+  compareV15Ids,
+  orderV15RankedNodes,
+  orderV15Seeds,
+  orderV15Transitions,
+} from '../../domain/retrieval/v15Plan.js';
 
 export class SimplePPR implements IPPR {
-  constructor(private readonly hubDegreeThreshold: number = 50) {}
-
   public async run(request: PPRRequest, projection: IGraphProjection): Promise<PPRResult> {
-    const { corpusId, initialVector, teleportProbability, convergenceEpsilon, maxIterations, topK, topM } = request;
+    const {
+      corpusId, initialVector, teleportProbability, convergenceEpsilon,
+      maxIterations, hubDegreeThreshold, topK, topM,
+    } = request;
 
     // Build adjacency list from graph
     const adjacency = new Map<string, { target: string; weight: number }[]>();
     const allNodes = new Set<string>();
     const inDegree = new Map<string, number>();
+    const transitions: TransitionEntry[] = [];
 
     for await (const entry of projection.getTransitions(corpusId)) {
+      transitions.push(entry);
+    }
+    for (const entry of orderV15Transitions(transitions)) {
       allNodes.add(entry.sourceNodeId);
       allNodes.add(entry.targetNodeId);
       if (!adjacency.has(entry.sourceNodeId)) {
@@ -35,7 +47,7 @@ export class SimplePPR implements IPPR {
     }
 
     // Initialize score vector from seeds
-    const nodeList = [...allNodes];
+    const nodeList = [...allNodes].sort(compareV15Ids);
     const n = nodeList.length;
     if (n === 0) {
       return { rankedPassages: [], rankedEntities: [], iterations: 0, converged: true, l1Delta: 0 };
@@ -47,13 +59,12 @@ export class SimplePPR implements IPPR {
     // Fact and passage nodes are preserved — they carry specific entity info needed
     // for comparison tasks.
     const hubDamping = new Float64Array(n);
-    const HUB_DEGREE_THRESHOLD = this.hubDegreeThreshold;
     for (let i = 0; i < n; i++) {
       const nodeId = nodeList[i]!;
       const outDeg = adjacency.get(nodeId)?.length ?? 0;
       const inDeg = inDegree.get(nodeId) ?? 0;
       const totalDeg = outDeg + inDeg;
-      if (nodeId.startsWith('schema:') && totalDeg > HUB_DEGREE_THRESHOLD) {
+      if (nodeId.startsWith('schema:') && totalDeg > hubDegreeThreshold) {
         hubDamping[i] = 1.0 / Math.log2(totalDeg + 2);
       } else {
         hubDamping[i] = 1.0;
@@ -63,7 +74,10 @@ export class SimplePPR implements IPPR {
     // Teleport vector (personalization)
     const teleport = new Float64Array(n);
     let teleportSum = 0;
-    for (const [nodeId, score] of Object.entries(initialVector.scores)) {
+    const seedEntries = orderV15Seeds(
+      Object.entries(initialVector.scores).map(([nodeId, score]) => ({ nodeId, score })),
+    );
+    for (const { nodeId, score } of seedEntries) {
       const idx = nodeIndex.get(nodeId);
       if (idx !== undefined) {
         teleport[idx] = score;
@@ -143,12 +157,12 @@ export class SimplePPR implements IPPR {
       }
     }
 
-    passageNodes.sort((a, b) => b.score - a.score);
-    entityNodes.sort((a, b) => b.score - a.score);
+    const orderedPassages = orderV15RankedNodes(passageNodes);
+    const orderedEntities = orderV15RankedNodes(entityNodes);
 
     return {
-      rankedPassages: passageNodes.slice(0, topK),
-      rankedEntities: entityNodes.slice(0, topM),
+      rankedPassages: orderedPassages.slice(0, topK),
+      rankedEntities: orderedEntities.slice(0, topM),
       iterations,
       converged,
       l1Delta,

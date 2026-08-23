@@ -57,7 +57,7 @@ async function* transitions(entries: readonly TransitionEntry[]): AsyncIterable<
 describe('retrieval-core behavioral boundaries', () => {
   it('returns a converged empty result when the projection has no transitions', async () => {
     const projection: IGraphProjection = { getTransitions: () => transitions([]), getDanglingNodes: vi.fn(), getNodeCount: vi.fn() };
-    const result = await new SimplePPR().run({ corpusId: 'c1', initialVector: { scores: {}, fallbackTriggered: false }, teleportProbability: 0.5, convergenceEpsilon: 1e-6, maxIterations: 10, topK: 3, topM: 3 }, projection);
+    const result = await new SimplePPR().run({ corpusId: 'c1', initialVector: { scores: {}, fallbackTriggered: false }, teleportProbability: 0.5, convergenceEpsilon: 1e-6, maxIterations: 10, hubDegreeThreshold: 50, topK: 3, topM: 3 }, projection);
     expect(result).toEqual({ rankedPassages: [], rankedEntities: [], iterations: 0, converged: true, l1Delta: 0 });
   });
 
@@ -68,7 +68,7 @@ describe('retrieval-core behavioral boundaries', () => {
       { sourceNodeId: 'schema:s', targetNodeId: 'entity:a', weight: 2 },
     ];
     const projection: IGraphProjection = { getTransitions: () => transitions(entries), getDanglingNodes: vi.fn(), getNodeCount: vi.fn() };
-    const result = await new SimplePPR(0).run({ corpusId: 'c1', initialVector: { scores: {}, fallbackTriggered: false }, teleportProbability: 0.25, convergenceEpsilon: 0, maxIterations: 2, topK: 1, topM: 10 }, projection);
+    const result = await new SimplePPR().run({ corpusId: 'c1', initialVector: { scores: {}, fallbackTriggered: false }, teleportProbability: 0.25, convergenceEpsilon: 0, maxIterations: 2, hubDegreeThreshold: 0, topK: 1, topM: 10 }, projection);
     expect(result.iterations).toBe(2);
     expect(result.converged).toBe(false);
     expect(result.rankedPassages).toHaveLength(1);
@@ -87,8 +87,8 @@ describe('retrieval-core behavioral boundaries', () => {
     entries.push({ sourceNodeId: 'schema:hub', targetNodeId: 'passage:p', weight: 1 });
     const projection: IGraphProjection = { getTransitions: () => transitions(entries), getDanglingNodes: vi.fn(), getNodeCount: vi.fn() };
     const pprRequest = { corpusId: 'c1', initialVector: { scores: { 'entity:0': 1 }, fallbackTriggered: false }, teleportProbability: 0.5, convergenceEpsilon: 1e-6, maxIterations: 50, topK: 3, topM: 3 };
-    const damped = await new SimplePPR(1).run(pprRequest, projection);
-    const undamped = await new SimplePPR(100).run(pprRequest, projection);
+    const damped = await new SimplePPR().run({ ...pprRequest, hubDegreeThreshold: 1 }, projection);
+    const undamped = await new SimplePPR().run({ ...pprRequest, hubDegreeThreshold: 100 }, projection);
     expect(damped.rankedPassages[0]?.nodeId).toBe('passage:p');
     const scoreFor = (result: typeof damped, nodeId: string) => result.rankedEntities.find((node) => node.nodeId === nodeId)?.score;
     expect(scoreFor(damped, 'schema:hub')).toBeLessThan(scoreFor(undamped, 'schema:hub')!);
@@ -137,9 +137,21 @@ describe('retrieval-core behavioral boundaries', () => {
     const ranking = { rankedPassages: [{ nodeId: 'passage:p1', score: 1, layer: 'passage' as const }], rankedEntities: [{ nodeId: 'fact:f1', score: 1, layer: 'fact' as const }], iterations: 1, converged: true, l1Delta: 0 };
     const bridge = await builder.build({ ...request, text: 'How does it work?' }, ranking);
     expect(bridge.promptContext.indexOf('Relevant Passages')).toBeLessThan(bridge.promptContext.indexOf('Key Facts'));
-    const comparison = await builder.build(request, ranking);
+    const comparison = await builder.build({ ...request, text: 'Are Alpha and Beta from the same country?' }, ranking);
     expect(comparison.promptContext.indexOf('Key Facts')).toBeLessThan(comparison.promptContext.indexOf('Relevant Passages'));
     expect(comparison.confidence).toBeGreaterThan(0);
+  });
+
+  it('uses the shared comparison authority for context ordering', async () => {
+    const store = memoryStore(snapshot([passage('p1', 'passage evidence')], [fact('f1')], []));
+    const builder = new SimpleContextBuilder(store);
+    const ranking = { rankedPassages: [{ nodeId: 'passage:p1', score: 1, layer: 'passage' as const }], rankedEntities: [{ nodeId: 'fact:f1', score: 1, layer: 'fact' as const }], iterations: 1, converged: true, l1Delta: 0 };
+
+    const bridge = await builder.build({ ...request, text: 'Which method was used?' }, ranking);
+    const comparison = await builder.build({ ...request, text: 'Are Alpha and Beta from the same country?' }, ranking);
+
+    expect(bridge.promptContext.indexOf('Relevant Passages')).toBeLessThan(bridge.promptContext.indexOf('Key Facts'));
+    expect(comparison.promptContext.indexOf('Key Facts')).toBeLessThan(comparison.promptContext.indexOf('Relevant Passages'));
   });
 
   it('ignores missing ranked nodes', async () => {

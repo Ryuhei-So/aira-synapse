@@ -1,0 +1,57 @@
+{
+  "counts": {
+    "caseIgnorableRanges": 506,
+    "casedRanges": 176,
+    "finalSigmaVectors": 6,
+    "lowercaseMappings": 1460,
+    "scalarValues": 1112064
+  },
+  "generator": {
+    "bytes": 17915,
+    "file": "scripts/generate-unicode16-lowercase.mjs",
+    "sha256": "cb3f1cb481338dcd3906cc0bc343a29cb37fc3ef5e2bfceeb2c319488f2c24b7"
+  },
+  "inputs": {
+    "DerivedCoreProperties.txt": {
+      "bytes": 1115959,
+      "file": "vendor/unicode/16.0.0/ucd/DerivedCoreProperties.txt",
+      "sha256": "39d35161f2954497f69e08bdb9e701493f476a3d30222de20028feda36c1dabd"
+    },
+    "SpecialCasing.txt": {
+      "bytes": 16809,
+      "file": "vendor/unicode/16.0.0/ucd/SpecialCasing.txt",
+      "sha256": "8d5de354eef79f2395a54c9c7dcebbaf3d30fc962d0f85611ea97aa973a0c451"
+    },
+    "UnicodeData.txt": {
+      "bytes": 2175362,
+      "file": "vendor/unicode/16.0.0/ucd/UnicodeData.txt",
+      "sha256": "ff58e5823bd095166564a006e47d111130813dcf8bf234ef79fa51a870edb48f"
+    }
+  },
+  "manifestVersion": "V15UnicodeLowercaseManifest@1",
+  "normalizationDigest": "v15-entity-normalization-ecmascript-tolowercase-unicode16.0.0@1",
+  "outputs": {
+    "conformanceFixture": {
+      "bytes": 5560651,
+      "file": "tests/fixtures/unicode16-lowercase.conformance.bin",
+      "format": "U16LOW1",
+      "sha256": "c89cc745f040ba8518473fb8b1511596a34e48616e2f3f3609237fdd74e4ae8a"
+    },
+    "generatedRuntimeTypeScript": {
+      "bytes": 4181,
+      "file": "src/domain/text/unicode16Lowercase.ts",
+      "sha256": "5551a724f04ec40c90c019103f6ea27c0d6bff11c129ccde39c516e268f0de60"
+    },
+    "generatedTypeScript": {
+      "bytes": 45561,
+      "file": "src/domain/text/unicode16Lowercase.generated.ts",
+      "sha256": "c633fe6f61cb063ddb2a2c276b2d3b96f50d89608a0b51140726337a5138e776"
+    },
+    "nativeRustLookup": {
+      "bytes": 68942,
+      "file": "tests/fixtures/unicode16-lowercase.lookup.rs",
+      "sha256": "4637b1b21285887f291ab36c19edb5bb94d1660364eb948159117c0d493d8f59"
+    }
+  },
+  "unicodeVersion": "16.0.0"
+}

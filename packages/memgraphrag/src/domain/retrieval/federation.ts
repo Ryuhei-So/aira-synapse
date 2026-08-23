@@ -7,6 +7,7 @@ import type { Fact } from '../memory/fact.js';
 import type { Passage } from '../memory/passage.js';
 import type { PPRResult, ContextBundle } from './ppr.js';
 import type { QueryRequest } from './memoryFilter.js';
+import type { V15RetrievalRequestPlan } from './v15Plan.js';
 
 // ─── Ranked results with optional DB provenance ───
 
@@ -66,5 +67,7 @@ export interface RetrievedQueryContext {
   readonly dictionaryHints: string;
   readonly isComparison: boolean;
   readonly queryVector: readonly number[];
+  /** The same policy plan consumed by the future bounded adapter. */
+  readonly retrievalPlan?: V15RetrievalRequestPlan;
   readonly metrics: RetrievalMetrics;
 }

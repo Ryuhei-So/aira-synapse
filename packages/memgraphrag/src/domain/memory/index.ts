@@ -42,3 +42,18 @@ export {
   type MemoryStatistics,
   type GlobalMemory,
 } from './globalMemory.js';
+
+export {
+  DOMAIN_CONTRACT_VERSION,
+  DOMAIN_CONTRACTS,
+  PASSAGE_CONTRACT,
+  FACT_CONTRACT,
+  SCHEMA_CONTRACT,
+  validateDomainObject,
+  isDomainObject,
+  type ContractNode,
+  type DomainContractValidation,
+  type DomainContractTypeWitness,
+  type DomainObjectKind,
+  type DomainObjectByKind,
+} from './domainContract.js';

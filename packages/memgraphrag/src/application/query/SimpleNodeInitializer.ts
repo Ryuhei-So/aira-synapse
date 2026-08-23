@@ -14,76 +14,39 @@ import type {
   NodeInitializationVector,
 } from '../../domain/retrieval/memoryFilter.js';
 import type { IMemoryStore } from '../../domain/storage/index.js';
-
-/** Attenuation for entity-expanded (non-seed) facts */
-const EXPANSION_ATTENUATION = 0.3;
-/** Maximum number of expanded facts to add (prevent seed dilution) */
-const MAX_EXPANSION_FACTS = 20;
-
-const COMPARISON_PATTERNS = /\b(which|who is (more|less|taller|shorter|older|younger|bigger|smaller|larger|heavier|lighter)|(compare|comparison|differ|difference|between)\b.*\b(and|or|vs)\b|both\b)/i;
+import {
+  buildV15FactExpansionPlan,
+  buildV15InitialVector,
+  compileV15FactExpansionEvaluator,
+  orderV15ScoreThenId,
+} from '../../domain/retrieval/v15Plan.js';
+import { isComparisonQuery } from './comparisonDetector.js';
 
 export class SimpleNodeInitializer implements INodeInitializer {
   constructor(private readonly memoryStore?: IMemoryStore) {}
 
   public async initialize(request: NodeInitializationRequest): Promise<NodeInitializationVector> {
-    const scores: Record<string, number> = {};
     const { candidates, query } = request;
-
-    // 1. Seed facts from vector search (full weight)
-    for (const c of candidates.facts) {
-      scores[`fact:${c.item.factId}`] = c.similarity;
-    }
+    const expandedFacts: { factId: string; score: number }[] = [];
 
     // 2. Entity expansion — only for comparison queries where entity
     //    bridging improves coverage of both compared entities.
-    const isComparison = COMPARISON_PATTERNS.test(query.text);
-    if (isComparison && this.memoryStore && candidates.facts.length > 0) {
+    const isComparison = isComparisonQuery(query.text);
+    const expansionPlan = buildV15FactExpansionPlan(candidates, isComparison);
+    if (expansionPlan && this.memoryStore) {
       const snapshot = await this.memoryStore.load(query.corpusId);
+      const evaluateExpansion = compileV15FactExpansionEvaluator(expansionPlan);
 
-      const seedEntities = new Map<string, number>();
-      for (const c of candidates.facts) {
-        const headKey = c.item.headEntity.toLowerCase();
-        const tailKey = c.item.tailEntity.toLowerCase();
-        seedEntities.set(headKey, Math.max(seedEntities.get(headKey) ?? 0, c.similarity));
-        seedEntities.set(tailKey, Math.max(seedEntities.get(tailKey) ?? 0, c.similarity));
-      }
-
-      const expansionCandidates: { key: string; score: number }[] = [];
+      const expansionCandidates: { id: string; score: number }[] = [];
       for (const fact of snapshot.facts) {
-        const factKey = `fact:${fact.factId}`;
-        if (scores[factKey] !== undefined) continue;
-
-        const headScore = seedEntities.get(fact.headEntity.toLowerCase());
-        const tailScore = seedEntities.get(fact.tailEntity.toLowerCase());
-
-        if (headScore !== undefined || tailScore !== undefined) {
-          const entityScore = Math.max(headScore ?? 0, tailScore ?? 0);
-          expansionCandidates.push({ key: factKey, score: entityScore * EXPANSION_ATTENUATION });
-        }
+        const evaluated = evaluateExpansion(fact);
+        if (evaluated) expansionCandidates.push({ id: evaluated.factId, score: evaluated.score });
       }
 
-      expansionCandidates.sort((a, b) => b.score - a.score);
-      for (const exp of expansionCandidates.slice(0, MAX_EXPANSION_FACTS)) {
-        scores[exp.key] = exp.score;
+      for (const exp of orderV15ScoreThenId(expansionCandidates).slice(0, expansionPlan.limit)) {
+        expandedFacts.push({ factId: exp.id, score: exp.score });
       }
     }
-
-    // 3. Passage nodes (full weight — primary info source in our graph)
-    for (const c of candidates.passages) {
-      scores[`passage:${c.item.passageId}`] = c.similarity;
-    }
-
-    // 4. Schema nodes (full weight)
-    for (const c of candidates.ontology) {
-      scores[`schema:${c.item.schemaId}`] = c.similarity;
-    }
-
-    // 5. Entity nodes excluded from PPR seeds — entity co-occurrence subgraph
-    //    is too dense and traps score.
-
-    return {
-      scores,
-      fallbackTriggered: candidates.fallbackRequired,
-    };
+    return buildV15InitialVector(candidates, expandedFacts);
   }
 }

@@ -12,8 +12,7 @@ import type { QueryRequest } from '../../domain/retrieval/memoryFilter.js';
 import type { IMemoryStore } from '../../domain/storage/index.js';
 import type { Passage } from '../../domain/memory/passage.js';
 import type { Fact } from '../../domain/memory/fact.js';
-
-const COMPARISON_PATTERNS = /\b(which|who is (more|less|taller|shorter|older|younger|bigger|smaller|larger|heavier|lighter)|(compare|comparison|differ|difference|between)\b.*\b(and|or|vs)\b|both\b)/i;
+import { isComparisonQuery } from './comparisonDetector.js';
 
 export class SimpleContextBuilder implements IContextBuilder {
   constructor(private readonly memoryStore: IMemoryStore) {}
@@ -45,7 +44,7 @@ export class SimpleContextBuilder implements IContextBuilder {
     }
 
     // Detect comparison queries — fact-first ordering benefits entity relationship tasks
-    const isComparison = COMPARISON_PATTERNS.test(query.text);
+    const isComparison = isComparisonQuery(query.text);
 
     let context = '';
     let tokenEstimate = 0;

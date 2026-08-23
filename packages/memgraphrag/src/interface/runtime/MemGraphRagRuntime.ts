@@ -265,7 +265,7 @@ class QueryServiceFacade implements QueryService {
       expansionPolicy: new ThesaurusExpansionPolicy(thesaurus),
       memoryFilter: new VectorMemoryFilter(this.embeddingProvider, this.vectorIndex, this.memoryStore, this.graphStore),
       nodeInitializer: new SimpleNodeInitializer(this.memoryStore),
-      ppr: new SimplePPR(hp?.hubDegreeThreshold),
+      ppr: new SimplePPR(),
       projection: this.graphProjection,
       contextBuilder: new SimpleContextBuilder(this.memoryStore),
       llm: this.llm,

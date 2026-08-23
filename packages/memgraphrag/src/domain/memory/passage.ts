@@ -9,13 +9,16 @@ import type {
   Timestamped,
 } from './types.js';
 
+export const DOCUMENT_SOURCE_TYPE_VALUES = ['pdf', 'html', 'docx', 'pptx', 'md'] as const;
+export type DocumentSourceType = typeof DOCUMENT_SOURCE_TYPE_VALUES[number];
+
 export interface DocumentMetadata {
   readonly documentId: string;
   readonly title: string;
   readonly sourceUrl: string;
   readonly doi?: string;
   readonly sourceDb?: string;
-  readonly sourceType?: 'pdf' | 'html' | 'docx' | 'pptx' | 'md';
+  readonly sourceType?: DocumentSourceType;
   readonly language: LanguageCode;
   readonly convertedAt?: string;
   readonly sectionPath: readonly string[];
