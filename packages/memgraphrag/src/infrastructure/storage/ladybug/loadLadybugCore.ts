@@ -4,7 +4,13 @@
  */
 
 export interface LadybugModule {
-  Database: new (path: string) => LadybugDatabase;
+  Database: new (
+    path: string,
+    flags?: number,
+    enableCompression?: boolean,
+    readOnly?: boolean,
+    maxDBSize?: number,
+  ) => LadybugDatabase;
   Connection: new (db: LadybugDatabase) => LadybugConnection;
   VERSION: string;
 }

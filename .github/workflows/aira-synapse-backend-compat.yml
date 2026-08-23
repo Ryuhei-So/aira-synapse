@@ -139,8 +139,15 @@ jobs:
   branch-protection-audit:
     runs-on: ubuntu-latest
     needs: backend-compat
+    env:
+      AIRA_GRAPHDB_REPO_PATH: ${{ github.workspace }}/aira-graphdb
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: Ryuhei-So/aira-graphdb
+          ref: c2413c1d9dd7903caad19c0b3007f8d6c0b76655
+          path: aira-graphdb
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -157,8 +164,15 @@ jobs:
     runs-on: ubuntu-latest
     needs: backend-compat-strict
     if: github.event_name == 'merge_group'
+    env:
+      AIRA_GRAPHDB_REPO_PATH: ${{ github.workspace }}/aira-graphdb
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: Ryuhei-So/aira-graphdb
+          ref: c2413c1d9dd7903caad19c0b3007f8d6c0b76655
+          path: aira-graphdb
       - uses: actions/setup-node@v4
         with:
           node-version: '22'

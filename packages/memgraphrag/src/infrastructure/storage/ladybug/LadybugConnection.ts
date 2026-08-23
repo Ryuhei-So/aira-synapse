@@ -50,6 +50,15 @@ const POOL_SIZE = 3;
 
 const EXTENSIONS = ['vector', 'fts', 'algo'] as const;
 
+export function openLadybugDatabase(
+  ldb: Pick<Awaited<ReturnType<typeof loadLadybugCore>>, 'Database'>,
+  dbPath: string,
+  maxDBSize?: number,
+): LadybugDatabase {
+  if (maxDBSize === undefined) return new ldb.Database(dbPath);
+  return new ldb.Database(dbPath, 0, true, false, maxDBSize);
+}
+
 function buildSchemaDDL(vectorDimensions: number): readonly string[] {
   return [
     // --- Node Tables ---
@@ -132,7 +141,11 @@ export class LadybugConnectionPool implements ILadybugConnectionPool {
   private initialized = false;
   private readonly vectorDimensions: number;
 
-  constructor(private readonly dbPath: string, vectorDimensions?: number) {
+  constructor(
+    private readonly dbPath: string,
+    vectorDimensions?: number,
+    private readonly maxDBSize?: number,
+  ) {
     this.vectorDimensions = vectorDimensions ?? 3072;
   }
 
@@ -141,7 +154,7 @@ export class LadybugConnectionPool implements ILadybugConnectionPool {
     if (this.initialized) return;
     const ldb = await loadLadybugCore();
 
-    this.db = new ldb.Database(this.dbPath);
+    this.db = openLadybugDatabase(ldb, this.dbPath, this.maxDBSize);
     for (let i = 0; i < POOL_SIZE; i++) {
       const conn = new ldb.Connection(this.db);
       // Load extensions on each connection
