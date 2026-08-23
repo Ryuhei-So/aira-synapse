@@ -23,6 +23,9 @@ type WorkflowStep = {
 type WorkflowJob = {
   'runs-on': string;
   env?: Record<string, string>;
+  strategy?: {
+    matrix?: Record<string, unknown>;
+  };
   steps: Array<WorkflowStep & { 'working-directory'?: string }>;
 };
 
@@ -31,9 +34,15 @@ describe('TASK-MG-004: CI workflow contract', () => {
   const workflow = parse(raw) as Record<string, unknown>;
   const jobs = workflow['jobs'] as Record<string, WorkflowJob>;
 
-  it('should have required jobs: lint, test, coverage, build', () => {
+  it('should have required jobs: Unicode conformance, lint, test, coverage, build', () => {
     expect(Object.keys(jobs)).toEqual(
-      expect.arrayContaining(['lint', 'test', 'coverage', 'build']),
+      expect.arrayContaining([
+        'unicode16-conformance',
+        'lint',
+        'test',
+        'coverage',
+        'build',
+      ]),
     );
   });
 
@@ -43,14 +52,37 @@ describe('TASK-MG-004: CI workflow contract', () => {
     }
   });
 
-  it('should set up Node 22 in all jobs', () => {
-    for (const [_name, job] of Object.entries(jobs)) {
+  it('should keep standard jobs on Node 22', () => {
+    for (const jobName of ['lint', 'test', 'coverage', 'build']) {
+      const job = jobs[jobName];
+      expect(job).toBeDefined();
       const nodeStep = job.steps.find(
         (s) => s.uses?.startsWith('actions/setup-node'),
       );
       expect(nodeStep).toBeDefined();
       expect(nodeStep?.with?.['node-version']).toBe('22');
     }
+  });
+
+  it('should prove Unicode 16 conformance on exactly Node 22 and Node 24', () => {
+    const job = jobs['unicode16-conformance'];
+    expect(job).toBeDefined();
+    expect(job!.strategy?.matrix?.['node-version']).toEqual(['22', '24']);
+
+    const nodeStep = job!.steps.find(
+      (s) => s.uses?.startsWith('actions/setup-node'),
+    );
+    expect(nodeStep?.with?.['node-version']).toBe('${{ matrix.node-version }}');
+
+    const runs = job!.steps.flatMap((step) =>
+      typeof step.run === 'string' ? [step.run] : [],
+    );
+    expect(runs).toContain(
+      'npm run check:unicode16-lowercase --workspace=packages/memgraphrag',
+    );
+    expect(runs).toContain(
+      'npm test --workspace=packages/memgraphrag -- tests/unit/domain/text/unicode16Lowercase.test.ts tests/unit/scripts/unicode16LowercaseGenerator.test.ts',
+    );
   });
 
   it('should set up Python in test and coverage jobs', () => {
