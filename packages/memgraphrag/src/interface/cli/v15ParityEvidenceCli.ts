@@ -18,6 +18,11 @@ const LIMITS = {
   attestation: 16 * 1024 * 1024,
 } as const;
 
+const PUBLIC_MANIFEST_PATHS = {
+  domain: 'packages/memgraphrag/tests/fixtures/bounded-domain-fixture.manifest.json',
+  normalization: 'packages/memgraphrag/tests/fixtures/unicode16-lowercase.manifest.json',
+} as const;
+
 async function runGit(repository: string, args: readonly string[], allowExitOne = false): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const child = spawn('git', ['-C', repository, ...args], { stdio: ['ignore', 'pipe', 'ignore'] });
@@ -69,6 +74,38 @@ async function assertHead(
   }
 }
 
+async function assertTrackedClean(repository: string): Promise<void> {
+  if ((await runGit(repository, ['status', '--porcelain=v1', '--untracked-files=no'])).length !== 0) {
+    throw new Error('SOURCE_WORKTREE_DIRTY');
+  }
+}
+
+async function assertDetached(repository: string): Promise<void> {
+  const result = await runGit(repository, ['symbolic-ref', '-q', 'HEAD'], true);
+  if (result.toString('utf8') !== 'EXIT_ONE') throw new Error('SOURCE_NOT_DETACHED');
+}
+
+async function assertPrivateCheckerPreflight(repository: string, expectedCommit: string): Promise<void> {
+  if (await exactCommit(repository, 'HEAD') !== expectedCommit) throw new Error('SOURCE_HEAD_MISMATCH');
+  await assertDetached(repository);
+  await assertTrackedClean(repository);
+}
+
+async function assertPublicManifestAuthority(
+  repository: string,
+  commit: string,
+  declared: V15ParityArtifact['publicManifests'],
+): Promise<void> {
+  const [domain, normalization] = await Promise.all([
+    runGit(repository, ['show', `${commit}:${PUBLIC_MANIFEST_PATHS.domain}`]),
+    runGit(repository, ['show', `${commit}:${PUBLIC_MANIFEST_PATHS.normalization}`]),
+  ]);
+  if (sha256V15ParityBytes(domain) !== declared.domainSha256
+    || sha256V15ParityBytes(normalization) !== declared.normalizationSha256) {
+    throw new Error('PUBLIC_MANIFEST_AUTHORITY_MISMATCH');
+  }
+}
+
 async function assertEvaluatedSource(
   repository: string,
   commit: string,
@@ -110,6 +147,14 @@ export async function verifyV15PrivateSourceAuthority(
     }),
     assertEvaluatedSource(repositories.graphDb, sources.evaluatedGraphDbCommit, sources.evaluatedGraphDbTreeDigest, 'exact'),
     assertEvaluatedSource(repositories.hub, sources.evaluatedHubDriverCommit, sources.evaluatedHubDriverTreeDigest, 'exact'),
+    assertPublicManifestAuthority(
+      repositories.synapse,
+      sources.evaluatedSynapseCandidateCommit,
+      artifact.publicManifests,
+    ),
+    assertTrackedClean(repositories.synapse),
+    assertTrackedClean(repositories.graphDb),
+    assertTrackedClean(repositories.hub),
   ]);
   assertRuntime(artifact);
 }
@@ -126,6 +171,13 @@ export async function verifyV15PublicSourceAuthority(
       if (digest !== sources.evaluatedSynapseBaseTreeDigest) throw new Error('SOURCE_TREE_MISMATCH');
     }),
     assertEvaluatedSource(repositories.graphDb, sources.evaluatedGraphDbCommit, sources.evaluatedGraphDbTreeDigest, 'descendant'),
+    assertPublicManifestAuthority(
+      repositories.synapse,
+      sources.evaluatedSynapseCandidateCommit,
+      attestation.publicManifests,
+    ),
+    assertTrackedClean(repositories.synapse),
+    assertTrackedClean(repositories.graphDb),
   ]);
 }
 
@@ -180,25 +232,29 @@ function requireArgs(actual: readonly string[], expected: number, usage: string)
 
 export async function runV15ParityEvidenceCli(operation: string | undefined, args: readonly string[]): Promise<Buffer> {
   if (operation === '--check-private') {
-    requireArgs(args, 6, '--check-private <artifact> <copy-manifest> <fixture> <synapse-repo> <graphdb-repo> <hub-repo>');
+    requireArgs(args, 7, '--check-private <checker-commit> <artifact> <copy-manifest> <fixture> <synapse-repo> <graphdb-repo> <hub-repo>');
+    await assertPrivateCheckerPreflight(args[4]!, args[0]!);
     const [artifact, copyManifest, fixture] = await Promise.all([
-      readV15ParityInput(args[0]!, LIMITS.artifact),
-      readV15ParityInput(args[1]!, LIMITS.copyManifest),
-      readV15ParityInput(args[2]!, LIMITS.fixture),
+      readV15ParityInput(args[1]!, LIMITS.artifact),
+      readV15ParityInput(args[2]!, LIMITS.copyManifest),
+      readV15ParityInput(args[3]!, LIMITS.fixture),
     ]);
     const checked = checkV15ParityArtifact(artifact, copyManifest, fixture);
-    await verifyV15PrivateSourceAuthority(checked, { synapse: args[3]!, graphDb: args[4]!, hub: args[5]! });
+    if (checked.synapseCheckerCommit !== args[0]) throw new Error('SOURCE_COMMIT_MISMATCH');
+    await verifyV15PrivateSourceAuthority(checked, { synapse: args[4]!, graphDb: args[5]!, hub: args[6]! });
     return Buffer.from('V15_PARITY_PRIVATE_OK\n');
   }
   if (operation === '--project-private') {
-    requireArgs(args, 6, '--project-private <artifact> <copy-manifest> <fixture> <synapse-repo> <graphdb-repo> <hub-repo>');
+    requireArgs(args, 7, '--project-private <checker-commit> <artifact> <copy-manifest> <fixture> <synapse-repo> <graphdb-repo> <hub-repo>');
+    await assertPrivateCheckerPreflight(args[4]!, args[0]!);
     const [artifact, copyManifest, fixture] = await Promise.all([
-      readV15ParityInput(args[0]!, LIMITS.artifact),
-      readV15ParityInput(args[1]!, LIMITS.copyManifest),
-      readV15ParityInput(args[2]!, LIMITS.fixture),
+      readV15ParityInput(args[1]!, LIMITS.artifact),
+      readV15ParityInput(args[2]!, LIMITS.copyManifest),
+      readV15ParityInput(args[3]!, LIMITS.fixture),
     ]);
     const checked = checkV15ParityArtifact(artifact, copyManifest, fixture);
-    await verifyV15PrivateSourceAuthority(checked, { synapse: args[3]!, graphDb: args[4]!, hub: args[5]! });
+    if (checked.synapseCheckerCommit !== args[0]) throw new Error('SOURCE_COMMIT_MISMATCH');
+    await verifyV15PrivateSourceAuthority(checked, { synapse: args[4]!, graphDb: args[5]!, hub: args[6]! });
     return serializeV15ParityJson(projectV15ParityAttestation(artifact, copyManifest, fixture));
   }
   if (operation === '--check-public') {

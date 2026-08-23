@@ -191,6 +191,21 @@ describe('TASK-MG-004: CI workflow contract', () => {
     expect(buildRuns).toContain('npm run check:v15-parity-schemas --workspace=packages/memgraphrag');
   });
 
+  it('force-rebuilds the parity checker before opening private evidence', () => {
+    const packageJson = JSON.parse(readFileSync(PACKAGE_PATH, 'utf8')) as {
+      scripts?: Record<string, string>;
+    };
+    expect(packageJson.scripts?.['build:v15-parity-checker'])
+      .toBe('tsc -b tsconfig.build.json --force');
+    for (const name of [
+      'check:v15-parity-private',
+      'project:v15-parity-public',
+      'check:v15-parity-public',
+    ]) {
+      expect(packageJson.scripts?.[name]).toMatch(/^npm run build:v15-parity-checker && /u);
+    }
+  });
+
   it('should run npm run test in test job', () => {
     const testRuns = jobs['test']!.steps
       .filter((s) => s.run)

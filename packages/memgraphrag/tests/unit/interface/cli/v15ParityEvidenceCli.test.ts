@@ -1,4 +1,4 @@
-import { appendFile, mkdtemp, link, symlink, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, mkdtemp, link, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -9,6 +9,7 @@ import {
   V15_REQUIRED_PARITY_CASES,
   checkV15ParityAttestation,
   serializeV15ParityJson,
+  sha256V15ParityBytes,
   type V15ParityArtifact,
 } from '../../../../src/domain/retrieval/v15ParityEvidence.js';
 import {
@@ -30,7 +31,7 @@ async function temporaryRoot(): Promise<string> {
 function publicAttestation(verdict: 'pass' | 'fail' = 'pass') {
   const requiredCases = Object.fromEntries(V15_REQUIRED_PARITY_CASES.map((name) => [name, true]));
   const summary = {
-    beforeCount: 0, afterCount: 0, matchedCount: 0, changedRankCount: 0,
+    beforeCount: 1, afterCount: 1, matchedCount: 1, changedRankCount: 0,
     maxAbsScoreDelta: 0, maxRankDelta: 0,
   };
   return {
@@ -44,11 +45,14 @@ function publicAttestation(verdict: 'pass' | 'fail' = 'pass') {
       evaluatedGraphDbCommit: 'c'.repeat(40),
       evaluatedGraphDbTreeDigest: '4'.repeat(64),
     },
-    publicManifests: { domainSha256: '5'.repeat(64), normalizationSha256: '6'.repeat(64) },
+    publicManifests: {
+      domainSha256: sha256V15ParityBytes(Buffer.from('domain-manifest\n')),
+      normalizationSha256: sha256V15ParityBytes(Buffer.from('normalization-manifest\n')),
+    },
     requiredCases,
     aggregate: {
       candidate: summary, expansion: summary, ppr: summary,
-      idAssociationChangedRowCount: 0, maximumAbsScoreDelta: 0, maximumRankDelta: 0,
+      idAssociationRowCount: 1, idAssociationChangedRowCount: 0, maximumAbsScoreDelta: 0, maximumRankDelta: 0,
     },
     acceptedSemanticChanges: [],
     verdict,
@@ -60,10 +64,13 @@ async function createAuthorityRepository(root: string, name: string, commits: nu
   execFileSync('git', ['init', '-q', repository]);
   execFileSync('git', ['-C', repository, 'config', 'user.email', 'parity@example.test']);
   execFileSync('git', ['-C', repository, 'config', 'user.name', 'Parity Test']);
+  await mkdir(join(repository, 'packages/memgraphrag/tests/fixtures'), { recursive: true });
+  await writeFile(join(repository, 'packages/memgraphrag/tests/fixtures/bounded-domain-fixture.manifest.json'), 'domain-manifest\n');
+  await writeFile(join(repository, 'packages/memgraphrag/tests/fixtures/unicode16-lowercase.manifest.json'), 'normalization-manifest\n');
   const values: string[] = [];
   for (let index = 0; index < commits; index += 1) {
     await writeFile(join(repository, 'authority.txt'), `authority-${index}\n`);
-    execFileSync('git', ['-C', repository, 'add', 'authority.txt']);
+    execFileSync('git', ['-C', repository, 'add', '.']);
     execFileSync('git', ['-C', repository, 'commit', '-q', '-m', `authority ${index}`]);
     values.push(execFileSync('git', ['-C', repository, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim());
   }
@@ -93,6 +100,13 @@ describe('V15 parity evidence CLI boundary', () => {
     await writeFile(path, serializeV15ParityJson(attestation), { mode: 0o600 });
     await expect(runV15ParityEvidenceCli('--check-public', [path, synapse.repository, graphDb.repository]))
       .rejects.toThrow('SOURCE_TREE_MISMATCH');
+
+    attestation.evaluatedSources.evaluatedGraphDbTreeDigest =
+      await computeV15ParityTreeDigest(graphDb.repository, graphDb.commits[0]!);
+    attestation.publicManifests.domainSha256 = 'f'.repeat(64);
+    await writeFile(path, serializeV15ParityJson(attestation), { mode: 0o600 });
+    await expect(runV15ParityEvidenceCli('--check-public', [path, synapse.repository, graphDb.repository]))
+      .rejects.toThrow('PUBLIC_MANIFEST_AUTHORITY_MISMATCH');
   });
 
   it('rejects false required cases paired with a passing verdict', async () => {
@@ -102,6 +116,23 @@ describe('V15 parity evidence CLI boundary', () => {
     attestation.requiredCases['missing-object-fail-closed'] = false;
     await writeFile(path, serializeV15ParityJson(attestation), { mode: 0o600 });
     expect(() => checkV15ParityAttestation(serializeV15ParityJson(attestation))).toThrow('DECLARED_VERDICT_MISMATCH');
+
+    const empty = publicAttestation();
+    const emptySummary = {
+      beforeCount: 0, afterCount: 0, matchedCount: 0, changedRankCount: 0,
+      maxAbsScoreDelta: 0, maxRankDelta: 0,
+    };
+    empty.aggregate = {
+      candidate: emptySummary,
+      expansion: emptySummary,
+      ppr: emptySummary,
+      idAssociationRowCount: 0,
+      idAssociationChangedRowCount: 0,
+      maximumAbsScoreDelta: 0,
+      maximumRankDelta: 0,
+    };
+    expect(() => checkV15ParityAttestation(serializeV15ParityJson(empty)))
+      .toThrow('EMPTY_PUBLIC_MEASUREMENT');
   });
 
   it('rejects symlinks and hard links before parsing payload bytes', async () => {
@@ -150,6 +181,10 @@ describe('V15 parity evidence CLI boundary', () => {
         evaluatedHubDriverCommit: hub.commits[0]!,
         evaluatedHubDriverTreeDigest: await computeV15ParityTreeDigest(hub.repository, hub.commits[0]!),
       },
+      publicManifests: {
+        domainSha256: sha256V15ParityBytes(Buffer.from('domain-manifest\n')),
+        normalizationSha256: sha256V15ParityBytes(Buffer.from('normalization-manifest\n')),
+      },
       runtime: {
         node: process.version.replace(/^v/u, ''),
         v8: process.versions.v8,
@@ -162,9 +197,41 @@ describe('V15 parity evidence CLI boundary', () => {
     await expect(verifyV15PrivateSourceAuthority(artifact, {
       synapse: synapse.repository, graphDb: graphDb.repository, hub: hub.repository,
     })).resolves.toBeUndefined();
+    artifact.evaluatedSources.evaluatedSynapseBaseCommit = synapse.commits[1]!;
+    artifact.evaluatedSources.evaluatedSynapseCandidateCommit = synapse.commits[0]!;
+    await expect(verifyV15PrivateSourceAuthority(artifact, {
+      synapse: synapse.repository, graphDb: graphDb.repository, hub: hub.repository,
+    })).rejects.toThrow('SOURCE_ANCESTRY_MISMATCH');
+    artifact.evaluatedSources.evaluatedSynapseBaseCommit = synapse.commits[0]!;
+    artifact.evaluatedSources.evaluatedSynapseCandidateCommit = synapse.commits[1]!;
     artifact.runtime.node = 'fabricated';
     await expect(verifyV15PrivateSourceAuthority(artifact, {
       synapse: synapse.repository, graphDb: graphDb.repository, hub: hub.repository,
     })).rejects.toThrow('RUNTIME_AUTHORITY_MISMATCH');
+  });
+
+  it('requires the private checker checkout to be detached, clean, and exactly pinned', async () => {
+    const root = await temporaryRoot();
+    const synapse = await createAuthorityRepository(root, 'preflight-synapse', 2);
+    const graphDb = await createAuthorityRepository(root, 'preflight-graphdb', 1);
+    const hub = await createAuthorityRepository(root, 'preflight-hub', 1);
+    const missing = join(root, 'missing.json');
+    const args = (checkerCommit: string) => [
+      checkerCommit, missing, missing, missing, synapse.repository, graphDb.repository, hub.repository,
+    ];
+
+    await expect(runV15ParityEvidenceCli('--check-private', args(synapse.commits[1]!)))
+      .rejects.toThrow('SOURCE_NOT_DETACHED');
+
+    execFileSync('git', ['-C', synapse.repository, 'checkout', '--detach', synapse.commits[1]!]);
+    await appendFile(join(synapse.repository, 'authority.txt'), 'dirty\n');
+    await expect(runV15ParityEvidenceCli('--check-private', args(synapse.commits[1]!)))
+      .rejects.toThrow('SOURCE_WORKTREE_DIRTY');
+    execFileSync('git', ['-C', synapse.repository, 'checkout', '--', '.']);
+
+    await expect(runV15ParityEvidenceCli('--check-private', args('f'.repeat(40))))
+      .rejects.toThrow('SOURCE_HEAD_MISMATCH');
+    await expect(runV15ParityEvidenceCli('--check-private', args(synapse.commits[0]!)))
+      .rejects.toThrow('SOURCE_HEAD_MISMATCH');
   });
 });
