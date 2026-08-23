@@ -22,6 +22,11 @@ describe('trusted production-runtime baseline anchor', () => {
 
     expect(artifactSha256(artifact)).toBe(EXPECTED_ARTIFACT_SHA256);
     expect(verifyProductionRuntimeAnchor(repoRoot)).toEqual(TRUSTED_BASE);
+    expect(TRUSTED_BASE.source).toMatchObject({
+      repository: 'Ryuhei-So/aira-synapse',
+      branch: 'production-runtime',
+      upstreamIssue: 'nahisaho/aira-synapse#1',
+    });
     expect(artifact.status).toBe('inconclusive');
     expect(artifact.decision).toBe('no-improvement');
     expect((artifact.strictCoverage as { metrics: unknown }).metrics).toBeNull();
@@ -37,5 +42,9 @@ describe('trusted production-runtime baseline anchor', () => {
       lines: { covered: 1, total: 1 },
     };
     expect(() => verifyProductionRuntimeAnchor(repoRoot, changedCoverage)).toThrow();
+
+    const changedAuthority = readAnchor();
+    (changedAuthority.source as { repository: string }).repository = 'nahisaho/aira-synapse';
+    expect(() => verifyProductionRuntimeAnchor(repoRoot, changedAuthority)).toThrow();
   });
 });

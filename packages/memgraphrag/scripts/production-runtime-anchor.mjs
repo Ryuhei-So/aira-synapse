@@ -20,8 +20,9 @@ export const TRUSTED_BASE = Object.freeze({
   status: 'inconclusive',
   decision: 'no-improvement',
   source: {
-    repository: 'nahisaho/aira-synapse',
+    repository: 'Ryuhei-So/aira-synapse',
     branch: 'production-runtime',
+    upstreamIssue: 'nahisaho/aira-synapse#1',
     headSha: '8414946fb77319e8c431c38e32ddddf20cf08c8e',
     graphDb: {
       repository: 'Ryuhei-So/aira-graphdb',
@@ -115,7 +116,7 @@ export const TRUSTED_BASE = Object.freeze({
 
 // Filled from the canonical JSON body after review. A changed body is a new
 // evidence artifact and must not silently replace this anchor.
-export const EXPECTED_ARTIFACT_SHA256 = '8be473252883c77f4ea50ce1073082eb6dff2de0189b23880bc87fa1171494d9';
+export const EXPECTED_ARTIFACT_SHA256 = '7784fd982b699821745c286394f80dbf7ef11005cd3400680410ec4c1b1baeac';
 
 function canonicalBody(artifact) {
   const body = { ...artifact };
