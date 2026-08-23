@@ -261,4 +261,34 @@ describe('T-006: LexiconBuilder', () => {
       'lex:corpus-b:tp53',
     );
   });
+
+  it('removes an ambiguous alias from dictionary relations while retaining distinct terms', async () => {
+    const result = await builder.buildIncremental(
+      'doc-ambiguous',
+      [
+        createFact({ factId: 'fact-shared', headEntity: 'Shared', tailEntity: 'Target A' }),
+        createFact({ factId: 'fact-beta', headEntity: 'Beta', tailEntity: 'Target B' }),
+      ],
+      [
+        createPassage({
+          passageId: 'passage-shared',
+          text: 'Shared (Alpha) is observed.',
+          entityMentions: ['Shared', 'Alpha'],
+        }),
+        createPassage({
+          passageId: 'passage-beta',
+          text: 'Beta (Shared) is observed.',
+          entityMentions: ['Beta', 'Shared'],
+        }),
+      ],
+    );
+
+    expect(result.ambiguousExcluded).toBeGreaterThan(0);
+    expect(readDictionaryRows(db, 'corpus-a').map((row) => row.term)).toEqual(
+      expect.arrayContaining(['shared', 'beta']),
+    );
+    expect(readThesaurusRows(db, 'corpus-a').some(
+      (row) => row.source_term === 'Beta' && row.target_term === 'Shared',
+    )).toBe(false);
+  });
 });
