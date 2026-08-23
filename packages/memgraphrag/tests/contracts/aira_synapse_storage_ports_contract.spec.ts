@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+import { resolveAiraGraphDbRepository } from '../../scripts/graphdb-repository-authority.mjs';
+
 type ContractPort = {
   requiredMethods: string[];
   methodContracts: Record<string, unknown>;
@@ -12,18 +14,10 @@ type ContractShape = {
   ports: Record<string, ContractPort>;
 };
 
-const contractPath = resolve(
-  process.cwd(),
-  '..',
-  '..',
-  '..',
-  '..',
-  '..',
-  'aira-graphdb',
-  'spec',
-  'contracts',
-  'aira-synapse-storage-ports.v1.0.0.json',
-);
+const { contractsPath } = resolveAiraGraphDbRepository({
+  requiredContracts: ['aira-synapse-storage-ports.v1.0.0.json'],
+});
+const contractPath = resolve(contractsPath, 'aira-synapse-storage-ports.v1.0.0.json');
 
 const storageInterfacePath = resolve(
   process.cwd(),
@@ -47,7 +41,7 @@ function extractInterfaceMethods(source: string, interfaceName: string): string[
   );
   if (!bodyMatch?.[1]) return [];
   const body = bodyMatch[1];
-  const methods = [...body.matchAll(/^\s*([A-Za-z_]\w*)\s*(?:<[^>]+>)?\s*\(/gm)]
+  const methods = [...body.matchAll(/^\s*([A-Za-z_]\w*)\s*(?:<[^()\n]*>)?\s*\(/gm)]
     .map((m) => m[1]!)
     .filter((name, index, all) => all.indexOf(name) === index);
   return methods.sort();

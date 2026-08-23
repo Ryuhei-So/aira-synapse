@@ -3,7 +3,7 @@
  * Any implementation (SQLite, LadybugDB) must pass all of these tests.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { it, expect, beforeEach, afterEach } from 'vitest';
 import type { GraphEdge, GraphNode, IGraphStore } from '../../src/domain/storage/graphStore.js';
 import type { Schema } from '../../src/domain/memory/schema.js';
 import type { Fact } from '../../src/domain/memory/fact.js';

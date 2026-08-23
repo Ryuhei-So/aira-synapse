@@ -3,6 +3,8 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
+import { resolveAiraGraphDbRepository } from './graphdb-repository-authority.mjs';
+
 function parseArgs(argv) {
   const args = {};
   for (let i = 2; i < argv.length; i += 1) {
@@ -31,8 +33,12 @@ const fromFork = boolEnv('GITHUB_EVENT_PULL_REQUEST_HEAD_REPO_FORK');
 const refProtected = boolEnv('GITHUB_REF_PROTECTED');
 const mergeQueue = boolEnv('GITHUB_MERGE_QUEUE');
 
-const repoRoot = resolve(process.cwd(), '..', '..', '..');
-const contractsRoot = resolve(repoRoot, '..', 'aira-graphdb', 'spec', 'contracts');
+const { contractsPath: contractsRoot } = resolveAiraGraphDbRepository({
+  requiredContracts: [
+    'event-scope-map.v1.0.0.json',
+    'branch-protection-policy.v1.0.0.json',
+  ],
+});
 const eventScopeMap = loadJson(resolve(contractsRoot, 'event-scope-map.v1.0.0.json'));
 const branchPolicy = loadJson(resolve(contractsRoot, 'branch-protection-policy.v1.0.0.json'));
 
@@ -92,4 +98,3 @@ if (strictMode && isTrustedScope && !process.env.AIRA_SYNAPSE_ADMIN_TOKEN) {
   };
   writeFileSync(outputPath, `${JSON.stringify(passed, null, 2)}\n`, 'utf8');
 }
-

@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "freshProcessPerFile": [
+    "tests/e2e/federation-neo4j.e2e.test.ts",
+    "tests/contracts/ladybug/graphProjection.ladybug.test.ts",
+    "tests/contracts/ladybug/graphStore.ladybug.test.ts",
+    "tests/contracts/ladybug/lexicalRetriever.ladybug.test.ts",
+    "tests/contracts/ladybug/memoryStore.ladybug.test.ts",
+    "tests/contracts/ladybug/vectorIndex.ladybug.test.ts",
+    "tests/integration/backend-compat/vector_lexical_compat.integration.test.ts",
+    "tests/integration/storage-port-compat/aira_graphdb.storage-port-compat.test.ts",
+    "tests/infrastructure/storage/ladybug/LadybugMultiHopTraversal.test.ts",
+    "tests/infrastructure/storage/ladybug/migration.test.ts",
+    "tests/infrastructure/storage/ladybug/perf.test.ts",
+    "tests/infrastructure/storage/ladybug/storageFactory.test.ts",
+    "tests/integration/interface/runtime/MemGraphRagRuntime.test.ts",
+    "tests/integration/infrastructure/storage/ladybug-e2e.test.ts"
+  ],
+  "freshProcessPerTest": [
+    "tests/infrastructure/storage/ladybug/LadybugConnection.test.ts"
+  ]
+}

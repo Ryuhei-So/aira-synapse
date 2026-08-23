@@ -27,6 +27,7 @@ import { FullDocumentIndexingPipeline } from '../../application/indexing/FullDoc
 import { VectorMemoryFilter } from '../../application/query/VectorMemoryFilter.js';
 import { SimpleNodeInitializer } from '../../application/query/SimpleNodeInitializer.js';
 import { SimplePPR } from '../../application/query/SimplePPR.js';
+import type { QueryHyperParams } from '../../application/query/QueryService.js';
 import { SQLiteGraphProjection } from '../../application/query/SQLiteGraphProjection.js';
 import { SimpleContextBuilder } from '../../application/query/SimpleContextBuilder.js';
 import type {
@@ -255,7 +256,7 @@ class QueryServiceFacade implements QueryService {
     private readonly graphProjection: IGraphProjection,
   ) {}
 
-  public async query(request: QueryRequest, hyperParams?: import('../../application/query/QueryService.js').QueryHyperParams): Promise<QueryResponse> {
+  public async query(request: QueryRequest, hyperParams?: QueryHyperParams): Promise<QueryResponse> {
     const dictionary = new SQLiteLexiconStore(this.db, request.corpusId);
     const thesaurus = new SQLiteLexiconStore(this.db, request.corpusId);
     const hp = hyperParams;

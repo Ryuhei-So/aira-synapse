@@ -2,9 +2,10 @@ import { describe, it, expect, vi } from 'vitest';
 import type { DictionaryMatch, ITermDictionary, IThesaurus } from '../../../../src/domain/dictionary/index.js';
 import type { ILLMProvider } from '../../../../src/domain/provider/index.js';
 import type { IMemoryFilter, INodeInitializer, QueryRequest } from '../../../../src/domain/retrieval/memoryFilter.js';
-import type { IContextBuilder, IGraphProjection, IPPR, PPRResult } from '../../../../src/domain/retrieval/ppr.js';
+import type { IContextBuilder, IGraphProjection, IPPR, PPRResult, ContextBundle } from '../../../../src/domain/retrieval/ppr.js';
+import type { RetrievedQueryContext } from '../../../../src/domain/retrieval/federation.js';
 import { createNotImplementedStub } from '../../../setup/testDoubles.js';
-import { ContextBuilderService, DefaultQueryService } from '../../../../src/application/query/QueryService.js';
+import { ContextBuilderService, DefaultQueryService, DEFAULT_HYPER_PARAMS } from '../../../../src/application/query/QueryService.js';
 import { ThesaurusExpansionPolicy } from '../../../../src/application/query/ThesaurusExpansionPolicy.js';
 
 const dictionaryEntry = {
@@ -142,5 +143,51 @@ describe('TASK-MG-034: DefaultQueryService', () => {
     const response = await service.query(createQueryRequest());
     expect(response.metrics.fallbackTriggered).toBe(true);
     expect(response.metrics.pprConverged).toBe(false);
+  });
+
+  it('uses template fallback for bounded provider failures and preserves entity context', async () => {
+    const service = new DefaultQueryService({
+      dictionary: { ...createNotImplementedStub<ITermDictionary>('ITermDictionary'), match: vi.fn<ITermDictionary['match']>().mockResolvedValue([]) },
+      expansionPolicy: { expandQuery: vi.fn().mockResolvedValue({ originalQuery: 'x', expandedTerms: [], rewrittenQuery: 'x' }) },
+      memoryFilter: createNotImplementedStub<IMemoryFilter>('IMemoryFilter'),
+      nodeInitializer: createNotImplementedStub<INodeInitializer>('INodeInitializer'),
+      ppr: createNotImplementedStub<IPPR>('IPPR'),
+      projection: createNotImplementedStub<IGraphProjection>('IGraphProjection'),
+      contextBuilder: createNotImplementedStub<IContextBuilder>('IContextBuilder'),
+      llm: { ...createNotImplementedStub<ILLMProvider>('ILLMProvider'), generate: vi.fn().mockRejectedValue(new Error('provider unavailable')) },
+    });
+    const context: ContextBundle = { promptContext: '', citedPassages: [], citedFacts: [], confidence: 0 };
+    const response = await service.answer(createQueryRequest(), {
+      passages: [], facts: [], pprResult: ranking, contextBundle: context,
+      normalizedText: 'x', expandedRequest: createQueryRequest(), entityHits: [{ term: 'GNN', matchedText: 'GNN', boostFactor: 1 }],
+      dictionaryHints: '', isComparison: false, queryVector: [], metrics: { dictionaryMatchCount: 1, expandedTerms: [], fallbackTriggered: false, pprIterations: 1, pprConverged: true, citedPassageCount: 0, latencyMs: 1 },
+    } satisfies RetrievedQueryContext);
+    expect(response.metrics.fallbackTriggered).toBe(true);
+    expect(response.response).toContain('Key entities: GNN');
+  });
+
+  it('majority-votes self-consistency answers and emits federated citations', async () => {
+    const llm = {
+      ...createNotImplementedStub<ILLMProvider>('ILLMProvider'),
+      generate: vi.fn<ILLMProvider['generate']>()
+        .mockResolvedValueOnce({ text: 'FINAL: Alpha', model: 'test', usage: { inputTokens: 1, outputTokens: 1 } })
+        .mockResolvedValueOnce({ text: 'FINAL: alpha', model: 'test', usage: { inputTokens: 1, outputTokens: 1 } })
+        .mockResolvedValueOnce({ text: 'FINAL: Beta', model: 'test', usage: { inputTokens: 1, outputTokens: 1 } }),
+    };
+    const service = new DefaultQueryService({
+      dictionary: { ...createNotImplementedStub<ITermDictionary>('ITermDictionary'), match: vi.fn<ITermDictionary['match']>().mockResolvedValue([]) },
+      expansionPolicy: { expandQuery: vi.fn().mockResolvedValue({ originalQuery: 'x', expandedTerms: [], rewrittenQuery: 'x' }) },
+      memoryFilter: createNotImplementedStub<IMemoryFilter>('IMemoryFilter'), nodeInitializer: createNotImplementedStub<INodeInitializer>('INodeInitializer'),
+      ppr: createNotImplementedStub<IPPR>('IPPR'), projection: createNotImplementedStub<IGraphProjection>('IGraphProjection'), contextBuilder: createNotImplementedStub<IContextBuilder>('IContextBuilder'),
+      llm, hyperParams: { ...DEFAULT_HYPER_PARAMS, scSamples: 3 },
+    });
+    const cited = { passageId: 'p1', corpusId: 'c1', text: 'evidence', normalizedText: 'evidence', metadata: { documentId: 'd1', title: 'Doc', sourceUrl: 'https://example.com', language: 'en', sectionPath: [], chunkId: 'p1', chunkIndex: 0, offsetStart: 0, offsetEnd: 8 }, factIds: [], entityMentions: [], qualityFlags: [], createdAt: '', updatedAt: '' };
+    const response = await service.answer(createQueryRequest(), {
+      passages: [{ passage: cited, score: 1, rank: 1, dbId: 'db-a' }], facts: [], pprResult: ranking,
+      contextBundle: { promptContext: 'evidence', citedPassages: [cited], citedFacts: [], confidence: 0 }, normalizedText: 'x', expandedRequest: createQueryRequest(), entityHits: [], dictionaryHints: '', isComparison: false, queryVector: [], metrics: { dictionaryMatchCount: 0, expandedTerms: [], fallbackTriggered: false, pprIterations: 1, pprConverged: true, citedPassageCount: 1, latencyMs: 1 },
+    } satisfies RetrievedQueryContext);
+    expect(response.response).toBe('Alpha');
+    expect(response.citations[0]).toMatchObject({ passageId: 'p1', dbId: 'db-a' });
+    expect(response.metrics.scVotes).toEqual(['Alpha', 'alpha', 'Beta']);
   });
 });

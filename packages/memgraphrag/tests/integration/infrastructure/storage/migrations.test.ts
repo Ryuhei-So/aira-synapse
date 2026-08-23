@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import Database from 'better-sqlite3';
-import { openDatabase, runMigrations, openAndMigrate } from '../../../../src/infrastructure/storage/migrate.js';
+import type Database from 'better-sqlite3';
+import { openDatabase, runMigrations } from '../../../../src/infrastructure/storage/migrate.js';
 
 describe('TASK-MG-018: SQLite migration runner', () => {
   let db: Database.Database;

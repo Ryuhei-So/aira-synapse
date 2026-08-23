@@ -93,7 +93,7 @@ describe('LadybugDB Performance Validation (T-14)', () => {
     console.log('\n╔══════════════════════════════════════════════════════════════╗');
     console.log('║         LadybugDB Performance Report (T-14)                 ║');
     console.log('╠══════════════════════════════════════════════════════════════╣');
-    for (const [name, { ms, description }] of Object.entries(report)) {
+    for (const [_name, { ms, description }] of Object.entries(report)) {
       const msStr = ms.toFixed(1).padStart(8);
       console.log(`║ ${msStr}ms │ ${description.padEnd(46)} ║`);
     }

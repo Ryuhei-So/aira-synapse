@@ -1,4 +1,4 @@
-import { Command } from 'commander';
+import type { Command } from 'commander';
 import type { CorpusManager } from '../../application/index.js';
 import { SERVICE_TOKENS } from '../runtime/MemGraphRagRuntime.js';
 import type { CliContext } from './runtimeUtils.js';

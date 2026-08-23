@@ -8,14 +8,28 @@ const WORKFLOW_PATH = resolve(
   REPO_ROOT,
   '.github/workflows/memgraphrag-ci.yml',
 );
+const BACKEND_WORKFLOW_PATH = resolve(
+  REPO_ROOT,
+  '.github/workflows/aira-synapse-backend-compat.yml',
+);
+const PACKAGE_PATH = resolve(REPO_ROOT, 'packages/memgraphrag/package.json');
+
+type WorkflowStep = {
+  run?: string;
+  uses?: string;
+  with?: Record<string, unknown>;
+};
+
+type WorkflowJob = {
+  'runs-on': string;
+  env?: Record<string, string>;
+  steps: Array<WorkflowStep & { 'working-directory'?: string }>;
+};
 
 describe('TASK-MG-004: CI workflow contract', () => {
   const raw = readFileSync(WORKFLOW_PATH, 'utf-8');
   const workflow = parse(raw) as Record<string, unknown>;
-  const jobs = workflow['jobs'] as Record<
-    string,
-    { 'runs-on': string; steps: Array<{ run?: string; uses?: string; with?: Record<string, unknown> }> }
-  >;
+  const jobs = workflow['jobs'] as Record<string, WorkflowJob>;
 
   it('should have required jobs: lint, test, coverage, build', () => {
     expect(Object.keys(jobs)).toEqual(
@@ -56,6 +70,61 @@ describe('TASK-MG-004: CI workflow contract', () => {
     expect(pr.paths).toContain('packages/memgraphrag/**');
   });
 
+  it('should trigger workflow changes and production-runtime branch pushes', () => {
+    const on = workflow['on'] as Record<string, unknown>;
+    const pr = on['pull_request'] as { paths: string[] };
+    const push = on['push'] as { branches: string[]; paths: string[] };
+    const workflowPaths = [
+      '.github/workflows/aira-synapse-backend-compat.yml',
+      '.github/workflows/memgraphrag-ci.yml',
+    ];
+
+    expect(pr.paths).toEqual(expect.arrayContaining(workflowPaths));
+    expect(push.paths).toEqual(expect.arrayContaining(workflowPaths));
+    expect(push.branches).toEqual(expect.arrayContaining(['main', 'production-runtime', 'production-runtime/**']));
+  });
+
+  it('checks out the attested GraphDB authority for native test and coverage jobs', () => {
+    for (const jobName of ['test', 'coverage']) {
+      const job = jobs[jobName]!;
+      expect(job.env).toEqual(expect.objectContaining({
+        AIRA_GRAPHDB_REPO_PATH: '${{ github.workspace }}/aira-graphdb',
+        AIRA_GRAPHDB_EXPECTED_SHA: '164092aa47f39330c0c771495d9d42e4e935e41b',
+        AIRA_GRAPHDB_NATIVE_CMD: '${{ github.workspace }}/aira-graphdb/target/release/aira-graphdb-native',
+      }));
+      const graphDbCheckout = job.steps.find(
+        (step) => step.uses === 'actions/checkout@v4'
+          && step.with?.repository === 'Ryuhei-So/aira-graphdb',
+      );
+      expect(graphDbCheckout).toBeDefined();
+      expect(graphDbCheckout?.with).toEqual(expect.objectContaining({
+        ref: '164092aa47f39330c0c771495d9d42e4e935e41b',
+        path: 'aira-graphdb',
+      }));
+      const nativeBuild = job.steps.find((step) => step.run?.includes('cargo build'));
+      expect(nativeBuild?.run).toContain(
+        'cargo build --locked --release --bin aira-graphdb-native',
+      );
+      expect(nativeBuild?.run).toContain(
+        '--manifest-path "$AIRA_GRAPHDB_REPO_PATH/Cargo.toml"',
+      );
+    }
+  });
+
+  it('keeps contract discovery explicit and rejects candidate-controlled gates', () => {
+    const contractConfig = readFileSync(
+      resolve(REPO_ROOT, 'packages/memgraphrag/vitest.contract.config.ts'),
+      'utf-8',
+    );
+    expect(contractConfig).toContain('tests/contracts/aira_synapse_storage_ports_contract.spec.ts');
+    expect(contractConfig).toContain('tests/setup/vitest.setup.ts');
+
+    const backendWorkflow = readFileSync(BACKEND_WORKFLOW_PATH, 'utf-8');
+    for (const content of [raw, backendWorkflow]) {
+      expect(content).not.toMatch(/continue-on-error|baseline|ratchet|\|\|\s*true/);
+    }
+  });
+
   it('should run npm run lint in lint job', () => {
     const lintRuns = jobs['lint']!.steps
       .filter((s) => s.run)
@@ -67,13 +136,21 @@ describe('TASK-MG-004: CI workflow contract', () => {
     const testRuns = jobs['test']!.steps
       .filter((s) => s.run)
       .map((s) => s.run);
-    expect(testRuns.some((r) => r?.includes('test'))).toBe(true);
+    expect(testRuns.some((r) => r === 'npm run test:ci --workspace=packages/memgraphrag')).toBe(true);
+    const packageJson = JSON.parse(readFileSync(PACKAGE_PATH, 'utf8')) as {
+      scripts?: { 'test:ci'?: string };
+    };
+    expect(packageJson.scripts?.['test:ci']).toBe('node scripts/run-vitest-partitions.mjs');
   });
 
   it('should run npm run test:coverage in coverage job', () => {
     const covRuns = jobs['coverage']!.steps
       .filter((s) => s.run)
       .map((s) => s.run);
-    expect(covRuns.some((r) => r?.includes('test:coverage'))).toBe(true);
+    expect(covRuns.some((r) => r === 'npm run test:coverage:ci --workspace=packages/memgraphrag')).toBe(true);
+    const packageJson = JSON.parse(readFileSync(PACKAGE_PATH, 'utf8')) as {
+      scripts?: { 'test:coverage:ci'?: string };
+    };
+    expect(packageJson.scripts?.['test:coverage:ci']).toBe('node scripts/run-vitest-partitions.mjs --coverage');
   });
 });

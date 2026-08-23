@@ -21,6 +21,13 @@ import type {
 interface Closeable {
   close(): Promise<void>;
 }
+
+type FederatedContext = RetrievedQueryContext & {
+  readonly dbContributions?: Readonly<Record<string, number>>;
+  readonly _perDbMetrics?: readonly FederatedDbMetric[];
+  readonly mergedPassages?: readonly unknown[];
+  readonly deduplicatedCount?: number;
+};
 import { FederatedQueryError, namespaceRankedPassage, namespaceRankedFact } from './federationTypes.js';
 import { executeWithSoftTimeout } from './softTimeout.js';
 
@@ -51,6 +58,7 @@ export class FederatedQueryService implements QueryService {
 
     // Attach warnings from federation
     const warnings = this.buildWarnings(ctx);
+    const federatedContext = ctx as FederatedContext;
 
     return {
       ...response,
@@ -59,11 +67,11 @@ export class FederatedQueryService implements QueryService {
         ...response.metrics,
         federationEnabled: true,
         federatedDbCount: this.config.databases.length,
-        federatedSuccessCount: Object.keys((ctx as any).dbContributions ?? {}).length,
-        federatedFailureCount: this.config.databases.length - Object.keys((ctx as any).dbContributions ?? {}).length,
-        perDbMetrics: (ctx as any)._perDbMetrics,
-        rrfMergedCount: (ctx as any).mergedPassages?.length,
-        rrfDeduplicatedCount: (ctx as any).deduplicatedCount,
+        federatedSuccessCount: Object.keys(federatedContext.dbContributions ?? {}).length,
+        federatedFailureCount: this.config.databases.length - Object.keys(federatedContext.dbContributions ?? {}).length,
+        perDbMetrics: federatedContext._perDbMetrics,
+        rrfMergedCount: federatedContext.mergedPassages?.length,
+        rrfDeduplicatedCount: federatedContext.deduplicatedCount,
       },
     };
   }
@@ -201,7 +209,7 @@ export class FederatedQueryService implements QueryService {
 
   private buildWarnings(ctx: RetrievedQueryContext): string[] {
     const warnings: string[] = [];
-    const perDbMetrics = (ctx as any)._perDbMetrics as FederatedDbMetric[] | undefined;
+    const perDbMetrics = (ctx as FederatedContext)._perDbMetrics;
     if (perDbMetrics) {
       for (const m of perDbMetrics) {
         if (m.status === 'timeout') {

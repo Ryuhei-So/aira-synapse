@@ -1,7 +1,8 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { existsSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { resolve } from 'node:path';
+
+import { resolveAiraGraphDbRepository } from '../../../../scripts/graphdb-repository-authority.mjs';
 
 interface RpcRequest {
   id: number;
@@ -41,16 +42,7 @@ interface RpcResponse {
 }
 
 function defaultCommand(dbPath: string): { command: string; args: string[] } {
-  const fromEnv = process.env.AIRA_GRAPHDB_REPO_PATH;
-  const repoPathCandidates = [
-    fromEnv,
-    resolve(process.cwd(), 'aira-graphdb'),
-    resolve(process.cwd(), '..', 'aira-graphdb'),
-    resolve(process.cwd(), '..', '..', 'aira-graphdb'),
-    resolve(process.cwd(), '..', '..', '..', 'aira-graphdb'),
-  ].filter((candidate): candidate is string => typeof candidate === 'string' && candidate.length > 0);
-  const repoPath = repoPathCandidates.find((candidate) => existsSync(resolve(candidate, 'Cargo.toml')))
-    ?? resolve(process.cwd(), '..', '..', '..', 'aira-graphdb');
+  const { repositoryPath: repoPath } = resolveAiraGraphDbRepository();
   return {
     command: 'cargo',
     args: [

@@ -101,4 +101,78 @@ describe('TASK-MG-025: PythonSidecarExtractor', () => {
       message: 'Python sidecar is healthy',
     });
   });
+
+  it('uses bounded JSON-RPC methods for Japanese chunking and extraction', async () => {
+    const child = new MockChildProcess();
+    const extractor = new PythonSidecarExtractor({
+      requestTimeoutMs: 100,
+      spawnImplementation: () => child as unknown as ChildProcessWithoutNullStreams,
+    });
+
+    const chunking = extractor.chunkSentences('第一文。第二文。', 250);
+    const chunkRequest = JSON.parse((child.stdin.write.mock.calls[0]?.[0] as string).trim()) as {
+      method: string;
+      params: { text: string; maxTokens: number };
+      id: number;
+    };
+    expect(chunkRequest).toMatchObject({
+      method: 'chunk_sentences',
+      params: { text: '第一文。第二文。', maxTokens: 250 },
+    });
+    child.stdout.emit('data', `${JSON.stringify({
+      jsonrpc: '2.0',
+      id: chunkRequest.id,
+      result: { chunks: [{ text: '第一文。', sentenceCount: 1, estimatedTokens: 2 }] },
+    })}\n`);
+    await expect(chunking).resolves.toEqual([
+      { text: '第一文。', sentenceCount: 1, estimatedTokens: 2 },
+    ]);
+
+    const extraction = extractor.extractEntitiesJa('東京大学');
+    const extractRequest = JSON.parse((child.stdin.write.mock.calls[1]?.[0] as string).trim()) as {
+      method: string;
+      params: { text: string };
+      id: number;
+    };
+    expect(extractRequest).toMatchObject({
+      method: 'extract_entities_ja',
+      params: { text: '東京大学' },
+    });
+    child.stdout.emit('data', `${JSON.stringify({
+      jsonrpc: '2.0',
+      id: extractRequest.id,
+      result: {
+        entities: [{ text: '東京大学', label: 'ORG', start: 0, end: 4, confidence: 0.9 }],
+        nounPhrases: ['東京大学'],
+      },
+    })}\n`);
+    await expect(extraction).resolves.toEqual({
+      language: 'ja',
+      entities: [{ text: '東京大学', label: 'ORG', start: 0, end: 4, confidence: 0.9 }],
+      nounPhrases: ['東京大学'],
+    });
+  });
+
+  it('ignores malformed and unmatched frames before returning the authoritative RPC error', async () => {
+    const child = new MockChildProcess();
+    const extractor = new PythonSidecarExtractor({
+      spawnImplementation: () => child as unknown as ChildProcessWithoutNullStreams,
+    });
+
+    const pending = extractor.extract({ text: 'bad response', language: 'en' });
+    const request = JSON.parse((child.stdin.write.mock.calls[0]?.[0] as string).trim()) as {
+      id: number;
+    };
+    child.stdout.emit(
+      'data',
+      `not-json\n${JSON.stringify({ jsonrpc: '2.0', id: request.id + 1, result: {} })}\n\n`,
+    );
+    child.stdout.emit('data', `${JSON.stringify({
+      jsonrpc: '2.0',
+      id: request.id,
+      error: { code: -32000, message: 'sidecar rejected request' },
+    })}\n`);
+
+    await expect(pending).rejects.toThrow('sidecar rejected request');
+  });
 });

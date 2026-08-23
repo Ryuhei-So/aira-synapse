@@ -212,7 +212,10 @@ node scripts/agdb-index.mjs --corpus <id> --type <vector|lexical> [--db <path>]
 **Requirements:**
 - `npm run build` (scripts import from `dist/`)
 - `OPENAI_API_KEY` environment variable
-- `AIRA_GRAPHDB_NATIVE_CMD` pointing to the aira-graphdb binary (or auto-discovered from `../aira-graphdb/target/release/`)
+- `AIRA_GRAPHDB_NATIVE_CMD` pointing to the aira-graphdb binary, or
+  `AIRA_GRAPHDB_REPO_PATH` pointing to an explicit aira-graphdb source checkout
+  for the source-build fallback. The fallback does not guess paths from the
+  current working directory.
 
 **Features:**
 - Document-scoped entity nodes (safe re-ingest without data loss)
@@ -401,6 +404,7 @@ Environment variables override YAML config values.
 | `MEMGRAPHRAG_BACKEND` | storage backend selection (`sqlite` / `ladybug` / `neo4j` / `aira-graphdb`) |
 | `AIRA_GRAPHDB_DB_PATH` | Default DB path for agdb-ingest/agdb-index scripts |
 | `AIRA_GRAPHDB_NATIVE_CMD` | Path to aira-graphdb-native binary |
+| `AIRA_GRAPHDB_REPO_PATH` | Absolute aira-graphdb source checkout for the source-build fallback |
 
 ## 🏗️ Project Structure
 

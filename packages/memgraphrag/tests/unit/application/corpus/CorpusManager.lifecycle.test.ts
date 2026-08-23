@@ -100,7 +100,7 @@ describe('CorpusManager lifecycle', () => {
     // Add graph nodes
     const graphStore = new SQLiteGraphStore(db);
     await graphStore.upsertNodes([
-      { nodeId: 'n-1', corpusId: corpus.corpusId, layer: 'ontology', ref: {} as any, label: 'Test' },
+      { nodeId: 'n-1', corpusId: corpus.corpusId, layer: 'ontology', ref: {} as unknown as Record<string, unknown>, label: 'Test' },
     ]);
 
     const result = await manager.delete(corpus.corpusId);

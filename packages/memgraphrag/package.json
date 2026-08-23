@@ -13,13 +13,16 @@
   },
   "files": [
     "dist",
-    "config"
+    "config",
+    "scripts/graphdb-repository-authority.mjs"
   ],
   "scripts": {
     "build": "tsc -b tsconfig.build.json && cp -r src/infrastructure/storage/migrations dist/infrastructure/storage/",
     "test": "vitest run",
+    "test:ci": "node scripts/run-vitest-partitions.mjs",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:coverage:ci": "node scripts/run-vitest-partitions.mjs --coverage",
     "lint": "eslint src/ tests/",
     "bench": "vitest bench",
     "start:mcp": "node dist/interface/mcp/server.js",

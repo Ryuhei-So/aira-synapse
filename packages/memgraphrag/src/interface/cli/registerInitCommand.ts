@@ -1,6 +1,6 @@
 import { copyFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { Command } from 'commander';
+import type { Command } from 'commander';
 import { writeTextFile } from './runtimeUtils.js';
 
 export function registerInitCommand(program: Command): void {

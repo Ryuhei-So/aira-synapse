@@ -49,7 +49,7 @@ describe('MultiHopReasoner', () => {
       const result = await reasoner.reason('What is the capital of France?', passages);
       expect(result.questionType).toBe('bridge');
       // It will attempt multi-hop (LLM will be called)
-      expect((llm.generate as any).mock.calls.length).toBeGreaterThan(0);
+      expect((llm.generate as { mock: { calls: unknown[][] } }).mock.calls.length).toBeGreaterThan(0);
     });
   });
 

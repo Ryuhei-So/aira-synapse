@@ -212,7 +212,9 @@ node scripts/agdb-index.mjs --corpus <id> --type <vector|lexical> [--db <path>]
 **必要環境:**
 - `npm run build`（スクリプトは `dist/` からインポート）
 - `OPENAI_API_KEY` 環境変数
-- `AIRA_GRAPHDB_NATIVE_CMD` で aira-graphdb バイナリを指定（または `../aira-graphdb/target/release/` から自動検出）
+- `AIRA_GRAPHDB_NATIVE_CMD` で aira-graphdb バイナリを指定するか、ソースから
+  ビルドする場合は `AIRA_GRAPHDB_REPO_PATH` で明示的な aira-graphdb checkout を指定
+  （カレントディレクトリからの自動推測は行わない）
 
 **機能:**
 - ドキュメントスコープのエンティティノード（再登録時のデータ損失防止）
@@ -382,6 +384,7 @@ logging:
 | `MEMGRAPHRAG_LOCAL_ONLY` | 設定ファイルの `local_only` |
 | `MEMGRAPHRAG_NLP_BACKEND` | 設定ファイルの `providers.nlp.backend` |
 | `MEMGRAPHRAG_LOG_LEVEL` | 設定ファイルの `logging.level` |
+| `AIRA_GRAPHDB_REPO_PATH` | ソースビルド用 aira-graphdb checkout の絶対パス |
 
 ## 🏗️ プロジェクト構成
 

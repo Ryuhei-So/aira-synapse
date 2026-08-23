@@ -9,10 +9,23 @@ const WORKFLOW_PATH = resolve(
   '.github/workflows/aira-synapse-backend-compat.yml',
 );
 
+type WorkflowStep = {
+  run?: string;
+  uses?: string;
+  with?: Record<string, unknown>;
+  'working-directory'?: string;
+};
+
+type WorkflowJob = {
+  'runs-on': string;
+  env?: Record<string, string>;
+  steps: WorkflowStep[];
+};
+
 describe('TASK-AGDB-040/041: backend compatibility workflow contract', () => {
   const raw = readFileSync(WORKFLOW_PATH, 'utf-8');
   const workflow = parse(raw) as Record<string, unknown>;
-  const jobs = workflow.jobs as Record<string, { 'runs-on': string; steps: Array<{ uses?: string }> }>;
+  const jobs = workflow.jobs as Record<string, WorkflowJob>;
 
   it('contains required compatibility and governance jobs', () => {
     expect(Object.keys(jobs)).toEqual(expect.arrayContaining([
@@ -36,5 +49,48 @@ describe('TASK-AGDB-040/041: backend compatibility workflow contract', () => {
       const nodeStep = job.steps.find((s) => s.uses?.startsWith('actions/setup-node'));
       expect(nodeStep, `missing setup-node in ${name}`).toBeDefined();
     }
+  });
+
+  it('triggers workflow changes and production-runtime branch pushes', () => {
+    const on = workflow.on as Record<string, unknown>;
+    const pr = on.pull_request as { paths: string[] };
+    const push = on.push as { branches: string[]; paths: string[] };
+    const workflowPaths = [
+      '.github/workflows/aira-synapse-backend-compat.yml',
+      '.github/workflows/memgraphrag-ci.yml',
+    ];
+
+    expect(pr.paths).toEqual(expect.arrayContaining(workflowPaths));
+    expect(push.paths).toEqual(expect.arrayContaining(workflowPaths));
+    expect(push.branches).toEqual(expect.arrayContaining(['main', 'production-runtime', 'production-runtime/**']));
+  });
+
+  it('checks out the exact GraphDB authority in every owning job', () => {
+    const graphDbJobs = Object.keys(jobs);
+    for (const jobName of graphDbJobs) {
+      const job = jobs[jobName]!;
+      expect(job.env, `missing GraphDB env in ${jobName}`).toEqual(expect.objectContaining({
+        AIRA_GRAPHDB_REPO_PATH: '${{ github.workspace }}/aira-graphdb',
+        AIRA_GRAPHDB_EXPECTED_SHA: '164092aa47f39330c0c771495d9d42e4e935e41b',
+      }));
+      const graphDbCheckout = job.steps.find(
+        (step) => step.uses === 'actions/checkout@v4'
+          && step.with?.repository === 'Ryuhei-So/aira-graphdb',
+      );
+      expect(graphDbCheckout, `missing exact GraphDB checkout in ${jobName}`).toBeDefined();
+      expect(graphDbCheckout?.with).toEqual(expect.objectContaining({
+        ref: '164092aa47f39330c0c771495d9d42e4e935e41b',
+        path: 'aira-graphdb',
+      }));
+    }
+  });
+
+  it('discovers the .spec.ts contract and preserves raw command exits', () => {
+    const contractJob = jobs['storage-port-contract']!;
+    const contractRun = contractJob.steps.find((step) => step.run?.includes('vitest.contract.config.ts'));
+    expect(contractRun?.run).toContain('vitest.contract.config.ts');
+    expect(contractRun?.['working-directory']).toBe('packages/memgraphrag');
+    expect(raw).toContain('exit "$status"');
+    expect(raw).not.toMatch(/continue-on-error|baseline|ratchet|\|\|\s*true/);
   });
 });

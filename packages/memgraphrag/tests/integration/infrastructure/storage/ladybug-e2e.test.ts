@@ -13,8 +13,6 @@ import {
   createLadybugAdapters,
   type StorageAdapters,
 } from '../../../../src/infrastructure/storage/ladybug/storageFactory.js';
-import { LadybugMultiHopTraversal } from '../../../../src/infrastructure/storage/ladybug/LadybugMultiHopTraversal.js';
-import { LadybugConnectionPool } from '../../../../src/infrastructure/storage/ladybug/LadybugConnection.js';
 import type { GraphNode, GraphEdge } from '../../../../src/domain/storage/graphStore.js';
 import type { MemorySnapshot } from '../../../../src/domain/memory/globalMemory.js';
 import type { Passage } from '../../../../src/domain/memory/passage.js';

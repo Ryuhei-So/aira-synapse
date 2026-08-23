@@ -3,7 +3,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { DictionaryAwareNodeInitializer } from '../../../../src/application/query/DictionaryAwareNodeInitializer.js';
-import type { INodeInitializer, NodeInitializationRequest, NodeInitializationVector } from '../../../../src/domain/retrieval/memoryFilter.js';
+import type { INodeInitializer, NodeInitializationVector } from '../../../../src/domain/retrieval/memoryFilter.js';
 import type { ITermDictionary, DictionaryMatch, TermDictionaryEntry } from '../../../../src/domain/dictionary/termDictionary.js';
 import type { IMemoryStore } from '../../../../src/domain/storage/index.js';
 import type { Fact } from '../../../../src/domain/memory/fact.js';

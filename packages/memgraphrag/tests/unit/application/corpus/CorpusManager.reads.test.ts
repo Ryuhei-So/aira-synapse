@@ -68,8 +68,8 @@ describe('CorpusManager reads', () => {
       // Insert graph nodes and edges
       const graphStore = new SQLiteGraphStore(db);
       await graphStore.upsertNodes([
-        { nodeId: 'n1', corpusId, layer: 'ontology', ref: {} as any, label: 'A' },
-        { nodeId: 'n2', corpusId, layer: 'fact', ref: {} as any, label: 'B' },
+        { nodeId: 'n1', corpusId, layer: 'ontology', ref: {} as unknown as Record<string, unknown>, label: 'A' },
+        { nodeId: 'n2', corpusId, layer: 'fact', ref: {} as unknown as Record<string, unknown>, label: 'B' },
       ]);
       await graphStore.upsertEdges([
         {
@@ -205,9 +205,9 @@ describe('CorpusManager reads', () => {
     it('should export graph with pagination', async () => {
       const graphStore = new SQLiteGraphStore(db);
       await graphStore.upsertNodes([
-        { nodeId: 'n1', corpusId, layer: 'ontology', ref: {} as any, label: 'A' },
-        { nodeId: 'n2', corpusId, layer: 'fact', ref: {} as any, label: 'B' },
-        { nodeId: 'n3', corpusId, layer: 'passage', ref: {} as any, label: 'C' },
+        { nodeId: 'n1', corpusId, layer: 'ontology', ref: {} as unknown as Record<string, unknown>, label: 'A' },
+        { nodeId: 'n2', corpusId, layer: 'fact', ref: {} as unknown as Record<string, unknown>, label: 'B' },
+        { nodeId: 'n3', corpusId, layer: 'passage', ref: {} as unknown as Record<string, unknown>, label: 'C' },
       ]);
 
       const page1 = await manager.exportGraph(corpusId, 'json', 0, 2);
@@ -223,7 +223,7 @@ describe('CorpusManager reads', () => {
     it('should export as GraphML', async () => {
       const graphStore = new SQLiteGraphStore(db);
       await graphStore.upsertNodes([
-        { nodeId: 'n1', corpusId, layer: 'ontology', ref: {} as any, label: 'Test' },
+        { nodeId: 'n1', corpusId, layer: 'ontology', ref: {} as unknown as Record<string, unknown>, label: 'Test' },
       ]);
 
       const page = await manager.exportGraph(corpusId, 'graphml', 0, 100);

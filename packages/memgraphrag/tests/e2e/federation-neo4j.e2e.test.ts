@@ -6,9 +6,8 @@
  *   - Two corpora indexed: EN (HotpotQA) and JP (Japanese Wikipedia)
  *   - OPENAI_API_KEY env var or config/openai_api_key file
  *
- * Run: npx vitest run tests/e2e/federation-neo4j.e2e.test.ts
+ * Run: RUN_NEO4J_E2E=1 npx vitest run tests/e2e/federation-neo4j.e2e.test.ts
  */
-import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, it, expect, afterAll, beforeAll } from 'vitest';
 import { FederatedQueryService } from '../../src/application/query/FederatedQueryService.js';
@@ -22,6 +21,8 @@ import { ThesaurusExpansionPolicy } from '../../src/application/index.js';
 import { createNeo4jAdapters } from '../../src/infrastructure/storage/ladybug/storageFactory.js';
 import { OpenAIEmbeddingProvider } from '../../src/infrastructure/embedding/OpenAIEmbeddingProvider.js';
 import { OpenAILLMProvider } from '../../src/infrastructure/llm/OpenAILLMProvider.js';
+import { resolveApiKey } from '../../src/infrastructure/config/resolveApiKey.js';
+import { enforceNeo4jE2E } from './neo4j-e2e-gate.js';
 import type { StorageAdapters } from '../../src/infrastructure/storage/ladybug/storageFactory.js';
 import type { FederatedDbConfig, FederatedQueryConfig } from '../../src/application/query/federationTypes.js';
 import type { ITermDictionary, IThesaurus } from '../../src/domain/index.js';
@@ -39,9 +40,9 @@ const NEO4J_OPTS = {
 
 // Resolve API key from env or file
 const keyFilePath = resolve(process.cwd(), 'config/openai_api_key');
-const apiKey = process.env.OPENAI_API_KEY
-  ?? (existsSync(keyFilePath) ? readFileSync(keyFilePath, 'utf-8').trim() : '');
-const describeIf = apiKey ? describe : describe.skip;
+const apiKey = resolveApiKey(keyFilePath, process.env, process.cwd());
+const neo4jGate = enforceNeo4jE2E(process.env.RUN_NEO4J_E2E, apiKey, NEO4J_OPTS);
+const describeIf = neo4jGate.state === 'run' ? describe : describe.skip;
 
 describeIf('E2E: Federated Query across EN + JP corpora (Neo4j)', () => {
   let enAdapters: StorageAdapters;
@@ -108,7 +109,7 @@ describeIf('E2E: Federated Query across EN + JP corpora (Neo4j)', () => {
     };
 
     // DB factory: create Neo4j adapters + DefaultQueryService per DB
-    const dbFactory = async (dbConfig: FederatedDbConfig) => {
+    const dbFactory = async (_dbConfig: FederatedDbConfig) => {
       const adapters = await createNeo4jAdapters(NEO4J_OPTS);
       const queryService = new DefaultQueryService({
         dictionary: stubDict,

@@ -15,6 +15,7 @@ import { detectConflicts, resolveConflicts, recordConflictAudit } from './StageI
 import type { ILLMProvider, IEmbeddingProvider, INLPExtractor } from '../../domain/provider/index.js';
 import type { IGraphStore, IVectorIndex, IMemoryStore } from '../../domain/storage/index.js';
 import type { Fact } from '../../domain/memory/fact.js';
+import type { ITermDictionary } from '../../domain/dictionary/termDictionary.js';
 import { LLMExtractionAgent } from './LLMExtractionAgent.js';
 import { LexiconBuilder } from './LexiconBuilder.js';
 
@@ -28,9 +29,9 @@ export interface FullPipelineOptions {
   readonly nlpExtractor: INLPExtractor;
   readonly enableConflictResolution?: boolean;
   readonly enableDictionaryIndexing?: boolean;
-  readonly dictionary?: import('../../domain/dictionary/termDictionary.js').ITermDictionary;
+  readonly dictionary?: ITermDictionary;
   /** Factory to create a corpus-scoped ITermDictionary. Used by Stage V to satisfy FK constraints. */
-  readonly dictionaryFactory?: (corpusId: string) => import('../../domain/dictionary/termDictionary.js').ITermDictionary;
+  readonly dictionaryFactory?: (corpusId: string) => ITermDictionary;
 }
 
 export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {

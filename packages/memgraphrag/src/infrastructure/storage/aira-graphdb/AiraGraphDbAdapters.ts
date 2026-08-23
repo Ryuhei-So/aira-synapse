@@ -12,7 +12,7 @@ import type {
 } from '../../../domain/storage/graphStore.js';
 import type { MemorySnapshot } from '../../../domain/memory/globalMemory.js';
 import type { IGraphStore } from '../../../domain/storage/graphStore.js';
-import { AiraGraphDbNativeClient } from './NativeClient.js';
+import type { AiraGraphDbNativeClient } from './NativeClient.js';
 
 export class AiraGraphDbGraphStore implements IGraphStore {
   public constructor(private readonly client: AiraGraphDbNativeClient) {}
