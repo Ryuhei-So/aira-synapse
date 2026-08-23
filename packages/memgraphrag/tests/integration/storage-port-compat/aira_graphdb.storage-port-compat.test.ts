@@ -42,6 +42,7 @@ async function commitBatch(adapters: Awaited<ReturnType<typeof createStorageAdap
 }
 
 describe('TASK-AGDB-037 storage-port-compat', () => {
+  // Hosted runners may compile the Rust native backend on the first request.
   it('storage-port-compat:graph-crud', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'aira-graphdb-compat-graph-'));
     try {
@@ -69,7 +70,7 @@ describe('TASK-AGDB-037 storage-port-compat', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
-  });
+  }, 30_000);
 
   it('storage-port-compat:vector-crud', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'aira-graphdb-compat-vector-'));
