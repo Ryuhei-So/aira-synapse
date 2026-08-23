@@ -5,6 +5,10 @@ on:
   pull_request:
     paths:
       - 'packages/memgraphrag/**'
+      - 'packages/memgraphrag/package.json'
+      - 'packages/memgraphrag/scripts/production-runtime-anchor.mjs'
+      - 'packages/memgraphrag/tests/unit/scripts/production-runtime-anchor.test.ts'
+      - '.github/anchors/**'
       - '.github/workflows/aira-synapse-backend-compat.yml'
       - '.github/workflows/memgraphrag-ci.yml'
   merge_group:
@@ -12,6 +16,10 @@ on:
     branches: [main, production-runtime, 'production-runtime/**']
     paths:
       - 'packages/memgraphrag/**'
+      - 'packages/memgraphrag/package.json'
+      - 'packages/memgraphrag/scripts/production-runtime-anchor.mjs'
+      - 'packages/memgraphrag/tests/unit/scripts/production-runtime-anchor.test.ts'
+      - '.github/anchors/**'
       - '.github/workflows/aira-synapse-backend-compat.yml'
       - '.github/workflows/memgraphrag-ci.yml'
 

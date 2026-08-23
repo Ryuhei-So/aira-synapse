@@ -5,6 +5,10 @@ on:
   pull_request:
     paths:
       - 'packages/memgraphrag/**'
+      - 'packages/memgraphrag/package.json'
+      - 'packages/memgraphrag/scripts/production-runtime-anchor.mjs'
+      - 'packages/memgraphrag/tests/unit/scripts/production-runtime-anchor.test.ts'
+      - '.github/anchors/**'
       - 'spec/PLAN-MEMGRAPHRAG-001.md'
       - '.github/workflows/aira-synapse-backend-compat.yml'
       - '.github/workflows/memgraphrag-ci.yml'
@@ -14,6 +18,7 @@ on:
       - 'packages/memgraphrag/**'
       - '.github/workflows/aira-synapse-backend-compat.yml'
       - '.github/workflows/memgraphrag-ci.yml'
+      - '.github/anchors/**'
 
 jobs:
   lint:
@@ -34,7 +39,11 @@ jobs:
       AIRA_GRAPHDB_EXPECTED_SHA: 164092aa47f39330c0c771495d9d42e4e935e41b
       AIRA_GRAPHDB_NATIVE_CMD: ${{ github.workspace }}/aira-graphdb/target/release/aira-graphdb-native
     steps:
+      # The anchor verifier checks the reviewed 8414946 Git object. Keep full history;
+      # a shallow checkout must fail closed when that exact object is unavailable.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/checkout@v4
         with:
           repository: Ryuhei-So/aira-graphdb
@@ -60,7 +69,10 @@ jobs:
       AIRA_GRAPHDB_EXPECTED_SHA: 164092aa47f39330c0c771495d9d42e4e935e41b
       AIRA_GRAPHDB_NATIVE_CMD: ${{ github.workspace }}/aira-graphdb/target/release/aira-graphdb-native
     steps:
+      # Coverage runs the same full test set, including the immutable anchor verifier.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/checkout@v4
         with:
           repository: Ryuhei-So/aira-graphdb

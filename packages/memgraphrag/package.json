@@ -23,6 +23,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:coverage:ci": "node scripts/run-vitest-partitions.mjs --coverage",
+    "verify:production-runtime-anchor": "node scripts/production-runtime-anchor.mjs",
     "lint": "eslint src/ tests/",
     "bench": "vitest bench",
     "start:mcp": "node dist/interface/mcp/server.js",
