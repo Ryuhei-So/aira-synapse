@@ -98,15 +98,46 @@ describe('TASK-MG-035: AsyncJobRunner and DefaultIndexingService', () => {
     expect(deleteDocument).toHaveBeenCalledWith('corpus-1', 'doc-1');
   });
 
-  it('records failures into the jobs table when processing throws', async () => {
+  it('records inner document failures as completed structured job errors', async () => {
     const pipeline = { processDocument: vi.fn().mockRejectedValue(new Error('boom')) };
     const runner = new AsyncJobRunner(db, memoryStore, pipeline);
     runner.registerJob('job-1', command());
     await runner.enqueue('job-1');
     await runner.execute('job-1');
 
+    const row = db.prepare('SELECT status, processed, total, errors_json, summary FROM jobs WHERE job_id = ?').get('job-1') as { status: string; processed: number; total: number; errors_json: string; summary: string };
+    expect(row.status).toBe('completed');
+    expect(row.processed).toBe(0);
+    expect(row.total).toBe(1);
+    expect(JSON.parse(row.errors_json)).toEqual([{
+      code: 'DOCUMENT_PROCESSING_FAILED',
+      message: expect.stringContaining('boom'),
+      documentId: 'doc-1',
+    }]);
+    expect(JSON.parse(row.summary)).toEqual(expect.objectContaining({
+      skippedCount: 1,
+      documentErrorCount: 1,
+    }));
+  });
+
+  it('records outer storage failures as failed structured job errors', async () => {
+    const pipeline = { processDocument: vi.fn().mockResolvedValue({ processedDocumentId: 'doc-1', addedNodes: 1, addedEdges: 1, conflicts: 0 }) };
+    const storageBatch = {
+      begin: vi.fn<() => Promise<void>>().mockRejectedValue(new Error('batch boom')),
+      commit: vi.fn<() => Promise<void>>().mockResolvedValue(),
+    };
+    const runner = new AsyncJobRunner(db, memoryStore, pipeline, storageBatch);
+    runner.registerJob('job-1', command());
+    await runner.enqueue('job-1');
+    await runner.execute('job-1');
+
     const row = db.prepare('SELECT status, errors_json FROM jobs WHERE job_id = ?').get('job-1') as { status: string; errors_json: string };
     expect(row.status).toBe('failed');
-    expect(JSON.parse(row.errors_json)).toEqual(['boom']);
+    expect(JSON.parse(row.errors_json)).toEqual([{
+      code: 'JOB_EXECUTION_FAILED',
+      message: expect.stringContaining('batch boom'),
+    }]);
+    expect(pipeline.processDocument).not.toHaveBeenCalled();
+    expect(storageBatch.commit).not.toHaveBeenCalled();
   });
 });

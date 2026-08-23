@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { resolve } from 'node:path';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
 import { loadMemGraphRagConfig } from '../../../../src/infrastructure/config/loadMemGraphRagConfig.js';
 import {
   resolveConfigFromEnv,
@@ -129,8 +131,19 @@ describe('TASK-MG-027: Config env overlay', () => {
     });
 
     it('should return available when api_key_file exists', () => {
-      const result = checkApiKeyAvailability(baseConfig, {});
-      expect(result.available).toBe(true);
+      const fixtureDir = mkdtempSync(join(tmpdir(), 'aira-api-key-'));
+      try {
+        const apiKeyFile = join(fixtureDir, 'openai_api_key');
+        writeFileSync(apiKeyFile, 'sk-test-file-key\n', { mode: 0o600 });
+        const fileConfig = {
+          ...baseConfig,
+          providers: { ...baseConfig.providers, apiKeyFile },
+        };
+        const result = checkApiKeyAvailability(fileConfig, {});
+        expect(result.available).toBe(true);
+      } finally {
+        rmSync(fixtureDir, { recursive: true, force: true });
+      }
     });
   });
 

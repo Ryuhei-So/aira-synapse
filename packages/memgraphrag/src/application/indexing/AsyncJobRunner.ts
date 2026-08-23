@@ -1,5 +1,6 @@
 import type Database from 'better-sqlite3';
 import type { IMemoryStore } from '../../domain/storage/index.js';
+import type { JobError } from '../corpus/corpusDtos.js';
 import type { IndexDocumentsCommand } from './IndexingService.js';
 
 export interface ProcessDocumentResult {
@@ -22,6 +23,8 @@ export interface StorageWriteBatch {
 }
 
 const BATCH_COMMIT_EVERY_DOCS = 15;
+const DOCUMENT_PROCESSING_FAILED = 'DOCUMENT_PROCESSING_FAILED';
+const JOB_EXECUTION_FAILED = 'JOB_EXECUTION_FAILED';
 
 export class AsyncJobRunner {
   private readonly jobs = new Map<string, IndexDocumentsCommand>();
@@ -65,24 +68,26 @@ export class AsyncJobRunner {
       throw new Error(`Unknown job ${jobId}`);
     }
 
-    const checkpoint = await this.memoryStore.loadCheckpoint(jobId);
-    const processed = new Set(checkpoint?.processedDocumentIds ?? []);
-
-    this.db.prepare(
-      `UPDATE jobs SET status = 'running', total = ?, processed = ?, updated_at = ? WHERE job_id = ?`,
-    ).run(command.documents.length, processed.size, new Date().toISOString(), jobId);
-
-    // Defer backend persistence to one write per BATCH_COMMIT_EVERY_DOCS
-    // documents (aira-graphdb rewrites its whole file on every mutating RPC
-    // otherwise). Data and checkpoints commit together, so a crash simply
-    // replays the last uncommitted documents.
-    await this.storageBatch?.begin();
-    let sinceCommit = 0;
+    let batchStarted = false;
     try {
+      const checkpoint = await this.memoryStore.loadCheckpoint(jobId);
+      const processed = new Set(checkpoint?.processedDocumentIds ?? []);
+
+      this.db.prepare(
+        `UPDATE jobs SET status = 'running', total = ?, processed = ?, updated_at = ? WHERE job_id = ?`,
+      ).run(command.documents.length, processed.size, new Date().toISOString(), jobId);
+
+      // Defer backend persistence to one write per BATCH_COMMIT_EVERY_DOCS
+      // documents (aira-graphdb rewrites its whole file on every mutating RPC
+      // otherwise). Data and checkpoints commit together, so a crash simply
+      // replays the last uncommitted documents.
+      await this.storageBatch?.begin();
+      batchStarted = this.storageBatch !== undefined;
+      let sinceCommit = 0;
       let addedNodes = 0;
       let addedEdges = 0;
       let conflicts = 0;
-      const documentErrors: string[] = [];
+      const documentErrors: JobError[] = [];
 
       for (const document of command.documents) {
         // Honor cancellations recorded in the DB (e.g. by an operator or
@@ -111,7 +116,11 @@ export class AsyncJobRunner {
           const message = error instanceof Error
             ? `${error.message}\n${(error.stack ?? '').split('\n').slice(1, 4).join('\n')}`
             : String(error);
-          documentErrors.push(`[${document.documentId}] ${message}`);
+          documentErrors.push({
+            code: DOCUMENT_PROCESSING_FAILED,
+            message,
+            documentId: document.documentId,
+          });
           console.log(`  [${document.title}] FAILED (skipping): ${message.split('\n')[0]}`);
           continue;
         }
@@ -134,7 +143,9 @@ export class AsyncJobRunner {
         sinceCommit += 1;
         if (this.storageBatch && sinceCommit >= BATCH_COMMIT_EVERY_DOCS) {
           await this.storageBatch.commit();
+          batchStarted = false;
           await this.storageBatch.begin();
+          batchStarted = true;
           sinceCommit = 0;
         }
       }
@@ -154,14 +165,20 @@ export class AsyncJobRunner {
       const message = error instanceof Error
         ? `${error.message}\n${(error.stack ?? '').split('\n').slice(1, 6).join('\n')}`
         : String(error);
+      const jobError: JobError = {
+        code: JOB_EXECUTION_FAILED,
+        message,
+      };
       this.db.prepare(
         `UPDATE jobs SET status = 'failed', errors_json = ?, updated_at = ? WHERE job_id = ?`,
-      ).run(JSON.stringify([message]), new Date().toISOString(), jobId);
+      ).run(JSON.stringify([jobError]), new Date().toISOString(), jobId);
     } finally {
-      try {
-        await this.storageBatch?.commit();
-      } catch (err) {
-        console.log(`  [job ${jobId}] final storage commit failed: ${err instanceof Error ? err.message : String(err)}`);
+      if (batchStarted) {
+        try {
+          await this.storageBatch?.commit();
+        } catch (err) {
+          console.log(`  [job ${jobId}] final storage commit failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
       }
     }
   }
