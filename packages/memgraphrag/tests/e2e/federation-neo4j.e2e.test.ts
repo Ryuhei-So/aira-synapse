@@ -109,7 +109,7 @@ describeIf('E2E: Federated Query across EN + JP corpora (Neo4j)', () => {
     };
 
     // DB factory: create Neo4j adapters + DefaultQueryService per DB
-    const dbFactory = async (dbConfig: FederatedDbConfig) => {
+    const dbFactory = async (_dbConfig: FederatedDbConfig) => {
       const adapters = await createNeo4jAdapters(NEO4J_OPTS);
       const queryService = new DefaultQueryService({
         dictionary: stubDict,

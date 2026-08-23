@@ -6,7 +6,7 @@
 
 import type { Passage } from '../../domain/memory/passage.js';
 import type { Fact } from '../../domain/memory/fact.js';
-import type { RankedPassage, RankedFact } from '../../domain/retrieval/federation.js';
+import type { RankedPassage, RankedFact, RetrievalMetrics } from '../../domain/retrieval/federation.js';
 import type {
   IRRFMerger,
   NamespacedRetrievedContext,
@@ -214,7 +214,7 @@ export class DefaultRRFMerger implements IRRFMerger {
 
   private aggregateMetrics(
     contexts: readonly NamespacedRetrievedContext[],
-  ): import('../../domain/retrieval/federation.js').RetrievalMetrics {
+  ): RetrievalMetrics {
     let totalDictMatch = 0;
     let totalCited = 0;
     let totalLatency = 0;

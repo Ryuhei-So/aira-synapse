@@ -1,4 +1,4 @@
-import { Command } from 'commander';
+import type { Command } from 'commander';
 import { SERVICE_TOKENS } from '../runtime/MemGraphRagRuntime.js';
 import type { CliContext } from './runtimeUtils.js';
 import { attachCommonOptions, renderOutput, withRuntime } from './runtimeUtils.js';

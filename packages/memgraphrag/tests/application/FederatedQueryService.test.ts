@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { FederatedQueryService } from '../../src/application/query/FederatedQueryService.js';
 import { DefaultRRFMerger } from '../../src/application/query/DefaultRRFMerger.js';
 import type { FederatedQueryConfig, FederatedDbConfig } from '../../src/application/query/federationTypes.js';
-import type { DefaultQueryService, QueryHyperParams } from '../../src/application/query/QueryService.js';
+import type { DefaultQueryService } from '../../src/application/query/QueryService.js';
 import type { QueryRequest } from '../../src/domain/retrieval/memoryFilter.js';
 import type { RetrievedQueryContext, PreparedQuery } from '../../src/domain/retrieval/federation.js';
 import type { Passage } from '../../src/domain/memory/passage.js';
@@ -40,7 +40,7 @@ function createMockPrimaryService(): DefaultQueryService {
     answer: vi.fn().mockResolvedValue({ response: 'answer', citations: [], entities: [], metrics: { dictionaryMatchCount: 0, expandedTerms: [], fallbackTriggered: false, pprIterations: 0, pprConverged: true, citedPassageCount: 0, llmInputTokens: 10, llmOutputTokens: 5 } }),
     query: vi.fn(),
     retrieve: vi.fn(),
-    dependencies: {} as any,
+    dependencies: {} as unknown as DefaultQueryService['dependencies'],
   } as unknown as DefaultQueryService;
 }
 

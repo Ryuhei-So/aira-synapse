@@ -259,7 +259,7 @@ export class LadybugGraphStore implements IGraphStore {
     }
 
     // Count edges incident to these nodes
-    let deletedEdges = 0;
+    let _deletedEdges = 0;
     for (const pk of matchingPks) {
       const edgeCount = await this.pool.execute(
         `MATCH (n:GNode {pk: $pk})-[e:GEdge]-()
@@ -267,7 +267,7 @@ export class LadybugGraphStore implements IGraphStore {
         { pk },
       );
       const rows = await edgeCount.getAll();
-      deletedEdges += (rows[0]?.c as number) ?? 0;
+      _deletedEdges += (rows[0]?.c as number) ?? 0;
     }
     // Edges are counted from both endpoints; divide by 2 for internal edges
     // But actually, DETACH DELETE handles it. Count before delete.

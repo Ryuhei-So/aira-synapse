@@ -115,7 +115,7 @@ describe('Multi-hop Domain Types', () => {
   describe('IMultiHopReasoner', () => {
     it('should define the reason method contract', () => {
       const mock: IMultiHopReasoner = {
-        async reason(query, passages, _options) {
+        async reason(_query, _passages, _options) {
           return {
             answer: 'test',
             questionType: 'bridge' as const,

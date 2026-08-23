@@ -5,7 +5,8 @@
  * Idempotent: uses MERGE for node tables, skip-on-exists for edges.
  */
 
-import type { IGraphStore, IMemoryStore, IVectorIndex } from '../../../domain/storage/graphStore.js';
+import type { GraphEdge, GraphNode, IGraphStore, IMemoryStore, IVectorIndex } from '../../../domain/storage/graphStore.js';
+import type { MemorySnapshot } from '../../../domain/memory/globalMemory.js';
 import type { ILexicalRetriever } from '../../../domain/retrieval/ppr.js';
 
 export interface MigrationSource {
@@ -54,7 +55,7 @@ export async function migrateCorpus(
   }
 
   // 2. Migrate GraphStore nodes
-  let srcNodes: readonly import('../../../domain/storage/graphStore.js').GraphNode[] | undefined;
+  let srcNodes: readonly GraphNode[] | undefined;
   try {
     srcNodes = await source.graphStore.getNodes(corpusId);
     if (srcNodes.length > 0) {
@@ -69,7 +70,7 @@ export async function migrateCorpus(
   }
 
   // 3. Migrate GraphStore edges
-  let srcEdges: readonly import('../../../domain/storage/graphStore.js').GraphEdge[] | undefined;
+  let srcEdges: readonly GraphEdge[] | undefined;
   try {
     srcEdges = await source.graphStore.getEdges(corpusId);
     if (srcEdges.length > 0) {
@@ -92,9 +93,9 @@ export async function migrateCorpus(
   }
 
   // 5. Verify counts
-  let tgtNodes: readonly import('../../../domain/storage/graphStore.js').GraphNode[] | undefined;
-  let tgtEdges: readonly import('../../../domain/storage/graphStore.js').GraphEdge[] | undefined;
-  let tgtSnapshot: import('../../../domain/memory/globalMemory.js').MemorySnapshot | undefined;
+  let tgtNodes: readonly GraphNode[] | undefined;
+  let tgtEdges: readonly GraphEdge[] | undefined;
+  let tgtSnapshot: MemorySnapshot | undefined;
   try {
     tgtNodes = await target.graphStore.getNodes(corpusId);
     tgtEdges = await target.graphStore.getEdges(corpusId);

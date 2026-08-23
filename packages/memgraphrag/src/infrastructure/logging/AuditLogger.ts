@@ -1,4 +1,4 @@
-import { StructuredLogger } from './StructuredLogger.js';
+import type { StructuredLogger } from './StructuredLogger.js';
 
 export interface AuditRecord {
   readonly corpusId: string;

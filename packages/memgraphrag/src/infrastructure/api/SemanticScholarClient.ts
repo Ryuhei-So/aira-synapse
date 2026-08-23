@@ -1,5 +1,5 @@
 import { setTimeout as delay } from 'node:timers/promises';
-import { SemanticScholarCache } from './SemanticScholarCache.js';
+import type { SemanticScholarCache } from './SemanticScholarCache.js';
 
 export interface SemanticScholarPaper {
   readonly paperId: string;

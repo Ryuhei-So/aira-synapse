@@ -16,9 +16,11 @@ import type { Fact } from '../../domain/memory/fact.js';
 import type { Passage } from '../../domain/memory/passage.js';
 import type { QueryFeatureFlags } from '../../domain/config/featureFlags.js';
 import type { IMultiHopReasoner } from '../../domain/retrieval/multiHop.js';
-import type { PreparedQuery, RetrievedQueryContext } from '../../domain/retrieval/federation.js';
+import type { PreparedQuery, RetrievedQueryContext, RankedPassage, RankedFact } from '../../domain/retrieval/federation.js';
+import type { QuestionType, MultiHopFallbackReason } from '../../domain/retrieval/multiHop.js';
+import type { FederatedDbMetric } from './federationTypes.js';
 import { DEFAULT_QUERY_FLAGS } from '../../domain/config/featureFlags.js';
-import { ThesaurusExpansionPolicy } from './ThesaurusExpansionPolicy.js';
+import type { ThesaurusExpansionPolicy } from './ThesaurusExpansionPolicy.js';
 import { TemplateResponseGenerator } from './TemplateResponseGenerator.js';
 import { isComparisonQuery } from './comparisonDetector.js';
 import { extractFinalAnswer } from './query-utils.js';
@@ -61,21 +63,21 @@ export interface QueryMetrics {
   readonly totalLatencyMs?: number;
   // Multi-hop reasoning additions (REQ-MH-009)
   readonly multiHopEnabled?: boolean;
-  readonly questionType?: import('../../domain/retrieval/multiHop.js').QuestionType;
+  readonly questionType?: QuestionType;
   readonly hop1SubQuestion?: string;
   readonly hop2SubQuestion?: string;
   readonly hop1Answer?: string;
   readonly hop2Answer?: string;
   readonly hop1PassageIds?: readonly string[];
   readonly hop2PassageIds?: readonly string[];
-  readonly multiHopFallbackReason?: import('../../domain/retrieval/multiHop.js').MultiHopFallbackReason;
+  readonly multiHopFallbackReason?: MultiHopFallbackReason;
   readonly multiHopLatencyMs?: number;
   // Federation additions (DES-FED-007)
   readonly federationEnabled?: boolean;
   readonly federatedDbCount?: number;
   readonly federatedSuccessCount?: number;
   readonly federatedFailureCount?: number;
-  readonly perDbMetrics?: readonly import('./federationTypes.js').FederatedDbMetric[];
+  readonly perDbMetrics?: readonly FederatedDbMetric[];
   readonly rrfMergedCount?: number;
   readonly rrfDeduplicatedCount?: number;
 }
@@ -141,7 +143,7 @@ function toEntityHits(matches: readonly DictionaryMatch[]): readonly EntityHit[]
   }));
 }
 
-function toCitationsFromPassages(passages: readonly import('../../domain/retrieval/federation.js').RankedPassage[]): readonly CitationDto[] {
+function toCitationsFromPassages(passages: readonly RankedPassage[]): readonly CitationDto[] {
   return passages.map((rp) => ({
     passageId: rp.passage.passageId,
     title: rp.passage.metadata.title,
@@ -241,13 +243,13 @@ export class DefaultQueryService implements QueryService {
     const context = await this.dependencies.contextBuilder.build(expandedRequest, ranking);
 
     // Build RankedPassage[] and RankedFact[] from PPR results
-    const passages: import('../../domain/retrieval/federation.js').RankedPassage[] =
+    const passages: RankedPassage[] =
       context.citedPassages.map((passage, idx) => {
         const pprNode = ranking.rankedPassages[idx];
         return { passage, score: pprNode?.score ?? 0, rank: idx + 1 };
       });
 
-    const facts: import('../../domain/retrieval/federation.js').RankedFact[] =
+    const facts: RankedFact[] =
       context.citedFacts.map((fact, idx) => {
         const pprNode = ranking.rankedEntities[idx];
         return { fact, score: pprNode?.score ?? 0, rank: idx + 1 };
@@ -302,14 +304,14 @@ export class DefaultQueryService implements QueryService {
 
     // Multi-hop reasoning metrics
     let multiHopEnabled: boolean | undefined;
-    let mhQuestionType: import('../../domain/retrieval/multiHop.js').QuestionType | undefined;
+    let mhQuestionType: QuestionType | undefined;
     let mhHop1SubQuestion: string | undefined;
     let mhHop2SubQuestion: string | undefined;
     let mhHop1Answer: string | undefined;
     let mhHop2Answer: string | undefined;
     let mhHop1PassageIds: readonly string[] | undefined;
     let mhHop2PassageIds: readonly string[] | undefined;
-    let mhFallbackReason: import('../../domain/retrieval/multiHop.js').MultiHopFallbackReason | undefined;
+    let mhFallbackReason: MultiHopFallbackReason | undefined;
     let mhLatencyMs: number | undefined;
 
     let multiHopHint = '';
