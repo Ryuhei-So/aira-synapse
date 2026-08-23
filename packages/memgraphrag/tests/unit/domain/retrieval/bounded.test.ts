@@ -221,6 +221,52 @@ describe('BoundedGenerationSession', () => {
           { id: 'passage:passage-1', score: -0.2, item: { ...passage, corpusId: 'other-corpus' } },
         ] }, valid.slots[1]!, valid.slots[2]!],
       },
+      {
+        ...valid,
+        slots: [{ ...valid.slots[0]!, hits: [
+          {
+            id: 'passage:passage-1',
+            score: -0.2,
+            item: { ...passage, passageId: undefined } as never,
+          },
+        ] }, valid.slots[1]!, valid.slots[2]!],
+      },
+      {
+        ...valid,
+        slots: [{ ...valid.slots[0]!, hits: [
+          {
+            id: 'passage:passage-1',
+            score: -0.2,
+            item: {
+              ...passage,
+              metadata: { ...passage.metadata, sectionPath: 'Results' },
+            } as never,
+          },
+        ] }, valid.slots[1]!, valid.slots[2]!],
+      },
+      {
+        ...valid,
+        slots: [{ ...valid.slots[0]!, hits: [
+          {
+            id: 'passage:passage-1',
+            score: -0.2,
+            item: { ...passage, unknownTopLevel: true } as never,
+          },
+        ] }, valid.slots[1]!, valid.slots[2]!],
+      },
+      {
+        ...valid,
+        slots: [{ ...valid.slots[0]!, hits: [
+          {
+            id: 'passage:passage-1',
+            score: -0.2,
+            item: {
+              ...passage,
+              metadata: { ...passage.metadata, unknownNested: true },
+            } as never,
+          },
+        ] }, valid.slots[1]!, valid.slots[2]!],
+      },
     ];
 
     for (const response of cases) {
@@ -275,6 +321,22 @@ describe('BoundedGenerationSession', () => {
       }),
       pprResponse({
         rankedFacts: [{ nodeId: 'fact:fact-1', score: Number.NaN, rank: 1, fact }],
+      }),
+      pprResponse({
+        rankedPassages: [{
+          nodeId: 'passage:passage-1',
+          score: 0.8,
+          rank: 1,
+          passage: { ...passage, unknownTopLevel: true } as never,
+        }],
+      }),
+      pprResponse({
+        rankedFacts: [{
+          nodeId: 'fact:fact-1',
+          score: 0.7,
+          rank: 1,
+          fact: { ...fact, schemaId: undefined } as never,
+        }],
       }),
       pprResponse({
         rankedPassages: [{ nodeId: 'passage:passage-1', score: 0.8, rank: 2, passage }],

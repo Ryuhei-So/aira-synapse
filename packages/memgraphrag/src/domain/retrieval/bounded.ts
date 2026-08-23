@@ -9,6 +9,7 @@
 import type { Fact } from '../memory/fact.js';
 import type { Passage } from '../memory/passage.js';
 import type { Schema } from '../memory/schema.js';
+import { validateDomainObject } from '../memory/domainContract.js';
 import type { FilteredMemoryCandidates, MemoryCandidate } from './memoryFilter.js';
 import {
   assertV15RetrievalRequestPlan,
@@ -282,6 +283,17 @@ function invalidResponse(message: string): never {
   throw new BoundedGenerationSessionError('INVALID_RESPONSE', message);
 }
 
+function assertBoundedDomainObject(
+  namespace: V15SearchSlotId,
+  value: unknown,
+  path: string,
+): void {
+  const validation = validateDomainObject(namespace, value);
+  if (!validation.valid) {
+    invalidResponse(`${path} violates the ${namespace} domain contract: ${validation.errors.join('; ')}`);
+  }
+}
+
 function objectIdentity(
   namespace: V15SearchSlotId,
   item: Passage | Fact | Schema,
@@ -318,6 +330,9 @@ function validateCandidateSearchResponse(
     const seen = new Set<string>();
     let previous: BoundedCandidateHit<Passage | Fact | Schema> | undefined;
     for (const hit of actual.hits as readonly BoundedCandidateHit<Passage | Fact | Schema>[]) {
+      if (typeof hit !== 'object' || hit === null) {
+        invalidResponse(`candidate response slot ${requested.slotId} contains a malformed hit`);
+      }
       if (typeof hit.id !== 'string' || hit.id.length === 0 || !Number.isFinite(hit.score)) {
         invalidResponse(`candidate response slot ${requested.slotId} contains an invalid id or score`);
       }
@@ -330,6 +345,7 @@ function validateCandidateSearchResponse(
         invalidResponse(`candidate response slot ${requested.slotId} is not strictly score/id ordered`);
       }
       previous = hit;
+      assertBoundedDomainObject(requested.namespace, hit.item, `candidate ${hit.id}`);
       const identity = objectIdentity(requested.namespace, hit.item);
       if (hit.id !== `${requested.namespace}:${identity.id}` || identity.corpusId !== plan.corpusId) {
         invalidResponse(`candidate response hit ${hit.id} does not match its object or corpus`);
@@ -365,6 +381,10 @@ function validateFactExpansionResponse(
   const seen = new Set<string>();
   const evaluateExpansion = compileV15FactExpansionEvaluator(plan);
   for (const hit of response.facts) {
+    if (typeof hit !== 'object' || hit === null) {
+      invalidResponse('fact expansion contains a malformed hit');
+    }
+    assertBoundedDomainObject('fact', hit.fact, `fact expansion ${hit.factId}`);
     if (hit.factId !== hit.fact.factId || hit.fact.corpusId !== corpusId || !Number.isFinite(hit.score)) {
       invalidResponse(`fact expansion hit ${hit.factId} does not match its object, corpus, or score`);
     }
@@ -405,6 +425,7 @@ function validatePprMaterializationResponse(
       if (!item || !Number.isFinite(entry.score) || entry.rank !== index + 1) {
         invalidResponse(`PPR ${namespace} response has an invalid score, rank, or object`);
       }
+      assertBoundedDomainObject(namespace, item, `PPR ${namespace} ${entry.nodeId}`);
       const identity = objectIdentity(namespace, item);
       if (entry.nodeId !== `${namespace}:${identity.id}` || identity.corpusId !== corpusId) {
         invalidResponse(`PPR ${namespace} hit ${entry.nodeId} does not match its object or corpus`);
