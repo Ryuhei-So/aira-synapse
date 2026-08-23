@@ -109,7 +109,9 @@ jobs:
       - name: Verify coverage ratchet
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: node scripts/coverage-ratchet.mjs verify coverage/coverage-summary.json ../../.github/memgraphrag-coverage-baseline.json --base-sha "$BASE_SHA"
+        run: |
+          node -e 'console.log(JSON.stringify(require("./coverage/coverage-summary.json").total))'
+          node scripts/coverage-ratchet.mjs verify coverage/coverage-summary.json ../../.github/memgraphrag-coverage-baseline.json --base-sha "$BASE_SHA"
         working-directory: packages/memgraphrag
 
   build:
