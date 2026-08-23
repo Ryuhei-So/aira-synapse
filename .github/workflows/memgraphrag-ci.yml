@@ -132,3 +132,4 @@ jobs:
       - run: npm ci
       - run: npm run build --workspace=packages/memgraphrag
       - run: npm run check:bounded-domain-fixture --workspace=packages/memgraphrag
+      - run: npm run check:v15-parity-schemas --workspace=packages/memgraphrag

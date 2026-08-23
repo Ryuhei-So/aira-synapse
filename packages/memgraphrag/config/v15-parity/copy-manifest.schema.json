@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "V15CopiedProductionCopyManifest@1",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "V15CopiedProductionCopyManifest@1"
+    },
+    "generation": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991
+    },
+    "entries": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "type": "object",
+          "properties": {
+            "role": {
+              "type": "string",
+              "const": "canonical"
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "size": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 68719476736
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          },
+          "required": [
+            "role",
+            "path",
+            "size",
+            "sha256"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "role": {
+              "type": "string",
+              "const": "ownerManifest"
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "size": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 68719476736
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          },
+          "required": [
+            "role",
+            "path",
+            "size",
+            "sha256"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "role": {
+              "type": "string",
+              "const": "vectorBlob"
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "size": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 68719476736
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          },
+          "required": [
+            "role",
+            "path",
+            "size",
+            "sha256"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "descriptor": {
+      "type": "object",
+      "properties": {
+        "generation": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "vectorBlob": {
+          "type": "object",
+          "properties": {
+            "basename": {
+              "type": "string",
+              "minLength": 1
+            },
+            "size": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 68719476736
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "format": {
+              "type": "number",
+              "const": 1
+            }
+          },
+          "required": [
+            "basename",
+            "size",
+            "sha256",
+            "format"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "generation",
+        "vectorBlob"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schema",
+    "generation",
+    "entries",
+    "descriptor"
+  ],
+  "additionalProperties": false
+}

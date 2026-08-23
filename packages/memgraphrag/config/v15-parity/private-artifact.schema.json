@@ -1,0 +1,936 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "V15CopiedProductionParityArtifact@1",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "V15CopiedProductionParityArtifact@1"
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+    },
+    "generation": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991
+    },
+    "canonicalSha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "ownerManifestSha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "vectorBlobSha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "copyManifestSha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "fixtureSha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "evaluatedSources": {
+      "type": "object",
+      "properties": {
+        "evaluatedSynapseBaseCommit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "evaluatedSynapseBaseTreeDigest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "evaluatedSynapseCandidateCommit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "evaluatedSynapseCandidateTreeDigest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "evaluatedGraphDbCommit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "evaluatedGraphDbTreeDigest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "evaluatedHubDriverCommit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "evaluatedHubDriverTreeDigest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "evaluatedSynapseBaseCommit",
+        "evaluatedSynapseBaseTreeDigest",
+        "evaluatedSynapseCandidateCommit",
+        "evaluatedSynapseCandidateTreeDigest",
+        "evaluatedGraphDbCommit",
+        "evaluatedGraphDbTreeDigest",
+        "evaluatedHubDriverCommit",
+        "evaluatedHubDriverTreeDigest"
+      ],
+      "additionalProperties": false
+    },
+    "synapseCheckerCommit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "publicManifests": {
+      "type": "object",
+      "properties": {
+        "domainSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "normalizationSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "domainSha256",
+        "normalizationSha256"
+      ],
+      "additionalProperties": false
+    },
+    "runtime": {
+      "type": "object",
+      "properties": {
+        "node": {
+          "type": "string",
+          "minLength": 1
+        },
+        "v8": {
+          "type": "string",
+          "minLength": 1
+        },
+        "icu": {
+          "type": "string",
+          "minLength": 1
+        },
+        "unicode": {
+          "type": "string",
+          "minLength": 1
+        },
+        "os": {
+          "type": "string",
+          "minLength": 1
+        },
+        "architecture": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "node",
+        "v8",
+        "icu",
+        "unicode",
+        "os",
+        "architecture"
+      ],
+      "additionalProperties": false
+    },
+    "normalizedArguments": {
+      "maxItems": 128,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 4096,
+        "pattern": "^[^\\r\\n]*$"
+      }
+    },
+    "comparisons": {
+      "type": "object",
+      "properties": {
+        "candidate": {
+          "type": "object",
+          "properties": {
+            "before": {
+              "maxItems": 100000,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  "rank": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1000000
+                  },
+                  "score": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "id",
+                  "rank",
+                  "score"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "after": {
+              "maxItems": 100000,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  "rank": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1000000
+                  },
+                  "score": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "id",
+                  "rank",
+                  "score"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "summary": {
+              "type": "object",
+              "properties": {
+                "beforeCount": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                "afterCount": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                "matchedCount": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                "changedRankCount": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                "maxAbsScoreDelta": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "maxRankDelta": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                }
+              },
+              "required": [
+                "beforeCount",
+                "afterCount",
+                "matchedCount",
+                "changedRankCount",
+                "maxAbsScoreDelta",
+                "maxRankDelta"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "before",
+            "after",
+            "summary"
+          ],
+          "additionalProperties": false
+        },
+        "expansion": {
+          "type": "object",
+          "properties": {
+            "before": {
+              "maxItems": 100000,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  "rank": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1000000
+                  },
+                  "score": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "id",
+                  "rank",
+                  "score"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "after": {
+              "maxItems": 100000,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  "rank": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1000000
+                  },
+                  "score": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "id",
+                  "rank",
+                  "score"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "summary": {
+              "type": "object",
+              "properties": {
+                "beforeCount": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                "afterCount": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                "matchedCount": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                "changedRankCount": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                "maxAbsScoreDelta": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "maxRankDelta": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                }
+              },
+              "required": [
+                "beforeCount",
+                "afterCount",
+                "matchedCount",
+                "changedRankCount",
+                "maxAbsScoreDelta",
+                "maxRankDelta"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "before",
+            "after",
+            "summary"
+          ],
+          "additionalProperties": false
+        },
+        "ppr": {
+          "type": "object",
+          "properties": {
+            "before": {
+              "maxItems": 100000,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  "rank": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1000000
+                  },
+                  "score": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "id",
+                  "rank",
+                  "score"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "after": {
+              "maxItems": 100000,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  "rank": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1000000
+                  },
+                  "score": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "id",
+                  "rank",
+                  "score"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "summary": {
+              "type": "object",
+              "properties": {
+                "beforeCount": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                "afterCount": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                "matchedCount": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                "changedRankCount": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                "maxAbsScoreDelta": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "maxRankDelta": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                }
+              },
+              "required": [
+                "beforeCount",
+                "afterCount",
+                "matchedCount",
+                "changedRankCount",
+                "maxAbsScoreDelta",
+                "maxRankDelta"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "before",
+            "after",
+            "summary"
+          ],
+          "additionalProperties": false
+        },
+        "idAssociation": {
+          "type": "object",
+          "properties": {
+            "before": {
+              "maxItems": 100000,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "rankedResultId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  "passageIds": {
+                    "maxItems": 10000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 512
+                    }
+                  },
+                  "factIds": {
+                    "maxItems": 10000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 512
+                    }
+                  }
+                },
+                "required": [
+                  "rankedResultId",
+                  "passageIds",
+                  "factIds"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "after": {
+              "maxItems": 100000,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "rankedResultId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  "passageIds": {
+                    "maxItems": 10000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 512
+                    }
+                  },
+                  "factIds": {
+                    "maxItems": 10000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 512
+                    }
+                  }
+                },
+                "required": [
+                  "rankedResultId",
+                  "passageIds",
+                  "factIds"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "inputs": {
+              "type": "object",
+              "properties": {
+                "rankedNodes": {
+                  "maxItems": 100000,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "nodeId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 512
+                      },
+                      "score": {
+                        "type": "number"
+                      },
+                      "layer": {
+                        "type": "string",
+                        "enum": [
+                          "ontology",
+                          "fact",
+                          "passage",
+                          "entity"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "nodeId",
+                      "score",
+                      "layer"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "passageIds": {
+                  "maxItems": 100000,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  }
+                },
+                "factIds": {
+                  "maxItems": 100000,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  }
+                }
+              },
+              "required": [
+                "rankedNodes",
+                "passageIds",
+                "factIds"
+              ],
+              "additionalProperties": false
+            },
+            "changedRowCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            }
+          },
+          "required": [
+            "before",
+            "after",
+            "inputs",
+            "changedRowCount"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "candidate",
+        "expansion",
+        "ppr",
+        "idAssociation"
+      ],
+      "additionalProperties": false
+    },
+    "missingObjectAudit": {
+      "type": "object",
+      "properties": {
+        "checked": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "missing": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        }
+      },
+      "required": [
+        "checked",
+        "missing"
+      ],
+      "additionalProperties": false
+    },
+    "requiredCases": {
+      "type": "object",
+      "properties": {
+        "candidate": {
+          "type": "boolean"
+        },
+        "expansion": {
+          "type": "boolean"
+        },
+        "ppr": {
+          "type": "boolean"
+        },
+        "id-association": {
+          "type": "boolean"
+        },
+        "missing-object-fail-closed": {
+          "type": "boolean"
+        },
+        "production-missing-object-zero": {
+          "type": "boolean"
+        },
+        "absent-seed": {
+          "type": "boolean"
+        },
+        "signed-sum-non-positive": {
+          "type": "boolean"
+        },
+        "dangling-loss": {
+          "type": "boolean"
+        },
+        "hub-damping": {
+          "type": "boolean"
+        },
+        "convergence": {
+          "type": "boolean"
+        },
+        "candidate-tie-order": {
+          "type": "boolean"
+        },
+        "expansion-tie-order": {
+          "type": "boolean"
+        },
+        "ppr-tie-order": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "candidate",
+        "expansion",
+        "ppr",
+        "id-association",
+        "missing-object-fail-closed",
+        "production-missing-object-zero",
+        "absent-seed",
+        "signed-sum-non-positive",
+        "dangling-loss",
+        "hub-damping",
+        "convergence",
+        "candidate-tie-order",
+        "expansion-tie-order",
+        "ppr-tie-order"
+      ],
+      "additionalProperties": false
+    },
+    "aggregate": {
+      "type": "object",
+      "properties": {
+        "candidate": {
+          "type": "object",
+          "properties": {
+            "beforeCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "afterCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "matchedCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "changedRankCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "maxAbsScoreDelta": {
+              "type": "number",
+              "minimum": 0
+            },
+            "maxRankDelta": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            }
+          },
+          "required": [
+            "beforeCount",
+            "afterCount",
+            "matchedCount",
+            "changedRankCount",
+            "maxAbsScoreDelta",
+            "maxRankDelta"
+          ],
+          "additionalProperties": false
+        },
+        "expansion": {
+          "type": "object",
+          "properties": {
+            "beforeCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "afterCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "matchedCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "changedRankCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "maxAbsScoreDelta": {
+              "type": "number",
+              "minimum": 0
+            },
+            "maxRankDelta": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            }
+          },
+          "required": [
+            "beforeCount",
+            "afterCount",
+            "matchedCount",
+            "changedRankCount",
+            "maxAbsScoreDelta",
+            "maxRankDelta"
+          ],
+          "additionalProperties": false
+        },
+        "ppr": {
+          "type": "object",
+          "properties": {
+            "beforeCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "afterCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "matchedCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "changedRankCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "maxAbsScoreDelta": {
+              "type": "number",
+              "minimum": 0
+            },
+            "maxRankDelta": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            }
+          },
+          "required": [
+            "beforeCount",
+            "afterCount",
+            "matchedCount",
+            "changedRankCount",
+            "maxAbsScoreDelta",
+            "maxRankDelta"
+          ],
+          "additionalProperties": false
+        },
+        "idAssociationChangedRowCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "maximumAbsScoreDelta": {
+          "type": "number",
+          "minimum": 0
+        },
+        "maximumRankDelta": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        }
+      },
+      "required": [
+        "candidate",
+        "expansion",
+        "ppr",
+        "idAssociationChangedRowCount",
+        "maximumAbsScoreDelta",
+        "maximumRankDelta"
+      ],
+      "additionalProperties": false
+    },
+    "acceptedSemanticChanges": {
+      "maxItems": 3,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "semantic-expansion-tie-order",
+          "semantic-ppr-tie-order",
+          "semantic-id-keyed-context-association"
+        ]
+      }
+    },
+    "verdict": {
+      "type": "string",
+      "enum": [
+        "pass",
+        "fail"
+      ]
+    }
+  },
+  "required": [
+    "schema",
+    "generatedAt",
+    "generation",
+    "canonicalSha256",
+    "ownerManifestSha256",
+    "vectorBlobSha256",
+    "copyManifestSha256",
+    "fixtureSha256",
+    "evaluatedSources",
+    "synapseCheckerCommit",
+    "publicManifests",
+    "runtime",
+    "normalizedArguments",
+    "comparisons",
+    "missingObjectAudit",
+    "requiredCases",
+    "aggregate",
+    "acceptedSemanticChanges",
+    "verdict"
+  ],
+  "additionalProperties": false
+}

@@ -184,6 +184,13 @@ describe('TASK-MG-004: CI workflow contract', () => {
     expect(lintRuns.some((r) => r?.includes('lint'))).toBe(true);
   });
 
+  it('regenerates V15 parity JSON Schemas from the Zod authority in CI', () => {
+    const buildRuns = jobs['build']!.steps
+      .filter((step) => step.run)
+      .map((step) => step.run);
+    expect(buildRuns).toContain('npm run check:v15-parity-schemas --workspace=packages/memgraphrag');
+  });
+
   it('should run npm run test in test job', () => {
     const testRuns = jobs['test']!.steps
       .filter((s) => s.run)

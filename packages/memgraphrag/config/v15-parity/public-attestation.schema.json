@@ -1,0 +1,322 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "V15CopiedProductionParityAttestation@1",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "V15CopiedProductionParityAttestation@1"
+    },
+    "detailedArtifactSha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "evaluatedSources": {
+      "type": "object",
+      "properties": {
+        "evaluatedSynapseBaseCommit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "evaluatedSynapseBaseTreeDigest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "evaluatedSynapseCandidateCommit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "evaluatedSynapseCandidateTreeDigest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "evaluatedGraphDbCommit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "evaluatedGraphDbTreeDigest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "evaluatedSynapseBaseCommit",
+        "evaluatedSynapseBaseTreeDigest",
+        "evaluatedSynapseCandidateCommit",
+        "evaluatedSynapseCandidateTreeDigest",
+        "evaluatedGraphDbCommit",
+        "evaluatedGraphDbTreeDigest"
+      ],
+      "additionalProperties": false
+    },
+    "publicManifests": {
+      "type": "object",
+      "properties": {
+        "domainSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "normalizationSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "domainSha256",
+        "normalizationSha256"
+      ],
+      "additionalProperties": false
+    },
+    "requiredCases": {
+      "type": "object",
+      "properties": {
+        "candidate": {
+          "type": "boolean"
+        },
+        "expansion": {
+          "type": "boolean"
+        },
+        "ppr": {
+          "type": "boolean"
+        },
+        "id-association": {
+          "type": "boolean"
+        },
+        "missing-object-fail-closed": {
+          "type": "boolean"
+        },
+        "production-missing-object-zero": {
+          "type": "boolean"
+        },
+        "absent-seed": {
+          "type": "boolean"
+        },
+        "signed-sum-non-positive": {
+          "type": "boolean"
+        },
+        "dangling-loss": {
+          "type": "boolean"
+        },
+        "hub-damping": {
+          "type": "boolean"
+        },
+        "convergence": {
+          "type": "boolean"
+        },
+        "candidate-tie-order": {
+          "type": "boolean"
+        },
+        "expansion-tie-order": {
+          "type": "boolean"
+        },
+        "ppr-tie-order": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "candidate",
+        "expansion",
+        "ppr",
+        "id-association",
+        "missing-object-fail-closed",
+        "production-missing-object-zero",
+        "absent-seed",
+        "signed-sum-non-positive",
+        "dangling-loss",
+        "hub-damping",
+        "convergence",
+        "candidate-tie-order",
+        "expansion-tie-order",
+        "ppr-tie-order"
+      ],
+      "additionalProperties": false
+    },
+    "aggregate": {
+      "type": "object",
+      "properties": {
+        "candidate": {
+          "type": "object",
+          "properties": {
+            "beforeCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "afterCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "matchedCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "changedRankCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "maxAbsScoreDelta": {
+              "type": "number",
+              "minimum": 0
+            },
+            "maxRankDelta": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            }
+          },
+          "required": [
+            "beforeCount",
+            "afterCount",
+            "matchedCount",
+            "changedRankCount",
+            "maxAbsScoreDelta",
+            "maxRankDelta"
+          ],
+          "additionalProperties": false
+        },
+        "expansion": {
+          "type": "object",
+          "properties": {
+            "beforeCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "afterCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "matchedCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "changedRankCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "maxAbsScoreDelta": {
+              "type": "number",
+              "minimum": 0
+            },
+            "maxRankDelta": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            }
+          },
+          "required": [
+            "beforeCount",
+            "afterCount",
+            "matchedCount",
+            "changedRankCount",
+            "maxAbsScoreDelta",
+            "maxRankDelta"
+          ],
+          "additionalProperties": false
+        },
+        "ppr": {
+          "type": "object",
+          "properties": {
+            "beforeCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "afterCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "matchedCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "changedRankCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "maxAbsScoreDelta": {
+              "type": "number",
+              "minimum": 0
+            },
+            "maxRankDelta": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            }
+          },
+          "required": [
+            "beforeCount",
+            "afterCount",
+            "matchedCount",
+            "changedRankCount",
+            "maxAbsScoreDelta",
+            "maxRankDelta"
+          ],
+          "additionalProperties": false
+        },
+        "idAssociationChangedRowCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "maximumAbsScoreDelta": {
+          "type": "number",
+          "minimum": 0
+        },
+        "maximumRankDelta": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        }
+      },
+      "required": [
+        "candidate",
+        "expansion",
+        "ppr",
+        "idAssociationChangedRowCount",
+        "maximumAbsScoreDelta",
+        "maximumRankDelta"
+      ],
+      "additionalProperties": false
+    },
+    "acceptedSemanticChanges": {
+      "maxItems": 3,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "semantic-expansion-tie-order",
+          "semantic-ppr-tie-order",
+          "semantic-id-keyed-context-association"
+        ]
+      }
+    },
+    "verdict": {
+      "type": "string",
+      "enum": [
+        "pass",
+        "fail"
+      ]
+    }
+  },
+  "required": [
+    "schema",
+    "detailedArtifactSha256",
+    "evaluatedSources",
+    "publicManifests",
+    "requiredCases",
+    "aggregate",
+    "acceptedSemanticChanges",
+    "verdict"
+  ],
+  "additionalProperties": false
+}
