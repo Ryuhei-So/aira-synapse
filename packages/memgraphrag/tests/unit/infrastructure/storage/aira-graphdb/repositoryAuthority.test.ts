@@ -91,6 +91,7 @@ describe('aira-graphdb repository authority', () => {
   it('allows an explicit non-Git source directory when CI SHA verification is not requested', () => {
     const repositoryPath = createSourceDirectory();
     vi.stubEnv('AIRA_GRAPHDB_REPO_PATH', repositoryPath);
+    vi.stubEnv('AIRA_GRAPHDB_EXPECTED_SHA', undefined);
 
     const authority = resolveAiraGraphDbRepository();
 
@@ -101,6 +102,11 @@ describe('aira-graphdb repository authority', () => {
   it('fails closed when the explicit path is missing or not absolute', () => {
     vi.stubEnv('AIRA_GRAPHDB_REPO_PATH', '');
     expect(() => resolveAiraGraphDbRepository()).toThrow('AIRA_GRAPHDB_REPO_PATH is required');
+
+    const missingPath = mkdtempSync(join(tmpdir(), 'aira-graphdb-authority-missing-'));
+    rmSync(missingPath, { recursive: true, force: true });
+    vi.stubEnv('AIRA_GRAPHDB_REPO_PATH', missingPath);
+    expect(() => resolveAiraGraphDbRepository()).toThrow('AIRA_GRAPHDB_REPO_PATH does not resolve to a directory');
 
     vi.stubEnv('AIRA_GRAPHDB_REPO_PATH', 'aira-graphdb');
     expect(() => resolveAiraGraphDbRepository()).toThrow('AIRA_GRAPHDB_REPO_PATH must be absolute');
