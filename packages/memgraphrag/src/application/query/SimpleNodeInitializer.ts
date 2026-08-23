@@ -16,6 +16,7 @@ import type {
 import type { IMemoryStore } from '../../domain/storage/index.js';
 import {
   buildV15FactExpansionPlan,
+  buildV15InitialVector,
   normalizeV15Entity,
   orderV15ScoreThenId,
 } from '../../domain/retrieval/v15Plan.js';
@@ -26,13 +27,8 @@ export class SimpleNodeInitializer implements INodeInitializer {
   constructor(private readonly memoryStore?: IMemoryStore) {}
 
   public async initialize(request: NodeInitializationRequest): Promise<NodeInitializationVector> {
-    const scores: Record<string, number> = {};
     const { candidates, query } = request;
-
-    // 1. Seed facts from vector search (full weight)
-    for (const c of candidates.facts) {
-      scores[`fact:${c.item.factId}`] = c.similarity;
-    }
+    const expandedFacts: { factId: string; score: number }[] = [];
 
     // 2. Entity expansion — only for comparison queries where entity
     //    bridging improves coverage of both compared entities.
@@ -43,11 +39,11 @@ export class SimpleNodeInitializer implements INodeInitializer {
 
       const seedEntities = new Map(expansionPlan.seedEntities.map((seed) => [seed.key, seed.score]));
       const excludedSeedFacts = new Set(expansionPlan.excludedSeedFactIds);
+      const candidateFactIds = new Set(candidates.facts.map((candidate) => candidate.item.factId));
 
       const expansionCandidates: { id: string; score: number }[] = [];
       for (const fact of snapshot.facts) {
-        const factKey = `fact:${fact.factId}`;
-        if (excludedSeedFacts.has(fact.factId) || scores[factKey] !== undefined) continue;
+        if (excludedSeedFacts.has(fact.factId) || candidateFactIds.has(fact.factId)) continue;
 
         const headScore = seedEntities.get(normalizeV15Entity(fact.headEntity));
         const tailScore = seedEntities.get(normalizeV15Entity(fact.tailEntity));
@@ -59,26 +55,9 @@ export class SimpleNodeInitializer implements INodeInitializer {
       }
 
       for (const exp of orderV15ScoreThenId(expansionCandidates).slice(0, expansionPlan.limit)) {
-        scores[`fact:${exp.id}`] = exp.score;
+        expandedFacts.push({ factId: exp.id, score: exp.score });
       }
     }
-
-    // 3. Passage nodes (full weight — primary info source in our graph)
-    for (const c of candidates.passages) {
-      scores[`passage:${c.item.passageId}`] = c.similarity;
-    }
-
-    // 4. Schema nodes (full weight)
-    for (const c of candidates.ontology) {
-      scores[`schema:${c.item.schemaId}`] = c.similarity;
-    }
-
-    // 5. Entity nodes excluded from PPR seeds — entity co-occurrence subgraph
-    //    is too dense and traps score.
-
-    return {
-      scores,
-      fallbackTriggered: candidates.fallbackRequired,
-    };
+    return buildV15InitialVector(candidates, expandedFacts);
   }
 }

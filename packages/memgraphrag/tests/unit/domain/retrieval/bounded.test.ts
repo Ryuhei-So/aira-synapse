@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Fact } from '../../../../src/domain/memory/fact.js';
 import type { Passage } from '../../../../src/domain/memory/passage.js';
 import type { QueryFeatureFlags } from '../../../../src/domain/config/featureFlags.js';
-import type { FilteredMemoryCandidates, QueryRequest } from '../../../../src/domain/retrieval/memoryFilter.js';
+import type { QueryRequest } from '../../../../src/domain/retrieval/memoryFilter.js';
 import {
   MAX_SAFE_GENERATION,
   BoundedGenerationSession,
@@ -16,7 +16,7 @@ import {
   type GenerationSessionTransport,
   type PprMaterializeBoundedResponse,
 } from '../../../../src/domain/retrieval/bounded.js';
-import { buildV15RetrievalPlan } from '../../../../src/domain/retrieval/v15Plan.js';
+import { buildV15RetrievalRequestPlan } from '../../../../src/domain/retrieval/v15Plan.js';
 
 const lease: GenerationLease = { generation: 42, sessionId: 'session-42' };
 const flags: QueryFeatureFlags = {
@@ -38,22 +38,12 @@ function makePlan() {
     text: 'question',
     topK: 2,
     topM: 2,
-    threshold: -0.1,
+    threshold: -0.3,
     contextTokenLimit: 256,
   };
-  const candidates: FilteredMemoryCandidates = {
-    ontology: [],
-    facts: [{ layer: 'fact', item: fact, similarity: -0.25 }],
-    passages: [{ layer: 'passage', item: passage, similarity: -0.2 }],
-    expandedTerms: [],
-    fallbackRequired: false,
-    queryVector: [1, 0],
-  };
-  return buildV15RetrievalPlan(
+  return buildV15RetrievalRequestPlan(
     query,
     [1, 0],
-    candidates,
-    { scores: { 'fact:1': -0.25, 'passage:1': 0.5 }, fallbackTriggered: false },
     {
       comparisonMode: true,
       featureFlags: flags,
@@ -69,9 +59,19 @@ function candidateResponse(overrides: Partial<CandidateSearchBoundedResponse> = 
   return {
     generation: lease.generation,
     sessionId: lease.sessionId,
-    passages: [{ id: 'passage:passage-1', score: -0.2, item: passage }],
-    facts: [{ id: 'fact:fact-1', score: -0.25, item: fact }],
-    schemas: [],
+    slots: [
+      {
+        slotId: 'passage',
+        namespace: 'passage',
+        hits: [{ id: 'passage:passage-1', score: -0.2, item: passage }],
+      },
+      {
+        slotId: 'fact',
+        namespace: 'fact',
+        hits: [{ id: 'fact:fact-1', score: -0.25, item: fact }],
+      },
+      { slotId: 'schema', namespace: 'schema', hits: [] },
+    ],
     ...overrides,
   };
 }
@@ -143,6 +143,146 @@ describe('BoundedGenerationSession', () => {
     expect(owner.factExpandBounded).toHaveBeenCalledWith(expect.objectContaining({ generation: 42 }));
     expect(owner.pprMaterializeBounded).toHaveBeenCalledWith(expect.objectContaining({ generation: 42 }));
     expect(owner.releaseGeneration).toHaveBeenCalledTimes(1);
+  });
+
+  it('derives expansion and PPR requests from validated preceding results', async () => {
+    const expandedFact = makeFact('fact-2');
+    const factExpandBounded = vi.fn().mockImplementation(async (request) => {
+      expect(request.plan.excludedSeedFactIds).toEqual(['fact-1']);
+      expect(request.plan.seedEntities).toEqual([
+        { key: 'alpha', score: 0 },
+        { key: 'beta', score: 0 },
+      ]);
+      return {
+        generation: lease.generation,
+        sessionId: lease.sessionId,
+        facts: [{ factId: 'fact-2', score: 0.4, fact: expandedFact }],
+      };
+    });
+    const pprMaterializeBounded = vi.fn().mockImplementation(async (request) => {
+      expect(request.plan.seeds).toEqual([
+        { nodeId: 'fact:fact-1', score: -0.25 },
+        { nodeId: 'fact:fact-2', score: 0.4 },
+        { nodeId: 'passage:passage-1', score: -0.2 },
+      ]);
+      return pprResponse();
+    });
+    const owner = transport({ factExpandBounded, pprMaterializeBounded });
+
+    await new BoundedGenerationSession(owner, options(new ManualClock())).run(makePlan());
+
+    expect(factExpandBounded).toHaveBeenCalledTimes(1);
+    expect(pprMaterializeBounded).toHaveBeenCalledTimes(1);
+    expect(owner.releaseGeneration).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects malformed candidate results before expansion or PPR', async () => {
+    const secondPassage = makePassage('passage-2');
+    const valid = candidateResponse();
+    const cases: readonly CandidateSearchBoundedResponse[] = [
+      { ...valid, slots: valid.slots.slice(0, 2) },
+      { ...valid, slots: [valid.slots[1]!, valid.slots[0]!, valid.slots[2]!] },
+      {
+        ...valid,
+        slots: [{ ...valid.slots[0]!, hits: [
+          ...valid.slots[0]!.hits,
+          { id: 'passage:passage-2', score: -0.21, item: secondPassage },
+          { id: 'passage:passage-3', score: -0.22, item: makePassage('passage-3') },
+        ] }, valid.slots[1]!, valid.slots[2]!],
+      },
+      {
+        ...valid,
+        slots: [{ ...valid.slots[0]!, hits: [
+          { id: 'passage:passage-1', score: Number.NaN, item: passage },
+        ] }, valid.slots[1]!, valid.slots[2]!],
+      },
+      {
+        ...valid,
+        slots: [{ ...valid.slots[0]!, hits: [
+          { id: 'passage:passage-1', score: -0.2, item: passage },
+          { id: 'passage:passage-2', score: -0.1, item: secondPassage },
+        ] }, valid.slots[1]!, valid.slots[2]!],
+      },
+      {
+        ...valid,
+        slots: [{ ...valid.slots[0]!, hits: [
+          { id: 'passage:wrong-id', score: -0.2, item: passage },
+        ] }, valid.slots[1]!, valid.slots[2]!],
+      },
+      {
+        ...valid,
+        slots: [valid.slots[0]!, { ...valid.slots[1]!, hits: [
+          { id: 'fact:fact-1', score: -0.25, item: passage as never },
+        ] }, valid.slots[2]!],
+      },
+      {
+        ...valid,
+        slots: [{ ...valid.slots[0]!, hits: [
+          { id: 'passage:passage-1', score: -0.2, item: { ...passage, corpusId: 'other-corpus' } },
+        ] }, valid.slots[1]!, valid.slots[2]!],
+      },
+    ];
+
+    for (const response of cases) {
+      const owner = transport({ candidateSearchBounded: vi.fn().mockResolvedValue(response) });
+      const session = new BoundedGenerationSession(owner, options(new ManualClock()));
+      await expect(session.run(makePlan())).rejects.toMatchObject({ code: 'INVALID_RESPONSE' });
+      expect(owner.factExpandBounded).not.toHaveBeenCalled();
+      expect(owner.pprMaterializeBounded).not.toHaveBeenCalled();
+      expect(owner.releaseGeneration).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('rejects malformed expansion results before PPR', async () => {
+    const expanded = makeFact('fact-2');
+    const invalidFacts = [
+      [{ factId: 'wrong-id', score: 0.4, fact: expanded }],
+      [{ factId: 'fact-2', score: Number.POSITIVE_INFINITY, fact: expanded }],
+      [
+        { factId: 'fact-2', score: 0.2, fact: expanded },
+        { factId: 'fact-3', score: 0.3, fact: makeFact('fact-3') },
+      ],
+      [{ factId: 'fact-2', score: 0.4, fact: { ...expanded, corpusId: 'other-corpus' } }],
+    ];
+
+    for (const facts of invalidFacts) {
+      const owner = transport({
+        factExpandBounded: vi.fn().mockResolvedValue({
+          generation: lease.generation,
+          sessionId: lease.sessionId,
+          facts,
+        }),
+      });
+      await expect(
+        new BoundedGenerationSession(owner, options(new ManualClock())).run(makePlan()),
+      ).rejects.toMatchObject({ code: 'INVALID_RESPONSE' });
+      expect(owner.pprMaterializeBounded).not.toHaveBeenCalled();
+      expect(owner.releaseGeneration).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('rejects malformed PPR materialization without exposing partial context', async () => {
+    const invalidResponses: readonly PprMaterializeBoundedResponse[] = [
+      pprResponse({
+        rankedPassages: [{ nodeId: 'passage:wrong-id', score: 0.8, rank: 1, passage }],
+      }),
+      pprResponse({
+        rankedFacts: [{ nodeId: 'fact:fact-1', score: Number.NaN, rank: 1, fact }],
+      }),
+      pprResponse({
+        rankedPassages: [{ nodeId: 'passage:passage-1', score: 0.8, rank: 2, passage }],
+      }),
+      pprResponse({ iterations: 101 }),
+      pprResponse({ l1Delta: -1 }),
+    ];
+
+    for (const response of invalidResponses) {
+      const owner = transport({ pprMaterializeBounded: vi.fn().mockResolvedValue(response) });
+      await expect(
+        new BoundedGenerationSession(owner, options(new ManualClock())).run(makePlan()),
+      ).rejects.toMatchObject({ code: 'INVALID_RESPONSE' });
+      expect(owner.releaseGeneration).toHaveBeenCalledTimes(1);
+    }
   });
 
   it('rejects unsupported profile before acquire or any data-plane call', async () => {
@@ -245,7 +385,7 @@ describe('BoundedGenerationSession', () => {
       pprMaterializeBounded: vi.fn().mockReturnValue(pprPending),
     });
     const session = new BoundedGenerationSession(owner, options(clock));
-    const run = session.run({ ...makePlan(), comparisonMode: false, factExpansion: null });
+    const run = session.run({ ...makePlan(), comparisonMode: false });
 
     await waitFor(() => expect(owner.pprMaterializeBounded).toHaveBeenCalled());
     clock.tick();

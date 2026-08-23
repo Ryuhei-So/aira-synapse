@@ -8,6 +8,9 @@ import type { Fact } from '../memory/fact.js';
 import type { Passage } from '../memory/passage.js';
 import type { NodeInitializationVector, QueryRequest } from './memoryFilter.js';
 
+/** Shared v15/legacy default; callers may override it through PPRRequest. */
+export const DEFAULT_HUB_DEGREE_THRESHOLD = 50;
+
 export interface RankedNode {
   readonly nodeId: string;
   readonly score: number;
@@ -32,6 +35,7 @@ export interface PPRRequest {
   readonly teleportProbability: number;
   readonly convergenceEpsilon: number;
   readonly maxIterations: number;
+  readonly hubDegreeThreshold: number;
   readonly topK: number;
   readonly topM: number;
 }

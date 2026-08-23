@@ -10,7 +10,9 @@ import {
   associateV15RankedPassages,
   associateV15RankedSchemas,
   buildV15FactExpansionPlan,
-  buildV15RetrievalPlan,
+  buildV15InitialVector,
+  buildV15PprMaterializationPlan,
+  buildV15RetrievalRequestPlan,
   compareV15Transitions,
   isV15RetrievalPlan,
   normalizeV15Entity,
@@ -19,6 +21,8 @@ import {
   orderV15Transitions,
   unsupportedV15Features,
   validateV15RetrievalPlan,
+  validateV15FactExpansionPlan,
+  V15_ENTITY_NORMALIZATION_DIGEST,
   V15RetrievalPlanValidationError,
 } from '../../../../src/domain/retrieval/v15Plan.js';
 
@@ -63,11 +67,9 @@ function candidates(): FilteredMemoryCandidates {
 }
 
 function makePlan() {
-  return buildV15RetrievalPlan(
+  return buildV15RetrievalRequestPlan(
     query,
     [1, 0],
-    candidates(),
-    { scores: { 'fact:b': -0.2, 'fact:a': 0.3 }, fallbackTriggered: false },
     {
       comparisonMode: true,
       featureFlags: flags,
@@ -82,13 +84,22 @@ function makePlan() {
 describe('V15RetrievalPlan and shared parity helpers', () => {
   it('preserves signed scores and negative thresholds while making policy explicit', () => {
     const plan = makePlan();
+    const expansion = buildV15FactExpansionPlan(candidates(), true);
+    const initialVector = buildV15InitialVector(
+      candidates(),
+      [{ factId: 'expanded', score: 0.1 }],
+    );
+    const ppr = buildV15PprMaterializationPlan(plan.pprPolicy, initialVector);
 
     expect(plan.candidateSearch.slots.map((slot) => slot.threshold)).toEqual([-0.25, -0.25, -0.25]);
-    expect(plan.pprMaterialization.seeds).toEqual([
-      { nodeId: 'fact:a', score: 0.3 },
-      { nodeId: 'fact:b', score: -0.2 },
+    expect(plan.candidateSearch.slots.map((slot) => slot.slotId)).toEqual(['passage', 'fact', 'schema']);
+    expect(ppr.seeds).toEqual([
+      { nodeId: 'fact:expanded', score: 0.1 },
+      { nodeId: 'fact:fact-a', score: -0.2 },
+      { nodeId: 'fact:fact-b', score: -0.4 },
+      { nodeId: 'passage:passage-a', score: -0.1 },
     ]);
-    expect(plan.factExpansion?.seedEntities).toEqual([
+    expect(expansion?.seedEntities).toEqual([
       { key: 'alpha', score: 0 },
       { key: 'beta', score: 0 },
       { key: 'gamma', score: 0 },
@@ -165,32 +176,24 @@ describe('V15RetrievalPlan and shared parity helpers', () => {
     expect(() => validateV15RetrievalPlan({ ...plan, unknown: true })).toThrow(V15RetrievalPlanValidationError);
     expect(() => validateV15RetrievalPlan({ ...plan, profile: 'hybrid-rrf' })).toThrowError(/Unsupported v15 retrieval profile/);
     expect(isV15RetrievalPlan({ ...plan, profile: 'hybrid-rrf' })).toBe(false);
-    expect(() => buildV15RetrievalPlan(
+    expect(() => buildV15RetrievalRequestPlan(
       query,
       [1, 0],
-      candidates(),
-      { scores: {}, fallbackTriggered: false },
       { ...makePlanOptions(), comparisonMode: false, featureFlags: { ...flags, enableThesaurusExpansion: true } },
     )).toThrowError(/enableThesaurusExpansion/);
     const unsupported = { ...flags, enableSubQueryDecomposition: true };
     expect(unsupportedV15Features(unsupported)).toEqual(['enableSubQueryDecomposition']);
     expect(() => assertV15FeatureProfile(unsupported)).toThrowError(/enableSubQueryDecomposition/);
-    expect(() => buildV15RetrievalPlan(
-      query,
-      [1, 0],
-      candidates(),
-      { scores: {}, fallbackTriggered: false },
-      { ...makePlanOptions(), comparisonMode: true, featureFlags: flags },
-    )).not.toThrow();
+    expect(() => validateV15RetrievalPlan({
+      ...plan,
+      candidateSearch: { slots: plan.candidateSearch.slots.slice(1) },
+    })).toThrowError(/passage, fact, and schema/);
   });
 
   it('does not silently construct comparison expansion without the candidate stage', () => {
-    expect(() => buildV15RetrievalPlan(
-      query,
-      [1, 0],
+    expect(() => buildV15FactExpansionPlan(
       undefined as unknown as FilteredMemoryCandidates,
-      { scores: {}, fallbackTriggered: false },
-      { ...makePlanOptions(), comparisonMode: true, featureFlags: flags },
+      true,
     )).toThrow();
   });
 
@@ -201,13 +204,20 @@ describe('V15RetrievalPlan and shared parity helpers', () => {
       facts: originalCandidates.facts.map((candidate, index) =>
         index === 0 ? { ...candidate, similarity: Number.NaN } : candidate),
     };
-    expect(() => buildV15RetrievalPlan(
-      query,
-      [1, 0],
-      badCandidates,
+    expect(() => buildV15FactExpansionPlan(badCandidates, true)).toThrowError(/must be finite/);
+    expect(() => buildV15PprMaterializationPlan(
+      makePlan().pprPolicy,
       { scores: { 'fact:a': Number.POSITIVE_INFINITY }, fallbackTriggered: false },
-      { ...makePlanOptions(), comparisonMode: true, featureFlags: flags },
     )).toThrowError(/must be finite/);
+  });
+
+  it('requires the exact normalization digest before expansion crosses the boundary', () => {
+    const expansion = buildV15FactExpansionPlan(candidates(), true)!;
+    expect(expansion.normalizationContractDigest).toBe(V15_ENTITY_NORMALIZATION_DIGEST);
+    expect(() => validateV15FactExpansionPlan({
+      ...expansion,
+      normalizationContractDigest: 'wrong-digest',
+    })).toThrowError(/normalizationContractDigest/);
   });
 });
 

@@ -18,18 +18,20 @@ import type {
 import type { RankedNode, TransitionEntry } from './ppr.js';
 import type { QueryFeatureFlags } from '../config/featureFlags.js';
 
-export const V15_RETRIEVAL_PLAN_VERSION = 'V15RetrievalPlan@1' as const;
+export const V15_RETRIEVAL_PLAN_VERSION = 'V15RetrievalRequestPlan@1' as const;
 export const V15_RETRIEVAL_PROFILE = 'v15' as const;
 export const V15_ENTITY_NORMALIZATION_DIGEST =
-  'v15-entity-normalization-ecmascript-tolowercase@1' as const;
+  'v15-entity-normalization-ecmascript-tolowercase-unicode16.0.0@1' as const;
 export const V15_SCHEMA_SEARCH_LIMIT = 10 as const;
 export const V15_EXPANSION_ATTENUATION = 0.3 as const;
 export const V15_EXPANSION_LIMIT = 20 as const;
 
 export type V15RetrievalProfile = typeof V15_RETRIEVAL_PROFILE;
 export type V15SearchNamespace = 'passage' | 'fact' | 'schema';
+export type V15SearchSlotId = V15SearchNamespace;
 
 export interface V15SearchSlot {
+  readonly slotId: V15SearchSlotId;
   readonly namespace: V15SearchNamespace;
   readonly queryVector: readonly number[];
   readonly threshold: number;
@@ -70,6 +72,20 @@ export interface V15PprMaterializationPlan {
   readonly entityLimit: number;
 }
 
+export interface V15PprPolicy {
+  readonly teleportProbability: number;
+  readonly convergenceEpsilon: number;
+  readonly maxIterations: number;
+  readonly hubDegreeThreshold: number;
+  readonly passageLimit: number;
+  readonly entityLimit: number;
+}
+
+export interface V15ExpandedFactSeed {
+  readonly factId: string;
+  readonly score: number;
+}
+
 /**
  * Complete machine-readable policy for exactly one v15 retrieval.
  *
@@ -77,16 +93,18 @@ export interface V15PprMaterializationPlan {
  * expansion.  Keeping that choice explicit prevents the data plane from
  * inventing a default operation.
  */
-export interface V15RetrievalPlan {
+export interface V15RetrievalRequestPlan {
   readonly version: typeof V15_RETRIEVAL_PLAN_VERSION;
   readonly profile: V15RetrievalProfile;
   readonly corpusId: string;
   readonly comparisonMode: boolean;
   readonly contextTokenLimit: number;
   readonly candidateSearch: V15CandidateSearchPlan;
-  readonly factExpansion: V15FactExpansionPlan | null;
-  readonly pprMaterialization: V15PprMaterializationPlan;
+  readonly pprPolicy: V15PprPolicy;
 }
+
+/** @deprecated Use the staged V15RetrievalRequestPlan name. */
+export type V15RetrievalPlan = V15RetrievalRequestPlan;
 
 export interface V15RetrievalPlanOptions {
   readonly comparisonMode?: boolean;
@@ -299,9 +317,9 @@ export function buildV15SearchSlots(
 ): V15SearchSlot[] {
   const vector = [...queryVector];
   return [
-    { namespace: 'passage', queryVector: [...vector], threshold: query.threshold, limit: query.topK },
-    { namespace: 'fact', queryVector: [...vector], threshold: query.threshold, limit: query.topM },
-    { namespace: 'schema', queryVector: [...vector], threshold: query.threshold, limit: V15_SCHEMA_SEARCH_LIMIT },
+    { slotId: 'passage', namespace: 'passage', queryVector: [...vector], threshold: query.threshold, limit: query.topK },
+    { slotId: 'fact', namespace: 'fact', queryVector: [...vector], threshold: query.threshold, limit: query.topM },
+    { slotId: 'schema', namespace: 'schema', queryVector: [...vector], threshold: query.threshold, limit: V15_SCHEMA_SEARCH_LIMIT },
   ];
 }
 
@@ -350,9 +368,8 @@ export function buildV15FactExpansionPlan(
 }
 
 export function buildV15PprMaterializationPlan(
-  query: QueryRequest,
+  policy: V15PprPolicy,
   initialVector: NodeInitializationVector,
-  options: V15RetrievalPlanOptions,
 ): V15PprMaterializationPlan {
   const rawSeeds = Object.entries(initialVector.scores).map(([nodeId, score]) => {
     if (!Number.isFinite(score)) {
@@ -365,43 +382,57 @@ export function buildV15PprMaterializationPlan(
   });
   return {
     seeds: orderV15Seeds(rawSeeds),
-    teleportProbability: options.teleportProbability,
-    convergenceEpsilon: options.convergenceEpsilon,
-    maxIterations: options.maxIterations,
-    hubDegreeThreshold: options.hubDegreeThreshold,
-    passageLimit: query.topK,
-    entityLimit: query.topM,
+    ...policy,
   };
 }
 
-export function buildV15RetrievalPlan(
+/** Shared seed builder used after either legacy or bounded expansion. */
+export function buildV15InitialVector(
+  candidates: FilteredMemoryCandidates,
+  expandedFacts: readonly V15ExpandedFactSeed[] = [],
+): NodeInitializationVector {
+  const scores: Record<string, number> = {};
+  for (const candidate of candidates.facts) scores[`fact:${candidate.item.factId}`] = candidate.similarity;
+  for (const expanded of expandedFacts) {
+    if (!Number.isFinite(expanded.score)) {
+      throw new V15RetrievalPlanValidationError(
+        'INVALID_PLAN',
+        `expanded fact ${expanded.factId} score must be finite`,
+      );
+    }
+    if (scores[`fact:${expanded.factId}`] === undefined) {
+      scores[`fact:${expanded.factId}`] = expanded.score;
+    }
+  }
+  for (const candidate of candidates.passages) scores[`passage:${candidate.item.passageId}`] = candidate.similarity;
+  for (const candidate of candidates.ontology) scores[`schema:${candidate.item.schemaId}`] = candidate.similarity;
+  return { scores, fallbackTriggered: candidates.fallbackRequired };
+}
+
+export function buildV15RetrievalRequestPlan(
   query: QueryRequest,
   queryVector: readonly number[],
-  candidates: FilteredMemoryCandidates,
-  initialVector: NodeInitializationVector,
   options: V15RetrievalPlanOptions,
-): V15RetrievalPlan {
+): V15RetrievalRequestPlan {
   assertV15FeatureProfile(options.featureFlags);
-  if (!candidates || typeof candidates !== 'object') {
-    throw new V15RetrievalPlanValidationError(
-      'INVALID_PLAN',
-      'candidate stage is required before complete v15 plan construction',
-    );
-  }
   const comparisonMode = options.comparisonMode ?? false;
-  const plan: V15RetrievalPlan = {
+  const plan: V15RetrievalRequestPlan = {
     version: V15_RETRIEVAL_PLAN_VERSION,
     profile: V15_RETRIEVAL_PROFILE,
     corpusId: query.corpusId,
     comparisonMode,
     contextTokenLimit: query.contextTokenLimit,
     candidateSearch: { slots: buildV15SearchSlots(query, queryVector) },
-    // Candidate results and the post-expansion initial vector are required
-    // stages.  The helper never fabricates a missing expansion from defaults.
-    factExpansion: buildV15FactExpansionPlan(candidates, comparisonMode),
-    pprMaterialization: buildV15PprMaterializationPlan(query, initialVector, options),
+    pprPolicy: {
+      teleportProbability: options.teleportProbability,
+      convergenceEpsilon: options.convergenceEpsilon,
+      maxIterations: options.maxIterations,
+      hubDegreeThreshold: options.hubDegreeThreshold,
+      passageLimit: query.topK,
+      entityLimit: query.topM,
+    },
   };
-  validateV15RetrievalPlan(plan);
+  validateV15RetrievalRequestPlan(plan);
   return plan;
 }
 
@@ -463,11 +494,23 @@ function validateSeed(value: unknown, path: string): void {
   finiteValue(seed.score, `${path}.score`);
 }
 
-export function validateV15RetrievalPlan(input: unknown): V15RetrievalPlan {
+function validatePprPolicy(ppr: Record<string, unknown>, path: string): void {
+  const teleportProbability = finiteValue(ppr.teleportProbability, `${path}.teleportProbability`);
+  if (teleportProbability < 0 || teleportProbability > 1) invalid(`${path}.teleportProbability must be in [0, 1]`);
+  const convergenceEpsilon = finiteValue(ppr.convergenceEpsilon, `${path}.convergenceEpsilon`);
+  if (convergenceEpsilon <= 0) invalid(`${path}.convergenceEpsilon must be positive`);
+  positiveInteger(ppr.maxIterations, `${path}.maxIterations`);
+  const hubDegreeThreshold = finiteValue(ppr.hubDegreeThreshold, `${path}.hubDegreeThreshold`);
+  if (!Number.isSafeInteger(hubDegreeThreshold) || hubDegreeThreshold < 0) invalid(`${path}.hubDegreeThreshold must be a non-negative safe integer`);
+  positiveInteger(ppr.passageLimit, `${path}.passageLimit`);
+  positiveInteger(ppr.entityLimit, `${path}.entityLimit`);
+}
+
+export function validateV15RetrievalRequestPlan(input: unknown): V15RetrievalRequestPlan {
   const plan = record(input, 'plan');
   exactKeys(plan, [
     'version', 'profile', 'corpusId', 'comparisonMode', 'contextTokenLimit',
-    'candidateSearch', 'factExpansion', 'pprMaterialization',
+    'candidateSearch', 'pprPolicy',
   ], 'plan');
   if (plan.version !== V15_RETRIEVAL_PLAN_VERSION) {
     invalid(`plan.version must be ${V15_RETRIEVAL_PLAN_VERSION}`);
@@ -479,14 +522,16 @@ export function validateV15RetrievalPlan(input: unknown): V15RetrievalPlan {
 
   const candidateSearch = record(plan.candidateSearch, 'plan.candidateSearch');
   exactKeys(candidateSearch, ['slots'], 'plan.candidateSearch');
-  if (!Array.isArray(candidateSearch.slots) || candidateSearch.slots.length === 0) {
-    invalid('plan.candidateSearch.slots must be a non-empty array');
+  if (!Array.isArray(candidateSearch.slots) || candidateSearch.slots.length !== 3) {
+    invalid('plan.candidateSearch.slots must contain passage, fact, and schema exactly once');
   }
+  const expectedSlots: readonly V15SearchSlotId[] = ['passage', 'fact', 'schema'];
   candidateSearch.slots.forEach((entry, index) => {
     const slot = record(entry, `plan.candidateSearch.slots[${index}]`);
-    exactKeys(slot, ['namespace', 'queryVector', 'threshold', 'limit'], `plan.candidateSearch.slots[${index}]`);
-    if (slot.namespace !== 'passage' && slot.namespace !== 'fact' && slot.namespace !== 'schema') {
-      invalid(`plan.candidateSearch.slots[${index}].namespace is unsupported`);
+    exactKeys(slot, ['slotId', 'namespace', 'queryVector', 'threshold', 'limit'], `plan.candidateSearch.slots[${index}]`);
+    const expected = expectedSlots[index];
+    if (slot.slotId !== expected || slot.namespace !== expected) {
+      invalid(`plan.candidateSearch.slots[${index}] must be ${String(expected)}`);
     }
     finiteVector(slot.queryVector, `plan.candidateSearch.slots[${index}].queryVector`);
     const threshold = finiteValue(slot.threshold, `plan.candidateSearch.slots[${index}].threshold`);
@@ -494,56 +539,66 @@ export function validateV15RetrievalPlan(input: unknown): V15RetrievalPlan {
     positiveInteger(slot.limit, `plan.candidateSearch.slots[${index}].limit`);
   });
 
-  if (plan.factExpansion !== null) {
-    const expansion = record(plan.factExpansion, 'plan.factExpansion');
-    exactKeys(expansion, [
-      'seedEntities', 'excludedSeedFactIds', 'attenuation', 'limit', 'normalizationContractDigest',
-    ], 'plan.factExpansion');
-    if (!Array.isArray(expansion.seedEntities)) invalid('plan.factExpansion.seedEntities must be an array');
-    expansion.seedEntities.forEach((entry, index) => {
-      const seed = record(entry, `plan.factExpansion.seedEntities[${index}]`);
-      exactKeys(seed, ['key', 'score'], `plan.factExpansion.seedEntities[${index}]`);
-      stringValue(seed.key, `plan.factExpansion.seedEntities[${index}].key`);
-      const score = finiteValue(seed.score, `plan.factExpansion.seedEntities[${index}].score`);
-      if (score < 0) invalid(`plan.factExpansion.seedEntities[${index}].score must be non-negative`);
-    });
-    if (!Array.isArray(expansion.excludedSeedFactIds)) invalid('plan.factExpansion.excludedSeedFactIds must be an array');
-    expansion.excludedSeedFactIds.forEach((entry, index) => stringValue(entry, `plan.factExpansion.excludedSeedFactIds[${index}]`));
-    const attenuation = finiteValue(expansion.attenuation, 'plan.factExpansion.attenuation');
-    if (attenuation < 0) invalid('plan.factExpansion.attenuation must be non-negative');
-    positiveInteger(expansion.limit, 'plan.factExpansion.limit');
-    stringValue(expansion.normalizationContractDigest, 'plan.factExpansion.normalizationContractDigest');
-  }
+  const ppr = record(plan.pprPolicy, 'plan.pprPolicy');
+  exactKeys(ppr, [
+    'teleportProbability', 'convergenceEpsilon', 'maxIterations',
+    'hubDegreeThreshold', 'passageLimit', 'entityLimit',
+  ], 'plan.pprPolicy');
+  validatePprPolicy(ppr, 'plan.pprPolicy');
 
-  const ppr = record(plan.pprMaterialization, 'plan.pprMaterialization');
+  return input as V15RetrievalRequestPlan;
+}
+
+export function validateV15FactExpansionPlan(input: unknown): V15FactExpansionPlan {
+  const expansion = record(input, 'factExpansion');
+  exactKeys(expansion, [
+    'seedEntities', 'excludedSeedFactIds', 'attenuation', 'limit', 'normalizationContractDigest',
+  ], 'factExpansion');
+  if (!Array.isArray(expansion.seedEntities)) invalid('factExpansion.seedEntities must be an array');
+  expansion.seedEntities.forEach((entry, index) => {
+    const seed = record(entry, `factExpansion.seedEntities[${index}]`);
+    exactKeys(seed, ['key', 'score'], `factExpansion.seedEntities[${index}]`);
+    stringValue(seed.key, `factExpansion.seedEntities[${index}].key`);
+    const score = finiteValue(seed.score, `factExpansion.seedEntities[${index}].score`);
+    if (score < 0) invalid(`factExpansion.seedEntities[${index}].score must be non-negative`);
+  });
+  if (!Array.isArray(expansion.excludedSeedFactIds)) invalid('factExpansion.excludedSeedFactIds must be an array');
+  expansion.excludedSeedFactIds.forEach((entry, index) => stringValue(entry, `factExpansion.excludedSeedFactIds[${index}]`));
+  const attenuation = finiteValue(expansion.attenuation, 'factExpansion.attenuation');
+  if (attenuation < 0) invalid('factExpansion.attenuation must be non-negative');
+  positiveInteger(expansion.limit, 'factExpansion.limit');
+  if (expansion.normalizationContractDigest !== V15_ENTITY_NORMALIZATION_DIGEST) {
+    invalid(`factExpansion.normalizationContractDigest must be ${V15_ENTITY_NORMALIZATION_DIGEST}`);
+  }
+  return input as unknown as V15FactExpansionPlan;
+}
+
+export function validateV15PprMaterializationPlan(input: unknown): V15PprMaterializationPlan {
+  const ppr = record(input, 'pprMaterialization');
   exactKeys(ppr, [
     'seeds', 'teleportProbability', 'convergenceEpsilon', 'maxIterations',
     'hubDegreeThreshold', 'passageLimit', 'entityLimit',
-  ], 'plan.pprMaterialization');
-  if (!Array.isArray(ppr.seeds)) invalid('plan.pprMaterialization.seeds must be an array');
-  ppr.seeds.forEach((entry, index) => validateSeed(entry, `plan.pprMaterialization.seeds[${index}]`));
-  const teleportProbability = finiteValue(ppr.teleportProbability, 'plan.pprMaterialization.teleportProbability');
-  if (teleportProbability < 0 || teleportProbability > 1) invalid('plan.pprMaterialization.teleportProbability must be in [0, 1]');
-  const convergenceEpsilon = finiteValue(ppr.convergenceEpsilon, 'plan.pprMaterialization.convergenceEpsilon');
-  if (convergenceEpsilon <= 0) invalid('plan.pprMaterialization.convergenceEpsilon must be positive');
-  positiveInteger(ppr.maxIterations, 'plan.pprMaterialization.maxIterations');
-  const hubDegreeThreshold = finiteValue(ppr.hubDegreeThreshold, 'plan.pprMaterialization.hubDegreeThreshold');
-  if (!Number.isSafeInteger(hubDegreeThreshold) || hubDegreeThreshold < 0) invalid('plan.pprMaterialization.hubDegreeThreshold must be a non-negative safe integer');
-  positiveInteger(ppr.passageLimit, 'plan.pprMaterialization.passageLimit');
-  positiveInteger(ppr.entityLimit, 'plan.pprMaterialization.entityLimit');
-
-  return input as V15RetrievalPlan;
+  ], 'pprMaterialization');
+  if (!Array.isArray(ppr.seeds)) invalid('pprMaterialization.seeds must be an array');
+  ppr.seeds.forEach((entry, index) => validateSeed(entry, `pprMaterialization.seeds[${index}]`));
+  validatePprPolicy(ppr, 'pprMaterialization');
+  return input as unknown as V15PprMaterializationPlan;
 }
 
-export function assertV15RetrievalPlan(input: unknown): asserts input is V15RetrievalPlan {
-  validateV15RetrievalPlan(input);
+export function assertV15RetrievalRequestPlan(input: unknown): asserts input is V15RetrievalRequestPlan {
+  validateV15RetrievalRequestPlan(input);
 }
 
-export function isV15RetrievalPlan(input: unknown): input is V15RetrievalPlan {
+export function isV15RetrievalRequestPlan(input: unknown): input is V15RetrievalRequestPlan {
   try {
-    validateV15RetrievalPlan(input);
+    validateV15RetrievalRequestPlan(input);
     return true;
   } catch {
     return false;
   }
 }
+
+/** @deprecated staged-plan compatibility aliases. */
+export const validateV15RetrievalPlan = validateV15RetrievalRequestPlan;
+export const assertV15RetrievalPlan = assertV15RetrievalRequestPlan;
+export const isV15RetrievalPlan = isV15RetrievalRequestPlan;

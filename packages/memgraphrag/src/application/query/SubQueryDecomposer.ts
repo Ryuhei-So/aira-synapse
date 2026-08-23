@@ -6,7 +6,12 @@
 
 import type { ILLMProvider } from '../../domain/provider/index.js';
 import type { INodeInitializer, NodeInitializationRequest, NodeInitializationVector } from '../../domain/retrieval/memoryFilter.js';
-import type { IGraphProjection, IPPR, PPRRequest } from '../../domain/retrieval/ppr.js';
+import {
+  DEFAULT_HUB_DEGREE_THRESHOLD,
+  type IGraphProjection,
+  type IPPR,
+  type PPRRequest,
+} from '../../domain/retrieval/ppr.js';
 import { isComparisonQuery, withTimeout } from './query-utils.js';
 
 /** Regex patterns indicating bridge/chain questions */
@@ -121,6 +126,7 @@ export class SubQueryDecomposer {
       teleportProbability: 0.15,
       convergenceEpsilon: 1e-6,
       maxIterations: 50,
+      hubDegreeThreshold: DEFAULT_HUB_DEGREE_THRESHOLD,
       topK: request.query.topK,
       topM: request.query.topM,
     };

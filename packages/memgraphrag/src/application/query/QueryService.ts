@@ -12,6 +12,7 @@ import type {
   IPPR,
   PPRResult,
 } from '../../domain/retrieval/ppr.js';
+import { DEFAULT_HUB_DEGREE_THRESHOLD } from '../../domain/retrieval/ppr.js';
 import type { Fact } from '../../domain/memory/fact.js';
 import type { Passage } from '../../domain/memory/passage.js';
 import type { QueryFeatureFlags } from '../../domain/config/featureFlags.js';
@@ -30,9 +31,9 @@ import { DictionaryContextEnricher } from './DictionaryContextEnricher.js';
 import {
   associateV15RankedFacts,
   associateV15RankedPassages,
-  buildV15RetrievalPlan,
+  buildV15RetrievalRequestPlan,
   unsupportedV15Features,
-  type V15RetrievalPlan,
+  type V15RetrievalRequestPlan,
 } from '../../domain/retrieval/v15Plan.js';
 
 export interface CitationDto {
@@ -116,7 +117,7 @@ export const DEFAULT_HYPER_PARAMS: QueryHyperParams = {
   teleportProbability: 0.5,
   scTemperature: 0.0,
   scSamples: 1,
-  hubDegreeThreshold: 50,
+  hubDegreeThreshold: DEFAULT_HUB_DEGREE_THRESHOLD,
   reasoningEffort: 'high',
   verbosity: 'low',
 };
@@ -224,6 +225,21 @@ export class DefaultQueryService implements QueryService {
     };
   }
 
+  /** Build the bounded static policy before any candidate or snapshot access. */
+  public createBoundedRetrievalRequestPlan(
+    prepared: PreparedQuery,
+    queryVector: readonly number[],
+  ): V15RetrievalRequestPlan {
+    return buildV15RetrievalRequestPlan(prepared.expandedRequest, queryVector, {
+      comparisonMode: prepared.isComparison,
+      featureFlags: this.flags,
+      teleportProbability: this.hp.teleportProbability,
+      convergenceEpsilon: DEFAULT_PPR_CONVERGENCE_EPSILON,
+      maxIterations: DEFAULT_PPR_MAX_ITERATIONS,
+      hubDegreeThreshold: this.hp.hubDegreeThreshold,
+    });
+  }
+
   /** Execute retrieval using pre-processed query. No normalization/expansion. */
   public async retrievePrepared(
     prepared: PreparedQuery,
@@ -247,28 +263,16 @@ export class DefaultQueryService implements QueryService {
       teleportProbability: this.hp.teleportProbability,
       convergenceEpsilon: DEFAULT_PPR_CONVERGENCE_EPSILON,
       maxIterations: DEFAULT_PPR_MAX_ITERATIONS,
+      hubDegreeThreshold: this.hp.hubDegreeThreshold,
       topK: expandedRequest.topK,
       topM: expandedRequest.topM,
     }, this.dependencies.projection);
 
     const context = await this.dependencies.contextBuilder.build(expandedRequest, ranking);
 
-    const retrievalPlan: V15RetrievalPlan | undefined = candidates.queryVector.length > 0
+    const retrievalPlan: V15RetrievalRequestPlan | undefined = candidates.queryVector.length > 0
       && unsupportedV15Features(this.flags).length === 0
-      ? buildV15RetrievalPlan(
-        expandedRequest,
-        candidates.queryVector,
-        candidates,
-        initialVector,
-        {
-          comparisonMode: prepared.isComparison,
-          featureFlags: this.flags,
-          teleportProbability: this.hp.teleportProbability,
-          convergenceEpsilon: DEFAULT_PPR_CONVERGENCE_EPSILON,
-          maxIterations: DEFAULT_PPR_MAX_ITERATIONS,
-          hubDegreeThreshold: this.hp.hubDegreeThreshold,
-        },
-      )
+      ? this.createBoundedRetrievalRequestPlan(prepared, candidates.queryVector)
       : undefined;
 
     // Build RankedPassage[] and RankedFact[] from PPR results

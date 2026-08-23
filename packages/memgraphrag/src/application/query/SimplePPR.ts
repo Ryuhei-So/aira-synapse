@@ -18,10 +18,11 @@ import {
 } from '../../domain/retrieval/v15Plan.js';
 
 export class SimplePPR implements IPPR {
-  constructor(private readonly hubDegreeThreshold: number = 50) {}
-
   public async run(request: PPRRequest, projection: IGraphProjection): Promise<PPRResult> {
-    const { corpusId, initialVector, teleportProbability, convergenceEpsilon, maxIterations, topK, topM } = request;
+    const {
+      corpusId, initialVector, teleportProbability, convergenceEpsilon,
+      maxIterations, hubDegreeThreshold, topK, topM,
+    } = request;
 
     // Build adjacency list from graph
     const adjacency = new Map<string, { target: string; weight: number }[]>();
@@ -58,13 +59,12 @@ export class SimplePPR implements IPPR {
     // Fact and passage nodes are preserved — they carry specific entity info needed
     // for comparison tasks.
     const hubDamping = new Float64Array(n);
-    const HUB_DEGREE_THRESHOLD = this.hubDegreeThreshold;
     for (let i = 0; i < n; i++) {
       const nodeId = nodeList[i]!;
       const outDeg = adjacency.get(nodeId)?.length ?? 0;
       const inDeg = inDegree.get(nodeId) ?? 0;
       const totalDeg = outDeg + inDeg;
-      if (nodeId.startsWith('schema:') && totalDeg > HUB_DEGREE_THRESHOLD) {
+      if (nodeId.startsWith('schema:') && totalDeg > hubDegreeThreshold) {
         hubDamping[i] = 1.0 / Math.log2(totalDeg + 2);
       } else {
         hubDamping[i] = 1.0;

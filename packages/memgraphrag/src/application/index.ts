@@ -153,6 +153,7 @@ export type {
   PprMaterializeBoundedResponse,
   PprMaterializeBoundedPort,
   BoundedCandidateHit,
+  CandidateSearchSlotResult,
   BoundedFactExpansionHit,
   BoundedRankedPassage,
   BoundedRankedFact,

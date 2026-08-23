@@ -9,13 +9,21 @@
 import type { Fact } from '../memory/fact.js';
 import type { Passage } from '../memory/passage.js';
 import type { Schema } from '../memory/schema.js';
+import type { FilteredMemoryCandidates, MemoryCandidate } from './memoryFilter.js';
 import {
-  assertV15RetrievalPlan,
+  assertV15RetrievalRequestPlan,
+  buildV15FactExpansionPlan,
+  buildV15InitialVector,
+  buildV15PprMaterializationPlan,
+  compareV15ScoreThenId,
+  validateV15FactExpansionPlan,
+  validateV15PprMaterializationPlan,
   V15_RETRIEVAL_PLAN_VERSION,
   type V15FactExpansionPlan,
   type V15PprMaterializationPlan,
-  type V15RetrievalPlan,
+  type V15RetrievalRequestPlan,
   type V15SearchSlot,
+  type V15SearchSlotId,
 } from './v15Plan.js';
 
 export const CANDIDATE_SEARCH_BOUNDED_V1 = 'candidate_search_bounded@1' as const;
@@ -30,7 +38,8 @@ export type BoundedSessionErrorCode =
   | 'INVALID_GENERATION'
   | 'GENERATION_MISMATCH'
   | 'SESSION_MISMATCH'
-  | 'SESSION_BUSY';
+  | 'SESSION_BUSY'
+  | 'INVALID_RESPONSE';
 
 export class BoundedGenerationSessionError extends Error {
   public readonly code: BoundedSessionErrorCode;
@@ -92,12 +101,27 @@ export interface BoundedCandidateHit<TItem> {
   readonly item: TItem;
 }
 
+export type CandidateSearchSlotResult =
+  | {
+    readonly slotId: 'passage';
+    readonly namespace: 'passage';
+    readonly hits: readonly BoundedCandidateHit<Passage>[];
+  }
+  | {
+    readonly slotId: 'fact';
+    readonly namespace: 'fact';
+    readonly hits: readonly BoundedCandidateHit<Fact>[];
+  }
+  | {
+    readonly slotId: 'schema';
+    readonly namespace: 'schema';
+    readonly hits: readonly BoundedCandidateHit<Schema>[];
+  };
+
 export interface CandidateSearchBoundedResponse {
   readonly generation: Generation;
   readonly sessionId: string;
-  readonly passages: readonly BoundedCandidateHit<Passage>[];
-  readonly facts: readonly BoundedCandidateHit<Fact>[];
-  readonly schemas: readonly BoundedCandidateHit<Schema>[];
+  readonly slots: readonly CandidateSearchSlotResult[];
 }
 
 export interface CandidateSearchBoundedPort {
@@ -189,7 +213,7 @@ export interface GenerationSessionTransport extends BoundedRetrievalDataPlane {
 }
 
 export interface GenerationSession {
-  run(plan: V15RetrievalPlan): Promise<BoundedRetrievalResult>;
+  run(plan: V15RetrievalRequestPlan): Promise<BoundedRetrievalResult>;
 }
 
 export interface GenerationSessionClock {
@@ -253,6 +277,156 @@ function validateOperationEnvelope(
   }
 }
 
+function invalidResponse(message: string): never {
+  throw new BoundedGenerationSessionError('INVALID_RESPONSE', message);
+}
+
+function objectIdentity(
+  namespace: V15SearchSlotId,
+  item: Passage | Fact | Schema,
+): { id: string; corpusId: string } {
+  if (typeof item !== 'object' || item === null) {
+    return invalidResponse(`candidate ${namespace} hit has no domain object`);
+  }
+  if (namespace === 'passage' && 'passageId' in item) return { id: item.passageId, corpusId: item.corpusId };
+  if (namespace === 'fact' && 'factId' in item) return { id: item.factId, corpusId: item.corpusId };
+  if (namespace === 'schema' && 'schemaId' in item) return { id: item.schemaId, corpusId: item.corpusId };
+  return invalidResponse(`candidate ${namespace} hit has the wrong domain object kind`);
+}
+
+function validateCandidateSearchResponse(
+  plan: V15RetrievalRequestPlan,
+  response: CandidateSearchBoundedResponse,
+): FilteredMemoryCandidates {
+  if (!Array.isArray(response.slots) || response.slots.length !== plan.candidateSearch.slots.length) {
+    invalidResponse('candidate response slot cardinality does not match the request');
+  }
+  const passages: MemoryCandidate<Passage>[] = [];
+  const facts: MemoryCandidate<Fact>[] = [];
+  const ontology: MemoryCandidate<Schema>[] = [];
+
+  for (let slotIndex = 0; slotIndex < plan.candidateSearch.slots.length; slotIndex += 1) {
+    const requested = plan.candidateSearch.slots[slotIndex]!;
+    const actual = response.slots[slotIndex]!;
+    if (actual.slotId !== requested.slotId || actual.namespace !== requested.namespace) {
+      invalidResponse(`candidate response slot ${slotIndex} does not match ${requested.slotId}`);
+    }
+    if (!Array.isArray(actual.hits) || actual.hits.length > requested.limit) {
+      invalidResponse(`candidate response slot ${requested.slotId} exceeds its result limit`);
+    }
+    const seen = new Set<string>();
+    let previous: BoundedCandidateHit<Passage | Fact | Schema> | undefined;
+    for (const hit of actual.hits as readonly BoundedCandidateHit<Passage | Fact | Schema>[]) {
+      if (typeof hit.id !== 'string' || hit.id.length === 0 || !Number.isFinite(hit.score)) {
+        invalidResponse(`candidate response slot ${requested.slotId} contains an invalid id or score`);
+      }
+      if (hit.score < -1 || hit.score > 1 || hit.score < requested.threshold) {
+        invalidResponse(`candidate response slot ${requested.slotId} contains a score outside its contract`);
+      }
+      if (seen.has(hit.id)) invalidResponse(`candidate response slot ${requested.slotId} contains duplicate id ${hit.id}`);
+      seen.add(hit.id);
+      if (previous && compareV15ScoreThenId(previous, hit) >= 0) {
+        invalidResponse(`candidate response slot ${requested.slotId} is not strictly score/id ordered`);
+      }
+      previous = hit;
+      const identity = objectIdentity(requested.namespace, hit.item);
+      if (hit.id !== `${requested.namespace}:${identity.id}` || identity.corpusId !== plan.corpusId) {
+        invalidResponse(`candidate response hit ${hit.id} does not match its object or corpus`);
+      }
+      if (actual.namespace === 'passage') {
+        passages.push({ layer: 'passage', item: hit.item as Passage, similarity: hit.score });
+      } else if (actual.namespace === 'fact') {
+        facts.push({ layer: 'fact', item: hit.item as Fact, similarity: hit.score });
+      } else {
+        ontology.push({ layer: 'ontology', item: hit.item as Schema, similarity: hit.score });
+      }
+    }
+  }
+  return {
+    passages,
+    facts,
+    ontology,
+    expandedTerms: [],
+    fallbackRequired: false,
+    queryVector: [...plan.candidateSearch.slots[0]!.queryVector],
+  };
+}
+
+function validateFactExpansionResponse(
+  corpusId: string,
+  plan: V15FactExpansionPlan,
+  response: FactExpandBoundedResponse,
+): void {
+  if (!Array.isArray(response.facts) || response.facts.length > plan.limit) {
+    invalidResponse('fact expansion response exceeds its result limit');
+  }
+  let previous: { id: string; score: number } | undefined;
+  const seen = new Set<string>();
+  for (const hit of response.facts) {
+    if (hit.factId !== hit.fact.factId || hit.fact.corpusId !== corpusId || !Number.isFinite(hit.score)) {
+      invalidResponse(`fact expansion hit ${hit.factId} does not match its object, corpus, or score`);
+    }
+    if (seen.has(hit.factId)) invalidResponse(`fact expansion contains duplicate fact ${hit.factId}`);
+    seen.add(hit.factId);
+    const current = { id: hit.factId, score: hit.score };
+    if (previous && compareV15ScoreThenId(previous, current) >= 0) {
+      invalidResponse('fact expansion response is not strictly score/id ordered');
+    }
+    previous = current;
+  }
+}
+
+function validatePprMaterializationResponse(
+  corpusId: string,
+  plan: V15PprMaterializationPlan,
+  response: PprMaterializeBoundedResponse,
+): void {
+  if (!Array.isArray(response.rankedPassages) || response.rankedPassages.length > plan.passageLimit) {
+    invalidResponse('PPR passage response exceeds its result limit');
+  }
+  if (!Array.isArray(response.rankedFacts) || response.rankedFacts.length > plan.entityLimit) {
+    invalidResponse('PPR fact response exceeds its result limit');
+  }
+
+  const validateRanking = <T extends Passage | Fact>(
+    ranking: readonly { readonly nodeId: string; readonly score: number; readonly rank: number; readonly passage?: Passage; readonly fact?: Fact }[],
+    namespace: 'passage' | 'fact',
+  ): void => {
+    let previous: { id: string; score: number } | undefined;
+    const seen = new Set<string>();
+    ranking.forEach((entry, index) => {
+      const item = (namespace === 'passage' ? entry.passage : entry.fact) as T | undefined;
+      if (!item || !Number.isFinite(entry.score) || entry.rank !== index + 1) {
+        invalidResponse(`PPR ${namespace} response has an invalid score, rank, or object`);
+      }
+      const identity = objectIdentity(namespace, item);
+      if (entry.nodeId !== `${namespace}:${identity.id}` || identity.corpusId !== corpusId) {
+        invalidResponse(`PPR ${namespace} hit ${entry.nodeId} does not match its object or corpus`);
+      }
+      if (seen.has(entry.nodeId)) invalidResponse(`PPR ${namespace} response contains duplicate ${entry.nodeId}`);
+      seen.add(entry.nodeId);
+      const current = { id: entry.nodeId, score: entry.score };
+      if (previous && compareV15ScoreThenId(previous, current) >= 0) {
+        invalidResponse(`PPR ${namespace} response is not strictly score/id ordered`);
+      }
+      previous = current;
+    });
+  };
+
+  validateRanking(response.rankedPassages, 'passage');
+  validateRanking(response.rankedFacts, 'fact');
+  if (
+    !Number.isSafeInteger(response.iterations)
+    || response.iterations < 0
+    || response.iterations > plan.maxIterations
+    || typeof response.converged !== 'boolean'
+    || !Number.isFinite(response.l1Delta)
+    || response.l1Delta < 0
+  ) {
+    invalidResponse('PPR response metrics are outside the request contract');
+  }
+}
+
 /**
  * One exclusive, exact-generation retrieval session.
  *
@@ -284,10 +458,10 @@ export class BoundedGenerationSession implements GenerationSession {
     this.clock = options.clock ?? SYSTEM_CLOCK;
   }
 
-  public async run(plan: V15RetrievalPlan): Promise<BoundedRetrievalResult> {
+  public async run(plan: V15RetrievalRequestPlan): Promise<BoundedRetrievalResult> {
     // Policy validation deliberately precedes acquisition and every data call.
     // An unsupported profile therefore cannot trigger a native/owner request.
-    assertV15RetrievalPlan(plan);
+    assertV15RetrievalRequestPlan(plan);
     if (this.active) {
       throw new BoundedGenerationSessionError(
         'SESSION_BUSY',
@@ -322,25 +496,36 @@ export class BoundedGenerationSession implements GenerationSession {
         slots: plan.candidateSearch.slots,
       });
       validateOperationEnvelope(lease, candidateSearch, CANDIDATE_SEARCH_BOUNDED_V1);
+      const candidates = validateCandidateSearchResponse(plan, candidateSearch);
 
       let factExpansion: FactExpandBoundedResponse | null = null;
-      if (plan.factExpansion !== null) {
+      const factExpansionPlan = buildV15FactExpansionPlan(candidates, plan.comparisonMode);
+      if (factExpansionPlan !== null) {
+        validateV15FactExpansionPlan(factExpansionPlan);
         lease = await this.renew(lease);
         factExpansion = await this.transport.factExpandBounded({
           generation: lease.generation,
           corpusId: plan.corpusId,
-          plan: plan.factExpansion,
+          plan: factExpansionPlan,
         });
         validateOperationEnvelope(lease, factExpansion, FACT_EXPAND_BOUNDED_V1);
+        validateFactExpansionResponse(plan.corpusId, factExpansionPlan, factExpansion);
       }
 
+      const initialVector = buildV15InitialVector(
+        candidates,
+        factExpansion?.facts.map((hit) => ({ factId: hit.factId, score: hit.score })) ?? [],
+      );
+      const pprPlan = buildV15PprMaterializationPlan(plan.pprPolicy, initialVector);
+      validateV15PprMaterializationPlan(pprPlan);
       lease = await this.renew(lease);
       const pprMaterialization = await this.transport.pprMaterializeBounded({
         generation: lease.generation,
         corpusId: plan.corpusId,
-        plan: plan.pprMaterialization,
+        plan: pprPlan,
       });
       validateOperationEnvelope(lease, pprMaterialization, PPR_MATERIALIZE_BOUNDED_V1);
+      validatePprMaterializationResponse(plan.corpusId, pprPlan, pprMaterialization);
 
       // Stop scheduling and await any heartbeat first.  Only then perform the
       // one explicit final renewal/validation, so no timer renewal can race
