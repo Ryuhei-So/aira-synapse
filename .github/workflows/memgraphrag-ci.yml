@@ -113,6 +113,9 @@ jobs:
       - run: npm ci
       - run: npm run test:coverage -- --fileParallelism=false --exclude tests/unit/infrastructure/config/resolveConfigFromEnv.test.ts
         working-directory: packages/memgraphrag
+      - name: Verify coverage ratchet
+        run: node scripts/coverage-ratchet.mjs verify coverage/coverage-summary.json ../../.github/memgraphrag-coverage-baseline.json
+        working-directory: packages/memgraphrag
       - name: Run config path test with a deterministic fixture
         working-directory: packages/memgraphrag
         run: |

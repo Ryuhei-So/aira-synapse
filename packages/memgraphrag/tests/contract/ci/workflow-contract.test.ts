@@ -76,4 +76,11 @@ describe('TASK-MG-004: CI workflow contract', () => {
       .map((s) => s.run);
     expect(covRuns.some((r) => r?.includes('test:coverage'))).toBe(true);
   });
+
+  it('should require the monotonic coverage ratchet after coverage generation', () => {
+    const covRuns = jobs['coverage']!.steps
+      .filter((s) => s.run)
+      .map((s) => s.run);
+    expect(covRuns.some((r) => r?.includes('coverage-ratchet.mjs verify'))).toBe(true);
+  });
 });

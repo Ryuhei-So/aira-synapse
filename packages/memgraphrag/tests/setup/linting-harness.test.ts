@@ -32,12 +32,12 @@ describe('TASK-MG-002: ESLint and test harness', () => {
     expect(typeof doubles.createPartialMock).toBe('function');
   });
 
-  it('should have coverage thresholds in vitest.config.ts', () => {
+  it('should configure the coverage reporters without builtin thresholds', () => {
     const content = readFileSync(
       resolve(PKG_ROOT, 'vitest.config.ts'),
       'utf-8',
     );
-    expect(content).toContain('thresholds');
-    expect(content).toContain('80');
+    expect(content).toContain("reporter: ['text', 'json-summary']");
+    expect(content).not.toContain('thresholds');
   });
 });
