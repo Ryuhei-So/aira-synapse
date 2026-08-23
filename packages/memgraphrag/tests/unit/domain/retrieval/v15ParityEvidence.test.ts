@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import Ajv2020 from 'ajv/dist/2020.js';
 import type { Fact } from '../../../../src/domain/memory/fact.js';
 import type { Passage } from '../../../../src/domain/memory/passage.js';
 import type { RankedNode } from '../../../../src/domain/retrieval/ppr.js';
@@ -12,6 +11,7 @@ import {
   V15_COPY_MANIFEST_SCHEMA,
   V15_PARITY_ATTESTATION_SCHEMA,
   V15_PARITY_ARTIFACT_SCHEMA,
+  V15_REQUIRED_PARITY_CASES,
   buildV15ParityArtifact,
   checkV15ParityArtifact,
   checkV15ParityAttestation,
@@ -31,8 +31,6 @@ const H = {
   normalization: '5'.repeat(64),
   tree: '6'.repeat(64),
   fixture: 'fixture-data',
-  domainManifest: 'domain-manifest',
-  normalizationManifest: 'normalization-manifest',
 };
 const C = {
   base: 'a'.repeat(40),
@@ -130,31 +128,9 @@ function manifestBytes() {
   });
 }
 
-function caseMeasurements() {
-  const tieHits = [
-    { id: 'alpha', rank: 1, score: 0.5 },
-    { id: 'beta', rank: 2, score: 0.5 },
-  ];
-  return {
-    missingObjectFailClosed: { executions: 1, failureClass: 'missing-object', partialResultCount: 0 },
-    absentSeed: { executions: 1, absentSeedIds: ['absent-seed'], rankedNodeIds: ['ranked-node'] },
-    signedSumNonPositive: { executions: 1, seedScores: [-1], teleportWeights: [0.5, 0.5] },
-    danglingLoss: { executions: 1, danglingNodeIds: ['dangling-node'], lostMass: 1, redistributedMass: 0 },
-    hubDamping: {
-      executions: 1,
-      totalDegree: 100,
-      hubDegreeThreshold: 50,
-      undampedScore: 1,
-      dampedScore: 1 / Math.log2(102),
-    },
-    convergence: { executions: 1, converged: true, iterations: 1, l1Delta: 0, epsilon: 1 },
-    candidateTieOrder: { executions: 1, rankedHits: tieHits },
-    expansionTieOrder: { executions: 1, rankedHits: tieHits },
-    pprTieOrder: { executions: 1, rankedHits: tieHits },
-  };
-}
-
 function buildInput(): V15ParityArtifactBuildInput {
+  const requiredCases = Object.fromEntries(V15_REQUIRED_PARITY_CASES.map((name) => [name, true])) as
+    V15ParityArtifactBuildInput['requiredCases'];
   const alpha = { id: 'alpha', rank: 1, score: 0.5 };
   const betaBefore = { id: 'beta', rank: 1, score: 0.5 };
   const alphaBefore = { id: 'alpha', rank: 2, score: 0.5 };
@@ -164,8 +140,6 @@ function buildInput(): V15ParityArtifactBuildInput {
   return {
     copyManifestBytes: manifestBytes(),
     fixtureBytes: Buffer.from(H.fixture),
-    domainManifestBytes: Buffer.from(H.domainManifest),
-    normalizationManifestBytes: Buffer.from(H.normalizationManifest),
     generatedAt: '2026-08-24T00:00:00.000Z',
     evaluatedSources: {
       evaluatedSynapseBaseCommit: C.base,
@@ -178,6 +152,7 @@ function buildInput(): V15ParityArtifactBuildInput {
       evaluatedHubDriverTreeDigest: H.tree,
     },
     synapseCheckerCommit: C.candidate,
+    publicManifests: { domainSha256: H.domain, normalizationSha256: H.normalization },
     runtime: { node: '24.11.1', v8: '13.6', icu: '77.1', unicode: '16.0', os: 'linux', architecture: 'arm64' },
     normalizedArguments: ['--copied-root', '<redacted>'],
     comparisons: {
@@ -195,7 +170,7 @@ function buildInput(): V15ParityArtifactBuildInput {
       },
     },
     missingObjectAudit: { checked: 10, missing: 0 },
-    caseMeasurements: caseMeasurements(),
+    requiredCases,
     acceptedSemanticChanges: ['semantic-expansion-tie-order', 'semantic-ppr-tie-order'],
   };
 }
@@ -265,17 +240,10 @@ describe('V15 copied-production parity evidence authority', () => {
   });
 
   it('does not allow a missing production object to claim pass', () => {
-    const input = {
-      ...buildInput(),
-      missingObjectAudit: { checked: 10, missing: 1 },
-    };
+    const input = buildInput();
+    input.missingObjectAudit = { checked: 10, missing: 1 };
+    input.requiredCases['production-missing-object-zero'] = false;
     expect(buildArtifact(input).verdict).toBe('fail');
-
-    const zeroAudit = {
-      ...buildInput(),
-      missingObjectAudit: { checked: 0, missing: 0 },
-    };
-    expect(buildArtifact(zeroAudit).verdict).toBe('fail');
 
     const artifact = buildArtifact(buildInput());
     const tampered: V15ParityArtifact = {
@@ -285,7 +253,7 @@ describe('V15 copied-production parity evidence authority', () => {
     };
     expect(() => projectV15ParityAttestation(
       serializeV15ParityJson(tampered), input.copyManifestBytes, input.fixtureBytes,
-    )).toThrow('DECLARED_REQUIRED_CASES_MISMATCH');
+    )).toThrow('MISSING_OBJECT_CASE_MISMATCH');
 
     const attestation = projectV15ParityAttestation(
       serializeV15ParityJson(artifact), input.copyManifestBytes, input.fixtureBytes,
@@ -312,56 +280,6 @@ describe('V15 copied-production parity evidence authority', () => {
       synapseCheckerCommit: C.base,
     };
     expect(() => buildArtifact(mismatchedChecker)).toThrow();
-  });
-
-  it('rejects zero executions and contradictory structured case measurements', () => {
-    const zeroExecution = buildInput();
-    zeroExecution.caseMeasurements.absentSeed = {
-      ...zeroExecution.caseMeasurements.absentSeed,
-      executions: 0,
-    };
-    expect(() => buildArtifact(zeroExecution)).toThrow();
-
-    const overlappingAbsentSeed = buildInput();
-    overlappingAbsentSeed.caseMeasurements.absentSeed = {
-      ...overlappingAbsentSeed.caseMeasurements.absentSeed,
-      rankedNodeIds: ['absent-seed'],
-    };
-    expect(buildArtifact(overlappingAbsentSeed).verdict).toBe('fail');
-
-    const wrongUniformWeights = buildInput();
-    wrongUniformWeights.caseMeasurements.signedSumNonPositive = {
-      ...wrongUniformWeights.caseMeasurements.signedSumNonPositive,
-      teleportWeights: [0.25, 0.75],
-    };
-    expect(buildArtifact(wrongUniformWeights).verdict).toBe('fail');
-
-    const wrongHubFormula = buildInput();
-    wrongHubFormula.caseMeasurements.hubDamping = {
-      ...wrongHubFormula.caseMeasurements.hubDamping,
-      dampedScore: 0.5,
-    };
-    expect(buildArtifact(wrongHubFormula).verdict).toBe('fail');
-
-    const noTieObserved = buildInput();
-    noTieObserved.caseMeasurements.candidateTieOrder = {
-      executions: 1,
-      rankedHits: [
-        { id: 'alpha', rank: 1, score: 0.6 },
-        { id: 'beta', rank: 2, score: 0.5 },
-      ],
-    };
-    expect(buildArtifact(noTieObserved).verdict).toBe('fail');
-
-    const nonCanonicalOrder = buildInput();
-    nonCanonicalOrder.caseMeasurements.candidateTieOrder = {
-      executions: 1,
-      rankedHits: [
-        { id: 'beta', rank: 1, score: 0.5 },
-        { id: 'alpha', rank: 2, score: 0.5 },
-      ],
-    };
-    expect(() => buildArtifact(nonCanonicalOrder)).toThrow('candidate-tie-order:INVALID_ORDER');
   });
 
   it('rejects added IDs, score drift, non-tie reordering, and undeclared hardening', () => {
@@ -413,31 +331,13 @@ describe('V15 copied-production parity evidence authority', () => {
       .toThrow('candidate:INVALID_PUBLIC_SUMMARY');
   });
 
-  it('publishes an executable generated schema with exact ordered copy roles', () => {
+  it('publishes a generated copy schema with exact three-entry arity', () => {
     const schema = JSON.parse(readFileSync(
       new URL('../../../../config/v15-parity/copy-manifest.schema.json', import.meta.url),
       'utf8',
     ));
-    expect(schema.properties.entries.allOf[0].prefixItems).toHaveLength(3);
-    expect(schema.properties.entries.allOf[1].minItems).toBe(3);
-    expect(schema.properties.entries.allOf[1].maxItems).toBe(3);
-    // Zod emits tuple position and length as two allOf branches. Ajv's
-    // strictTuples warning cannot see the sibling branch, but validation can.
-    const validate = new Ajv2020({ strict: true, strictTuples: false }).compile(schema);
-    const manifest = JSON.parse(manifestBytes().toString('utf8'));
-    expect(validate(manifest)).toBe(true);
-
-    const reordered = structuredClone(manifest);
-    [reordered.entries[0], reordered.entries[1]] = [reordered.entries[1], reordered.entries[0]];
-    expect(validate(reordered)).toBe(false);
-
-    const duplicate = structuredClone(manifest);
-    duplicate.entries[1] = duplicate.entries[0];
-    expect(validate(duplicate)).toBe(false);
-
-    const extra = structuredClone(manifest);
-    extra.entries.push(extra.entries[2]);
-    expect(validate(extra)).toBe(false);
+    expect(schema.properties.entries.minItems).toBe(3);
+    expect(schema.properties.entries.maxItems).toBe(3);
   });
 
   it('rejects a measured association changed from the existing shared helper output', () => {

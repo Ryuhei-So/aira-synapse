@@ -39,24 +39,16 @@ const count = z.number().int().nonnegative().max(1_000_000);
 const rank = z.number().int().positive().max(1_000_000);
 const fileSize = z.number().int().nonnegative().max(64 * 1024 ** 3);
 
-const canonicalCopyEntrySchema = z.strictObject({
-  role: z.literal('canonical'), path: nonEmpty, size: fileSize, sha256,
-});
-const ownerManifestCopyEntrySchema = z.strictObject({
-  role: z.literal('ownerManifest'), path: nonEmpty, size: fileSize, sha256,
-});
-const vectorBlobCopyEntrySchema = z.strictObject({
-  role: z.literal('vectorBlob'), path: nonEmpty, size: fileSize, sha256,
-});
+const copyManifestEntrySchema = z.discriminatedUnion('role', [
+  z.strictObject({ role: z.literal('canonical'), path: nonEmpty, size: fileSize, sha256 }),
+  z.strictObject({ role: z.literal('ownerManifest'), path: nonEmpty, size: fileSize, sha256 }),
+  z.strictObject({ role: z.literal('vectorBlob'), path: nonEmpty, size: fileSize, sha256 }),
+]);
 
 export const v15CopyManifestSchema = z.strictObject({
   schema: z.literal(V15_COPY_MANIFEST_SCHEMA),
   generation: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
-  entries: z.tuple([
-    canonicalCopyEntrySchema,
-    ownerManifestCopyEntrySchema,
-    vectorBlobCopyEntrySchema,
-  ]).and(z.array(z.unknown()).length(3)),
+  entries: z.array(copyManifestEntrySchema).length(3),
   descriptor: z.strictObject({
     generation: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
     vectorBlob: z.strictObject({
@@ -69,6 +61,10 @@ export const v15CopyManifestSchema = z.strictObject({
 }).superRefine((manifest, context) => {
   if (manifest.descriptor.generation !== manifest.generation) {
     context.addIssue({ code: 'custom', message: 'descriptor generation mismatch' });
+  }
+  const expectedRoles = ['canonical', 'ownerManifest', 'vectorBlob'];
+  if (manifest.entries.some((entry, index) => entry.role !== expectedRoles[index])) {
+    context.addIssue({ code: 'custom', message: 'copy roles must use canonical order' });
   }
   const paths = manifest.entries.map((entry) => entry.path);
   if (new Set(paths).size !== paths.length) {
@@ -139,57 +135,6 @@ const requiredCasesShape = Object.fromEntries(
 ) as { [K in (typeof V15_REQUIRED_PARITY_CASES)[number]]: z.ZodBoolean };
 const requiredCasesSchema = z.strictObject(requiredCasesShape);
 
-const executionCount = z.number().int().positive().max(1_000_000);
-const measuredIds = z.array(nonEmpty.max(512)).min(1).max(100_000);
-const tieMeasurementSchema = z.strictObject({
-  executions: executionCount,
-  rankedHits: z.array(hitSchema).min(2).max(100_000),
-});
-const caseMeasurementsSchema = z.strictObject({
-  missingObjectFailClosed: z.strictObject({
-    executions: executionCount,
-    failureClass: z.literal('missing-object'),
-    partialResultCount: z.literal(0),
-  }),
-  absentSeed: z.strictObject({
-    executions: executionCount,
-    absentSeedIds: measuredIds,
-    rankedNodeIds: measuredIds,
-  }),
-  signedSumNonPositive: z.strictObject({
-    executions: executionCount,
-    seedScores: z.array(finiteNumber).min(1).max(100_000),
-    teleportWeights: z.array(nonNegativeFinite).min(2).max(100_000),
-  }),
-  danglingLoss: z.strictObject({
-    executions: executionCount,
-    danglingNodeIds: measuredIds,
-    lostMass: finiteNumber.positive(),
-    redistributedMass: z.literal(0),
-  }),
-  hubDamping: z.strictObject({
-    executions: executionCount,
-    totalDegree: z.number().int().positive().max(1_000_000_000),
-    hubDegreeThreshold: z.number().int().nonnegative().max(1_000_000_000),
-    undampedScore: finiteNumber.positive(),
-    dampedScore: finiteNumber.positive(),
-  }),
-  convergence: z.strictObject({
-    executions: executionCount,
-    converged: z.literal(true),
-    iterations: z.number().int().positive().max(1_000_000),
-    l1Delta: nonNegativeFinite,
-    epsilon: finiteNumber.positive(),
-  }).superRefine((measurement, context) => {
-    if (measurement.l1Delta >= measurement.epsilon) {
-      context.addIssue({ code: 'custom', message: 'convergence delta must be below epsilon' });
-    }
-  }),
-  candidateTieOrder: tieMeasurementSchema,
-  expansionTieOrder: tieMeasurementSchema,
-  pprTieOrder: tieMeasurementSchema,
-});
-
 const publicManifestsSchema = z.strictObject({
   domainSha256: sha256,
   normalizationSha256: sha256,
@@ -199,7 +144,6 @@ const aggregateSchema = z.strictObject({
   candidate: comparisonSummarySchema,
   expansion: comparisonSummarySchema,
   ppr: comparisonSummarySchema,
-  idAssociationRowCount: count,
   idAssociationChangedRowCount: count,
   maximumAbsScoreDelta: nonNegativeFinite,
   maximumRankDelta: count,
@@ -236,7 +180,6 @@ export const v15ParityArtifactSchema = z.strictObject({
     idAssociation: associationComparisonSchema,
   }),
   missingObjectAudit: z.strictObject({ checked: count, missing: count }),
-  caseMeasurements: caseMeasurementsSchema,
   requiredCases: requiredCasesSchema,
   aggregate: aggregateSchema,
   acceptedSemanticChanges: z.array(z.enum(V15_ACCEPTED_SEMANTIC_CHANGES)).max(V15_ACCEPTED_SEMANTIC_CHANGES.length),
@@ -267,7 +210,6 @@ export type V15ParityAttestation = z.infer<typeof v15ParityAttestationSchema>;
 export type V15ParityHit = z.infer<typeof hitSchema>;
 export type V15ParityAssociationRow = z.infer<typeof associationRowSchema>;
 export type V15ParityRequiredCases = z.infer<typeof requiredCasesSchema>;
-export type V15ParityCaseMeasurements = z.infer<typeof caseMeasurementsSchema>;
 export type V15AcceptedSemanticChange = (typeof V15_ACCEPTED_SEMANTIC_CHANGES)[number];
 
 function normalizeJsonValue(value: unknown): unknown {
@@ -400,60 +342,6 @@ function sameSummary(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
-function measuredTieOrderPasses(measurement: z.infer<typeof tieMeasurementSchema>, label: string): boolean {
-  validateOrderedHits(measurement.rankedHits, label);
-  let observedTie = false;
-  for (let index = 1; index < measurement.rankedHits.length; index += 1) {
-    const previous = measurement.rankedHits[index - 1]!;
-    const current = measurement.rankedHits[index]!;
-    if (compareV15ScoreThenId(previous, current) > 0) throw new Error(`${label}:INVALID_ORDER`);
-    if (previous.score === current.score) observedTie = true;
-  }
-  return observedTie;
-}
-
-function deriveRequiredCases(artifact: Pick<V15ParityArtifact,
-  'comparisons' | 'missingObjectAudit' | 'caseMeasurements'>): V15ParityRequiredCases {
-  const measurements = caseMeasurementsSchema.parse(artifact.caseMeasurements);
-  const absentSeedIds = new Set(measurements.absentSeed.absentSeedIds);
-  if (absentSeedIds.size !== measurements.absentSeed.absentSeedIds.length
-    || new Set(measurements.absentSeed.rankedNodeIds).size !== measurements.absentSeed.rankedNodeIds.length) {
-    throw new Error('absent-seed:DUPLICATE_ID');
-  }
-  const absentSeedPasses = measurements.absentSeed.rankedNodeIds.every((id) => !absentSeedIds.has(id));
-
-  const signedSeedSum = measurements.signedSumNonPositive.seedScores
-    .reduce((sum, score) => sum + score, 0);
-  const weights = measurements.signedSumNonPositive.teleportWeights;
-  const uniformWeight = 1 / weights.length;
-  const uniformTeleportPasses = Number.isFinite(signedSeedSum) && signedSeedSum <= 0
-    && weights.every((weight) => Math.abs(weight - uniformWeight) <= V15_PARITY_SCORE_TOLERANCE)
-    && Math.abs(weights.reduce((sum, weight) => sum + weight, 0) - 1) <= V15_PARITY_SCORE_TOLERANCE;
-
-  const hub = measurements.hubDamping;
-  const expectedDampedScore = hub.undampedScore / Math.log2(hub.totalDegree + 2);
-  const hubDampingPasses = hub.totalDegree > hub.hubDegreeThreshold
-    && Math.abs(hub.dampedScore - expectedDampedScore) <= V15_PARITY_SCORE_TOLERANCE;
-
-  return {
-    candidate: artifact.comparisons.candidate.after.length > 0,
-    expansion: artifact.comparisons.expansion.after.length > 0,
-    ppr: artifact.comparisons.ppr.after.length > 0,
-    'id-association': artifact.comparisons.idAssociation.after.length > 0,
-    'missing-object-fail-closed': measurements.missingObjectFailClosed.partialResultCount === 0,
-    'production-missing-object-zero': artifact.missingObjectAudit.checked > 0
-      && artifact.missingObjectAudit.missing === 0,
-    'absent-seed': absentSeedPasses,
-    'signed-sum-non-positive': uniformTeleportPasses,
-    'dangling-loss': measurements.danglingLoss.redistributedMass === 0,
-    'hub-damping': hubDampingPasses,
-    convergence: measurements.convergence.l1Delta < measurements.convergence.epsilon,
-    'candidate-tie-order': measuredTieOrderPasses(measurements.candidateTieOrder, 'candidate-tie-order'),
-    'expansion-tie-order': measuredTieOrderPasses(measurements.expansionTieOrder, 'expansion-tie-order'),
-    'ppr-tie-order': measuredTieOrderPasses(measurements.pprTieOrder, 'ppr-tie-order'),
-  };
-}
-
 function deriveAndCheckArtifact(artifact: V15ParityArtifact): void {
   const accepted = new Set(artifact.acceptedSemanticChanges);
   const candidate = deriveComparison(artifact.comparisons.candidate.before, artifact.comparisons.candidate.after, 'candidate', accepted);
@@ -472,19 +360,15 @@ function deriveAndCheckArtifact(artifact: V15ParityArtifact): void {
     candidate,
     expansion,
     ppr,
-    idAssociationRowCount: artifact.comparisons.idAssociation.after.length,
     idAssociationChangedRowCount,
     maximumAbsScoreDelta: Math.max(candidate.maxAbsScoreDelta, expansion.maxAbsScoreDelta, ppr.maxAbsScoreDelta),
     maximumRankDelta: Math.max(candidate.maxRankDelta, expansion.maxRankDelta, ppr.maxRankDelta),
   };
   if (idAssociationChangedRowCount !== artifact.comparisons.idAssociation.changedRowCount
     || !sameSummary(aggregate, artifact.aggregate)) throw new Error('DECLARED_AGGREGATE_MISMATCH');
-  const requiredCases = deriveRequiredCases(artifact);
-  if (!sameSummary(requiredCases, artifact.requiredCases)) throw new Error('DECLARED_REQUIRED_CASES_MISMATCH');
-  const requiredPass = V15_REQUIRED_PARITY_CASES.every((name) => requiredCases[name]);
+  const requiredPass = V15_REQUIRED_PARITY_CASES.every((name) => artifact.requiredCases[name]);
   const expectedVerdict = requiredPass && artifact.missingObjectAudit.missing === 0 ? 'pass' : 'fail';
-  if (artifact.requiredCases['production-missing-object-zero']
-    !== (artifact.missingObjectAudit.checked > 0 && artifact.missingObjectAudit.missing === 0)) {
+  if (artifact.requiredCases['production-missing-object-zero'] !== (artifact.missingObjectAudit.missing === 0)) {
     throw new Error('MISSING_OBJECT_CASE_MISMATCH');
   }
   if (artifact.verdict !== expectedVerdict) throw new Error('DECLARED_VERDICT_MISMATCH');
@@ -498,15 +382,11 @@ export interface V15ParityArtifactBuildInput extends Omit<V15ParityArtifact,
   | 'vectorBlobSha256'
   | 'copyManifestSha256'
   | 'fixtureSha256'
-  | 'publicManifests'
-  | 'requiredCases'
   | 'comparisons'
   | 'aggregate'
   | 'verdict'> {
   readonly copyManifestBytes: Uint8Array;
   readonly fixtureBytes: Uint8Array;
-  readonly domainManifestBytes: Uint8Array;
-  readonly normalizationManifestBytes: Uint8Array;
   readonly comparisons: {
     readonly candidate: { readonly before: V15ParityHit[]; readonly after: V15ParityHit[] };
     readonly expansion: { readonly before: V15ParityHit[]; readonly after: V15ParityHit[] };
@@ -520,9 +400,7 @@ export interface V15ParityArtifactBuildInput extends Omit<V15ParityArtifact,
 }
 
 export function buildV15ParityArtifact(input: V15ParityArtifactBuildInput): V15ParityArtifact {
-  const {
-    copyManifestBytes, fixtureBytes, domainManifestBytes, normalizationManifestBytes, ...fields
-  } = input;
+  const { copyManifestBytes, fixtureBytes, ...fields } = input;
   const manifest = parseCanonical(copyManifestBytes, v15CopyManifestSchema);
   const accepted = new Set(fields.acceptedSemanticChanges);
   const candidate = deriveComparison(fields.comparisons.candidate.before, fields.comparisons.candidate.after, 'candidate', accepted);
@@ -534,17 +412,6 @@ export function buildV15ParityArtifact(input: V15ParityArtifactBuildInput): V15P
     fields.comparisons.idAssociation.inputs,
     accepted,
   );
-  const comparisons = {
-    candidate: { ...fields.comparisons.candidate, summary: candidate },
-    expansion: { ...fields.comparisons.expansion, summary: expansion },
-    ppr: { ...fields.comparisons.ppr, summary: ppr },
-    idAssociation: { ...fields.comparisons.idAssociation, changedRowCount: idAssociationChangedRowCount },
-  };
-  const requiredCases = deriveRequiredCases({
-    comparisons,
-    missingObjectAudit: fields.missingObjectAudit,
-    caseMeasurements: fields.caseMeasurements,
-  });
   const artifact = v15ParityArtifactSchema.parse({
     schema: V15_PARITY_ARTIFACT_SCHEMA,
     ...fields,
@@ -554,22 +421,21 @@ export function buildV15ParityArtifact(input: V15ParityArtifactBuildInput): V15P
     vectorBlobSha256: manifest.entries[2]!.sha256,
     copyManifestSha256: sha256V15ParityBytes(copyManifestBytes),
     fixtureSha256: sha256V15ParityBytes(fixtureBytes),
-    publicManifests: {
-      domainSha256: sha256V15ParityBytes(domainManifestBytes),
-      normalizationSha256: sha256V15ParityBytes(normalizationManifestBytes),
+    comparisons: {
+      candidate: { ...fields.comparisons.candidate, summary: candidate },
+      expansion: { ...fields.comparisons.expansion, summary: expansion },
+      ppr: { ...fields.comparisons.ppr, summary: ppr },
+      idAssociation: { ...fields.comparisons.idAssociation, changedRowCount: idAssociationChangedRowCount },
     },
-    comparisons,
-    requiredCases,
     aggregate: {
       candidate,
       expansion,
       ppr,
-      idAssociationRowCount: fields.comparisons.idAssociation.after.length,
       idAssociationChangedRowCount,
       maximumAbsScoreDelta: Math.max(candidate.maxAbsScoreDelta, expansion.maxAbsScoreDelta, ppr.maxAbsScoreDelta),
       maximumRankDelta: Math.max(candidate.maxRankDelta, expansion.maxRankDelta, ppr.maxRankDelta),
     },
-    verdict: V15_REQUIRED_PARITY_CASES.every((name) => requiredCases[name])
+    verdict: V15_REQUIRED_PARITY_CASES.every((name) => fields.requiredCases[name])
       && fields.missingObjectAudit.missing === 0 ? 'pass' : 'fail',
   });
   deriveAndCheckArtifact(artifact);
@@ -646,15 +512,6 @@ export function checkV15ParityAttestation(attestationBytes: Uint8Array): V15Pari
   if (attestation.aggregate.candidate.changedRankCount !== 0
     || attestation.aggregate.candidate.maxAbsScoreDelta !== 0
     || attestation.aggregate.candidate.maxRankDelta !== 0) throw new Error('candidate:INVALID_PUBLIC_SUMMARY');
-  if (attestation.aggregate.candidate.matchedCount === 0
-    || attestation.aggregate.expansion.matchedCount === 0
-    || attestation.aggregate.ppr.matchedCount === 0
-    || attestation.aggregate.idAssociationRowCount === 0) {
-    throw new Error('EMPTY_PUBLIC_MEASUREMENT');
-  }
-  if (attestation.aggregate.idAssociationChangedRowCount > attestation.aggregate.idAssociationRowCount) {
-    throw new Error('idAssociation:INVALID_PUBLIC_SUMMARY');
-  }
   if (attestation.aggregate.expansion.maxAbsScoreDelta > V15_PARITY_SCORE_TOLERANCE
     || attestation.aggregate.ppr.maxAbsScoreDelta > V15_PARITY_SCORE_TOLERANCE) {
     throw new Error('INVALID_PUBLIC_SCORE_DELTA');

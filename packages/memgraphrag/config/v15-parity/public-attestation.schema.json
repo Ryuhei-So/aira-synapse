@@ -263,11 +263,6 @@
           ],
           "additionalProperties": false
         },
-        "idAssociationRowCount": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 1000000
-        },
         "idAssociationChangedRowCount": {
           "type": "integer",
           "minimum": 0,
@@ -287,7 +282,6 @@
         "candidate",
         "expansion",
         "ppr",
-        "idAssociationRowCount",
         "idAssociationChangedRowCount",
         "maximumAbsScoreDelta",
         "maximumRankDelta"

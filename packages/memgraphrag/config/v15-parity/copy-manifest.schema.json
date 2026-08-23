@@ -13,106 +13,100 @@
       "maximum": 9007199254740991
     },
     "entries": {
-      "allOf": [
-        {
-          "type": "array",
-          "prefixItems": [
-            {
-              "type": "object",
-              "properties": {
-                "role": {
-                  "type": "string",
-                  "const": "canonical"
-                },
-                "path": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "size": {
-                  "type": "integer",
-                  "minimum": 0,
-                  "maximum": 68719476736
-                },
-                "sha256": {
-                  "type": "string",
-                  "pattern": "^[0-9a-f]{64}$"
-                }
+      "minItems": 3,
+      "maxItems": 3,
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "role": {
+                "type": "string",
+                "const": "canonical"
               },
-              "required": [
-                "role",
-                "path",
-                "size",
-                "sha256"
-              ],
-              "additionalProperties": false
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "size": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 68719476736
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
             },
-            {
-              "type": "object",
-              "properties": {
-                "role": {
-                  "type": "string",
-                  "const": "ownerManifest"
-                },
-                "path": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "size": {
-                  "type": "integer",
-                  "minimum": 0,
-                  "maximum": 68719476736
-                },
-                "sha256": {
-                  "type": "string",
-                  "pattern": "^[0-9a-f]{64}$"
-                }
+            "required": [
+              "role",
+              "path",
+              "size",
+              "sha256"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "role": {
+                "type": "string",
+                "const": "ownerManifest"
               },
-              "required": [
-                "role",
-                "path",
-                "size",
-                "sha256"
-              ],
-              "additionalProperties": false
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "size": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 68719476736
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
             },
-            {
-              "type": "object",
-              "properties": {
-                "role": {
-                  "type": "string",
-                  "const": "vectorBlob"
-                },
-                "path": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "size": {
-                  "type": "integer",
-                  "minimum": 0,
-                  "maximum": 68719476736
-                },
-                "sha256": {
-                  "type": "string",
-                  "pattern": "^[0-9a-f]{64}$"
-                }
+            "required": [
+              "role",
+              "path",
+              "size",
+              "sha256"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "role": {
+                "type": "string",
+                "const": "vectorBlob"
               },
-              "required": [
-                "role",
-                "path",
-                "size",
-                "sha256"
-              ],
-              "additionalProperties": false
-            }
-          ]
-        },
-        {
-          "minItems": 3,
-          "maxItems": 3,
-          "type": "array",
-          "items": {}
-        }
-      ]
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "size": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 68719476736
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            },
+            "required": [
+              "role",
+              "path",
+              "size",
+              "sha256"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      }
     },
     "descriptor": {
       "type": "object",
