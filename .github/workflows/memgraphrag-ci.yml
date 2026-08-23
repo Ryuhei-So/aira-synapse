@@ -9,7 +9,7 @@ on:
       - '.github/workflows/aira-synapse-backend-compat.yml'
       - '.github/workflows/memgraphrag-ci.yml'
   push:
-    branches: [main, 'production-runtime/**']
+    branches: [main, production-runtime, 'production-runtime/**']
     paths:
       - 'packages/memgraphrag/**'
       - '.github/workflows/aira-synapse-backend-compat.yml'

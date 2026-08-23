@@ -62,7 +62,7 @@ describe('TASK-AGDB-040/041: backend compatibility workflow contract', () => {
 
     expect(pr.paths).toEqual(expect.arrayContaining(workflowPaths));
     expect(push.paths).toEqual(expect.arrayContaining(workflowPaths));
-    expect(push.branches).toEqual(expect.arrayContaining(['main', 'production-runtime/**']));
+    expect(push.branches).toEqual(expect.arrayContaining(['main', 'production-runtime', 'production-runtime/**']));
   });
 
   it('checks out the exact GraphDB authority in every owning job', () => {
