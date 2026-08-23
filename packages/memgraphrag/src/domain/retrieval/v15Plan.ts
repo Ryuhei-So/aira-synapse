@@ -20,11 +20,15 @@ import {
   V15_QUERY_FEATURE_SUPPORT,
   type QueryFeatureFlags,
 } from '../config/featureFlags.js';
+import {
+  UNICODE16_LOWERCASE_DIGEST,
+  unicode16Lowercase,
+} from '../text/unicode16Lowercase.js';
 
 export const V15_RETRIEVAL_PLAN_VERSION = 'V15RetrievalRequestPlan@1' as const;
 export const V15_RETRIEVAL_PROFILE = 'v15' as const;
 export const V15_ENTITY_NORMALIZATION_DIGEST =
-  'v15-entity-normalization-ecmascript-tolowercase-unicode16.0.0@1' as const;
+  UNICODE16_LOWERCASE_DIGEST;
 export const V15_SCHEMA_SEARCH_LIMIT = 10 as const;
 export const V15_EXPANSION_ATTENUATION = 0.3 as const;
 export const V15_EXPANSION_LIMIT = 20 as const;
@@ -186,9 +190,9 @@ export function assertV15FeatureProfile(flags: QueryFeatureFlags): void {
   }
 }
 
-/** ECMAScript `String.prototype.toLowerCase()` is the v15 authority. */
+/** Generated Unicode 16.0.0 tables are the v15 authority on every runtime. */
 export function normalizeV15Entity(value: string): string {
-  return value.toLowerCase();
+  return unicode16Lowercase(value);
 }
 
 /** Canonical id order used by seed, node, and tie-breaking helpers. */
