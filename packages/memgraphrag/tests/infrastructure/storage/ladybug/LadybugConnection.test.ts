@@ -25,6 +25,16 @@ describe('LadybugConnectionPool', () => {
     return pool;
   }
 
+  it('is idempotent on double init()', async () => {
+    const pool = createPool();
+    await pool.init();
+    await pool.init(); // should not throw
+
+    const result = await pool.query('MATCH (n:GNode) RETURN count(n) AS c');
+    const rows = await result.getAll();
+    expect(rows[0]?.c).toBe(0);
+  });
+
   afterEach(async () => {
     for (const pool of pools) {
       await pool.close();
@@ -173,13 +183,4 @@ describe('LadybugConnectionPool', () => {
     expect(mutations).toEqual([]); // old listener not carried over
   });
 
-  it('is idempotent on double init()', async () => {
-    const pool = createPool();
-    await pool.init();
-    await pool.init(); // should not throw
-
-    const result = await pool.query('MATCH (n:GNode) RETURN count(n) AS c');
-    const rows = await result.getAll();
-    expect(rows[0]?.c).toBe(0);
-  });
 });
