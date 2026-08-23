@@ -25,6 +25,7 @@ export interface StorageAdapters {
 export interface LadybugStorageOptions {
   readonly dbPath: string;
   readonly vectorDimensions?: number;
+  readonly maxDBSize?: number;
 }
 
 export interface SQLiteStorageOptions {
@@ -65,7 +66,7 @@ export async function createLadybugAdapters(
   const { LadybugGraphProjection } = await import('./LadybugGraphProjection.js');
   const { LadybugLexicalRetriever } = await import('./LadybugLexicalRetriever.js');
 
-  const pool = new LadybugConnectionPool(opts.dbPath, opts.vectorDimensions);
+  const pool = new LadybugConnectionPool(opts.dbPath, opts.vectorDimensions, opts.maxDBSize);
   await pool.init();
 
   const graphStore = new LadybugGraphStore(pool);

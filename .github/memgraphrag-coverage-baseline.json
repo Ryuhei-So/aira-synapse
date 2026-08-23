@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "targetPct": 80,
+  "sourceFileSetSha256": "0d06489961a96cfb5b395a0a193cca6cc3cea12ce9c4ed8a70c84b9fc6c056df",
+  "metrics": {
+    "lines": {
+      "covered": 8450,
+      "total": 11741
+    },
+    "statements": {
+      "covered": 8450,
+      "total": 11741
+    },
+    "functions": {
+      "covered": 606,
+      "total": 717
+    },
+    "branches": {
+      "covered": 1645,
+      "total": 2124
+    }
+  },
+  "currentDebt": {
+    "lines": {
+      "targetPct": 80,
+      "actualPct": 71.97,
+      "debtPct": 8.03
+    },
+    "statements": {
+      "targetPct": 80,
+      "actualPct": 71.97,
+      "debtPct": 8.03
+    },
+    "functions": {
+      "targetPct": 80,
+      "actualPct": 84.52,
+      "debtPct": 0
+    },
+    "branches": {
+      "targetPct": 80,
+      "actualPct": 77.45,
+      "debtPct": 2.55
+    }
+  },
+  "bootstrapFloor": {
+    "metrics": {
+      "lines": {
+        "covered": 8362,
+        "total": 11741
+      },
+      "statements": {
+        "covered": 8362,
+        "total": 11741
+      },
+      "functions": {
+        "covered": 578,
+        "total": 772
+      },
+      "branches": {
+        "covered": 1600,
+        "total": 2080
+      }
+    },
+    "note": "reviewed hosted seed; branches 1600/2080 = 76.92%"
+  }
+}

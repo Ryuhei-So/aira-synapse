@@ -103,18 +103,14 @@ describe('TASK-MG-040: MemGraphRagRuntime', () => {
       }>): Promise<void>;
       getNode(corpusId: string, nodeId: string): Promise<{ nodeId: string } | null>;
     }>(SERVICE_TOKENS.GRAPH_STORE);
-
-    await graphStore.upsertNodes([{
+    await expect(graphStore.getNode('c-native', 'schema:s1')).resolves.toBeNull();
+    await expect(graphStore.upsertNodes([{
       nodeId: 'schema:s1',
       corpusId: 'c-native',
       layer: 'schema',
       ref: { schemaId: 's1', canonicalName: 'Entity' },
       label: 'Entity',
-    }]);
-
-    await expect(graphStore.getNode('c-native', 'schema:s1')).resolves.toEqual(
-      expect.objectContaining({ nodeId: 'schema:s1' }),
-    );
+    }])).rejects.toThrow('mutation requires an active batch');
 
     await runtime.shutdown();
   });

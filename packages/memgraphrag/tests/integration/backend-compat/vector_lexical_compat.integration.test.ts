@@ -58,7 +58,9 @@ describe('TASK-AGDB-038 vector/lexical compatibility', () => {
         { id: 'd3', corpusId: CORPUS_ID, namespace: 'fact' as const, values: [0, 1, 0], metadata: { documentId: 'doc-3' } },
       ];
       await baseline.vectorIndex.upsert(vectors);
+      await candidate.batch!.begin();
       await candidate.vectorIndex.upsert(vectors);
+      await candidate.batch!.commit();
 
       const baselineHits = await baseline.vectorIndex.search({
         corpusId: CORPUS_ID,
@@ -103,7 +105,9 @@ describe('TASK-AGDB-038 vector/lexical compatibility', () => {
     const byPassageId = new Map(passages.map((p) => [p.passageId, p]));
 
     try {
+      await candidate.batch!.begin();
       await candidate.lexicalRetriever.indexPassages(CORPUS_ID, passages);
+      await candidate.batch!.commit();
       const hits = await candidate.lexicalRetriever.search(CORPUS_ID, 'graph retrieval', 2);
       const lexicalRows = hits.map((hit) => {
         const passage = byPassageId.get(hit.passageId)!;

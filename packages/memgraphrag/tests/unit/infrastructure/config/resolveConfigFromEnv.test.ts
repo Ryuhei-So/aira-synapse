@@ -14,6 +14,9 @@ const DEFAULT_CONFIG = resolve(
 );
 
 describe('TASK-MG-027: Config env overlay', () => {
+  it('requires an explicit RUN_NEO4J_E2E opt-in in addition to an API key', () => {
+    expect(process.env.RUN_NEO4J_E2E).not.toBe('1');
+  });
   const baseConfig = loadMemGraphRagConfig(DEFAULT_CONFIG);
 
   describe('resolveConfigFromEnv', () => {

@@ -31,8 +31,10 @@ const fromFork = boolEnv('GITHUB_EVENT_PULL_REQUEST_HEAD_REPO_FORK');
 const refProtected = boolEnv('GITHUB_REF_PROTECTED');
 const mergeQueue = boolEnv('GITHUB_MERGE_QUEUE');
 
-const repoRoot = resolve(process.cwd(), '..', '..', '..');
-const contractsRoot = resolve(repoRoot, '..', 'aira-graphdb', 'spec', 'contracts');
+if (!process.env.AIRA_GRAPHDB_REPO_PATH) {
+  throw new Error('AIRA_GRAPHDB_REPO_PATH is required; refusing an implicit GraphDB checkout');
+}
+const contractsRoot = resolve(process.env.AIRA_GRAPHDB_REPO_PATH, 'spec', 'contracts');
 const eventScopeMap = loadJson(resolve(contractsRoot, 'event-scope-map.v1.0.0.json'));
 const branchPolicy = loadJson(resolve(contractsRoot, 'branch-protection-policy.v1.0.0.json'));
 
@@ -92,4 +94,3 @@ if (strictMode && isTrustedScope && !process.env.AIRA_SYNAPSE_ADMIN_TOKEN) {
   };
   writeFileSync(outputPath, `${JSON.stringify(passed, null, 2)}\n`, 'utf8');
 }
-
