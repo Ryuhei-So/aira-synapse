@@ -1,0 +1,286 @@
+import { describe, expect, it } from 'vitest';
+import type { Fact } from '../../../../src/domain/memory/fact.js';
+import type { Passage } from '../../../../src/domain/memory/passage.js';
+import type { QueryFeatureFlags } from '../../../../src/domain/config/featureFlags.js';
+import type { FilteredMemoryCandidates, QueryRequest } from '../../../../src/domain/retrieval/memoryFilter.js';
+import type { RankedNode, TransitionEntry } from '../../../../src/domain/retrieval/ppr.js';
+import {
+  assertV15FeatureProfile,
+  associateV15RankedFacts,
+  associateV15RankedPassages,
+  associateV15RankedSchemas,
+  buildV15FactExpansionPlan,
+  buildV15RetrievalPlan,
+  compareV15Transitions,
+  isV15RetrievalPlan,
+  normalizeV15Entity,
+  orderV15RankedNodes,
+  orderV15ScoreThenId,
+  orderV15Transitions,
+  unsupportedV15Features,
+  validateV15RetrievalPlan,
+  V15RetrievalPlanValidationError,
+} from '../../../../src/domain/retrieval/v15Plan.js';
+
+const flags: QueryFeatureFlags = {
+  enableDictionaryInjection: false,
+  enableThesaurusExpansion: false,
+  enableHypernymExpansion: false,
+  enableAliasHints: false,
+  enableSubQueryDecomposition: false,
+  enableComparisonVerification: false,
+  enableMultiHopReasoning: false,
+};
+
+const query: QueryRequest = {
+  corpusId: 'corpus-1',
+  text: 'Which entity is larger?',
+  topK: 3,
+  topM: 2,
+  threshold: -0.25,
+  contextTokenLimit: 512,
+};
+
+const factA = makeFact('fact-a', 'Alpha', 'relates', 'Beta');
+const factB = makeFact('fact-b', 'beta', 'relates', 'Gamma');
+const passageA = makePassage('passage-a', 'A');
+const passageB = makePassage('passage-b', 'B');
+
+function candidates(): FilteredMemoryCandidates {
+  return {
+    ontology: [],
+    facts: [
+      { layer: 'fact', item: factB, similarity: -0.4 },
+      { layer: 'fact', item: factA, similarity: -0.2 },
+    ],
+    passages: [
+      { layer: 'passage', item: passageA, similarity: -0.1 },
+    ],
+    expandedTerms: [],
+    fallbackRequired: false,
+    queryVector: [1, 0],
+  };
+}
+
+function makePlan() {
+  return buildV15RetrievalPlan(
+    query,
+    [1, 0],
+    candidates(),
+    { scores: { 'fact:b': -0.2, 'fact:a': 0.3 }, fallbackTriggered: false },
+    {
+      comparisonMode: true,
+      featureFlags: flags,
+      teleportProbability: 0.5,
+      convergenceEpsilon: 1e-6,
+      maxIterations: 100,
+      hubDegreeThreshold: 50,
+    },
+  );
+}
+
+describe('V15RetrievalPlan and shared parity helpers', () => {
+  it('preserves signed scores and negative thresholds while making policy explicit', () => {
+    const plan = makePlan();
+
+    expect(plan.candidateSearch.slots.map((slot) => slot.threshold)).toEqual([-0.25, -0.25, -0.25]);
+    expect(plan.pprMaterialization.seeds).toEqual([
+      { nodeId: 'fact:a', score: 0.3 },
+      { nodeId: 'fact:b', score: -0.2 },
+    ]);
+    expect(plan.factExpansion?.seedEntities).toEqual([
+      { key: 'alpha', score: 0 },
+      { key: 'beta', score: 0 },
+      { key: 'gamma', score: 0 },
+    ]);
+    expect(validateV15RetrievalPlan(plan)).toBe(plan);
+  });
+
+  it('keeps expansion zero-floor, inactive facts, and deterministic score/id ties in the shared helper', () => {
+    const expansion = buildV15FactExpansionPlan(candidates(), true);
+    expect(expansion?.attenuation).toBe(0.3);
+    expect(expansion?.limit).toBe(20);
+    expect(orderV15ScoreThenId([
+      { id: 'fact:z', score: 0 },
+      { id: 'fact:a', score: 0 },
+      { id: 'fact:b', score: -1 },
+    ])).toEqual([
+      { id: 'fact:a', score: 0 },
+      { id: 'fact:z', score: 0 },
+      { id: 'fact:b', score: -1 },
+    ]);
+    expect(normalizeV15Entity('ÄLPHA')).toBe('älpha');
+  });
+
+  it('uses canonical graph and rank orders independent of insertion order', () => {
+    const transitions: TransitionEntry[] = [
+      { sourceNodeId: 'fact:z', targetNodeId: 'passage:b', weight: 1 },
+      { sourceNodeId: 'fact:a', targetNodeId: 'passage:z', weight: 1 },
+      { sourceNodeId: 'fact:a', targetNodeId: 'passage:a', weight: 1 },
+    ];
+    expect(orderV15Transitions(transitions).map((entry) => `${entry.sourceNodeId}->${entry.targetNodeId}`)).toEqual([
+      'fact:a->passage:a',
+      'fact:a->passage:z',
+      'fact:z->passage:b',
+    ]);
+    expect(compareV15Transitions(transitions[2]!, transitions[1]!)).toBe(-1);
+    const ranked: RankedNode[] = [
+      { nodeId: 'passage:z', score: 0.5, layer: 'passage' },
+      { nodeId: 'passage:a', score: 0.5, layer: 'passage' },
+    ];
+    expect(orderV15RankedNodes(ranked).map((node) => node.nodeId)).toEqual(['passage:a', 'passage:z']);
+  });
+
+  it('joins materialized context by IDs, never by positions, including schema prefix mapping', () => {
+    const rankedPassages: RankedNode[] = [
+      { nodeId: 'passage:passage-b', score: 0.9, layer: 'passage' },
+      { nodeId: 'passage:passage-a', score: 0.8, layer: 'passage' },
+    ];
+    const passages = associateV15RankedPassages(rankedPassages, [passageA, passageB]);
+    expect(passages.map((association) => [association.item.passageId, association.node.score])).toEqual([
+      ['passage-b', 0.9],
+      ['passage-a', 0.8],
+    ]);
+
+    const rankedFacts: RankedNode[] = [
+      { nodeId: 'fact:fact-b', score: 0.7, layer: 'fact' },
+      { nodeId: 'schema:schema-a', score: 0.6, layer: 'ontology' },
+      { nodeId: 'fact:fact-a', score: 0.5, layer: 'fact' },
+    ];
+    const facts = associateV15RankedFacts(rankedFacts, [factA, factB]);
+    expect(facts.map((association) => [association.item.factId, association.node.score])).toEqual([
+      ['fact-b', 0.7],
+      ['fact-a', 0.5],
+    ]);
+    const schema = makeSchema('schema-a');
+    const schemas = associateV15RankedSchemas(
+      [{ nodeId: 'schema:schema-a', score: 0.4, layer: 'ontology' }],
+      [schema],
+    );
+    expect(schemas[0]?.item.schemaId).toBe('schema-a');
+  });
+
+  it('fails closed for unknown fields, unsupported profiles, missing staged values, and active flags', () => {
+    const plan = makePlan();
+    expect(() => validateV15RetrievalPlan({ ...plan, unknown: true })).toThrow(V15RetrievalPlanValidationError);
+    expect(() => validateV15RetrievalPlan({ ...plan, profile: 'hybrid-rrf' })).toThrowError(/Unsupported v15 retrieval profile/);
+    expect(isV15RetrievalPlan({ ...plan, profile: 'hybrid-rrf' })).toBe(false);
+    expect(() => buildV15RetrievalPlan(
+      query,
+      [1, 0],
+      candidates(),
+      { scores: {}, fallbackTriggered: false },
+      { ...makePlanOptions(), comparisonMode: false, featureFlags: { ...flags, enableThesaurusExpansion: true } },
+    )).toThrowError(/enableThesaurusExpansion/);
+    const unsupported = { ...flags, enableSubQueryDecomposition: true };
+    expect(unsupportedV15Features(unsupported)).toEqual(['enableSubQueryDecomposition']);
+    expect(() => assertV15FeatureProfile(unsupported)).toThrowError(/enableSubQueryDecomposition/);
+    expect(() => buildV15RetrievalPlan(
+      query,
+      [1, 0],
+      candidates(),
+      { scores: {}, fallbackTriggered: false },
+      { ...makePlanOptions(), comparisonMode: true, featureFlags: flags },
+    )).not.toThrow();
+  });
+
+  it('does not silently construct comparison expansion without the candidate stage', () => {
+    expect(() => buildV15RetrievalPlan(
+      query,
+      [1, 0],
+      undefined as unknown as FilteredMemoryCandidates,
+      { scores: {}, fallbackTriggered: false },
+      { ...makePlanOptions(), comparisonMode: true, featureFlags: flags },
+    )).toThrow();
+  });
+
+  it('rejects non-finite candidate and seed scores before a plan can cross the boundary', () => {
+    const originalCandidates = candidates();
+    const badCandidates = {
+      ...originalCandidates,
+      facts: originalCandidates.facts.map((candidate, index) =>
+        index === 0 ? { ...candidate, similarity: Number.NaN } : candidate),
+    };
+    expect(() => buildV15RetrievalPlan(
+      query,
+      [1, 0],
+      badCandidates,
+      { scores: { 'fact:a': Number.POSITIVE_INFINITY }, fallbackTriggered: false },
+      { ...makePlanOptions(), comparisonMode: true, featureFlags: flags },
+    )).toThrowError(/must be finite/);
+  });
+});
+
+function makePlanOptions() {
+  return {
+    featureFlags: flags,
+    teleportProbability: 0.5,
+    convergenceEpsilon: 1e-6,
+    maxIterations: 100,
+    hubDegreeThreshold: 50,
+  };
+}
+
+function makeSchema(id: string): Schema {
+  return {
+    corpusId: 'corpus-1',
+    schemaId: id,
+    headType: 'Entity',
+    relation: 'relates',
+    tailType: 'Entity',
+    canonicalKey: 'entity::relates::entity',
+    aliases: [],
+    frequency: 1,
+    state: 'pending',
+    stabilizationThreshold: 2,
+    factIds: [],
+    sourceDocumentIds: [],
+    version: 1,
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+  };
+}
+
+function makePassage(id: string, text: string): Passage {
+  return {
+    corpusId: 'corpus-1',
+    passageId: id,
+    text,
+    normalizedText: text.toLowerCase(),
+    metadata: {
+      documentId: `doc-${id}`,
+      title: id,
+      sourceUrl: `https://example.com/${id}`,
+      language: 'en',
+      sectionPath: [],
+      chunkId: id,
+      chunkIndex: 0,
+      offsetStart: 0,
+      offsetEnd: text.length || 1,
+    },
+    factIds: [],
+    entityMentions: [],
+    qualityFlags: [],
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+  };
+}
+
+function makeFact(id: string, headEntity: string, relation: string, tailEntity: string): Fact {
+  return {
+    corpusId: 'corpus-1',
+    factId: id,
+    schemaId: 'schema-1',
+    headEntity,
+    headType: 'Entity',
+    relation,
+    tailEntity,
+    tailType: 'Entity',
+    state: 'inactive',
+    passageIds: [],
+    sourceDocumentIds: [],
+    confidence: 0.5,
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+  };
+}

@@ -27,6 +27,13 @@ import { extractFinalAnswer } from './query-utils.js';
 import type { SubQueryDecomposer } from './SubQueryDecomposer.js';
 import type { ComparisonVerifier } from './ComparisonVerifier.js';
 import { DictionaryContextEnricher } from './DictionaryContextEnricher.js';
+import {
+  associateV15RankedFacts,
+  associateV15RankedPassages,
+  buildV15RetrievalPlan,
+  unsupportedV15Features,
+  type V15RetrievalPlan,
+} from '../../domain/retrieval/v15Plan.js';
 
 export interface CitationDto {
   readonly passageId: string;
@@ -113,6 +120,10 @@ export const DEFAULT_HYPER_PARAMS: QueryHyperParams = {
   reasoningEffort: 'high',
   verbosity: 'low',
 };
+
+/** Existing QueryService policy authority for the legacy PPR call. */
+export const DEFAULT_PPR_CONVERGENCE_EPSILON = 1e-6;
+export const DEFAULT_PPR_MAX_ITERATIONS = 100;
 
 export interface QueryServiceDependencies {
   readonly dictionary: ITermDictionary;
@@ -234,26 +245,40 @@ export class DefaultQueryService implements QueryService {
       corpusId: expandedRequest.corpusId,
       initialVector,
       teleportProbability: this.hp.teleportProbability,
-      convergenceEpsilon: 1e-6,
-      maxIterations: 100,
+      convergenceEpsilon: DEFAULT_PPR_CONVERGENCE_EPSILON,
+      maxIterations: DEFAULT_PPR_MAX_ITERATIONS,
       topK: expandedRequest.topK,
       topM: expandedRequest.topM,
     }, this.dependencies.projection);
 
     const context = await this.dependencies.contextBuilder.build(expandedRequest, ranking);
 
-    // Build RankedPassage[] and RankedFact[] from PPR results
-    const passages: RankedPassage[] =
-      context.citedPassages.map((passage, idx) => {
-        const pprNode = ranking.rankedPassages[idx];
-        return { passage, score: pprNode?.score ?? 0, rank: idx + 1 };
-      });
+    const retrievalPlan: V15RetrievalPlan | undefined = candidates.queryVector.length > 0
+      && unsupportedV15Features(this.flags).length === 0
+      ? buildV15RetrievalPlan(
+        expandedRequest,
+        candidates.queryVector,
+        candidates,
+        initialVector,
+        {
+          comparisonMode: prepared.isComparison,
+          featureFlags: this.flags,
+          teleportProbability: this.hp.teleportProbability,
+          convergenceEpsilon: DEFAULT_PPR_CONVERGENCE_EPSILON,
+          maxIterations: DEFAULT_PPR_MAX_ITERATIONS,
+          hubDegreeThreshold: this.hp.hubDegreeThreshold,
+        },
+      )
+      : undefined;
 
-    const facts: RankedFact[] =
-      context.citedFacts.map((fact, idx) => {
-        const pprNode = ranking.rankedEntities[idx];
-        return { fact, score: pprNode?.score ?? 0, rank: idx + 1 };
-      });
+    // Build RankedPassage[] and RankedFact[] from PPR results
+    const passages: import('../../domain/retrieval/federation.js').RankedPassage[] =
+      associateV15RankedPassages(ranking.rankedPassages, context.citedPassages)
+        .map(({ item: passage, node, rank }) => ({ passage, score: node.score, rank }));
+
+    const facts: import('../../domain/retrieval/federation.js').RankedFact[] =
+      associateV15RankedFacts(ranking.rankedEntities, context.citedFacts)
+        .map(({ item: fact, node, rank }) => ({ fact, score: node.score, rank }));
 
     return {
       passages,
@@ -266,6 +291,7 @@ export class DefaultQueryService implements QueryService {
       dictionaryHints: prepared.dictionaryHints,
       isComparison: prepared.isComparison,
       queryVector: [...candidates.queryVector],
+      retrievalPlan,
       metrics: {
         dictionaryMatchCount: prepared.entityHits.length,
         expandedTerms: candidates.expandedTerms,

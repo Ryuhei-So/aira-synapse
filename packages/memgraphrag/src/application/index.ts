@@ -109,6 +109,8 @@ export {
   DefaultQueryService,
   ContextBuilderService,
   DEFAULT_HYPER_PARAMS,
+  DEFAULT_PPR_CONVERGENCE_EPSILON,
+  DEFAULT_PPR_MAX_ITERATIONS,
   type CitationDto,
   type EntityHit,
   type QueryMetrics,
@@ -120,6 +122,41 @@ export {
 } from './query/QueryService.js';
 export { DegradedModePolicy, type CapabilityHealthResults, type RuntimeCapabilities, type FeatureGates, type RuntimePolicyConfig } from './runtime/DegradedModePolicy.js';
 export { MetricsCollector, type MetricSnapshot } from './observability/MetricsCollector.js';
+
+export {
+  BoundedGenerationSession,
+  BoundedGenerationSessionError,
+  GenerationSessionCleanupError,
+  assertGeneration,
+  toGeneration,
+  CANDIDATE_SEARCH_BOUNDED_V1,
+  FACT_EXPAND_BOUNDED_V1,
+  PPR_MATERIALIZE_BOUNDED_V1,
+  MAX_SAFE_GENERATION,
+} from '../domain/retrieval/bounded.js';
+export type {
+  Generation,
+  GenerationLease,
+  GenerationSession,
+  GenerationSessionTransport,
+  GenerationSessionClock,
+  BoundedGenerationSessionOptions,
+  BoundedRetrievalDataPlane,
+  BoundedRetrievalResult,
+  CandidateSearchBoundedRequest,
+  CandidateSearchBoundedResponse,
+  CandidateSearchBoundedPort,
+  FactExpandBoundedRequest,
+  FactExpandBoundedResponse,
+  FactExpandBoundedPort,
+  PprMaterializeBoundedRequest,
+  PprMaterializeBoundedResponse,
+  PprMaterializeBoundedPort,
+  BoundedCandidateHit,
+  BoundedFactExpansionHit,
+  BoundedRankedPassage,
+  BoundedRankedFact,
+} from '../domain/retrieval/bounded.js';
 export {
   VectorLexicalCompatEvaluator,
   AgdbCompatValidationError,

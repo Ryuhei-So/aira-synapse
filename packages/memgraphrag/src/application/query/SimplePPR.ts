@@ -8,7 +8,14 @@ import type {
   PPRResult,
   RankedNode,
   IGraphProjection,
+  TransitionEntry,
 } from '../../domain/retrieval/ppr.js';
+import {
+  compareV15Ids,
+  orderV15RankedNodes,
+  orderV15Seeds,
+  orderV15Transitions,
+} from '../../domain/retrieval/v15Plan.js';
 
 export class SimplePPR implements IPPR {
   constructor(private readonly hubDegreeThreshold: number = 50) {}
@@ -20,8 +27,12 @@ export class SimplePPR implements IPPR {
     const adjacency = new Map<string, { target: string; weight: number }[]>();
     const allNodes = new Set<string>();
     const inDegree = new Map<string, number>();
+    const transitions: TransitionEntry[] = [];
 
     for await (const entry of projection.getTransitions(corpusId)) {
+      transitions.push(entry);
+    }
+    for (const entry of orderV15Transitions(transitions)) {
       allNodes.add(entry.sourceNodeId);
       allNodes.add(entry.targetNodeId);
       if (!adjacency.has(entry.sourceNodeId)) {
@@ -35,7 +46,7 @@ export class SimplePPR implements IPPR {
     }
 
     // Initialize score vector from seeds
-    const nodeList = [...allNodes];
+    const nodeList = [...allNodes].sort(compareV15Ids);
     const n = nodeList.length;
     if (n === 0) {
       return { rankedPassages: [], rankedEntities: [], iterations: 0, converged: true, l1Delta: 0 };
@@ -63,7 +74,10 @@ export class SimplePPR implements IPPR {
     // Teleport vector (personalization)
     const teleport = new Float64Array(n);
     let teleportSum = 0;
-    for (const [nodeId, score] of Object.entries(initialVector.scores)) {
+    const seedEntries = orderV15Seeds(
+      Object.entries(initialVector.scores).map(([nodeId, score]) => ({ nodeId, score })),
+    );
+    for (const { nodeId, score } of seedEntries) {
       const idx = nodeIndex.get(nodeId);
       if (idx !== undefined) {
         teleport[idx] = score;
@@ -143,12 +157,12 @@ export class SimplePPR implements IPPR {
       }
     }
 
-    passageNodes.sort((a, b) => b.score - a.score);
-    entityNodes.sort((a, b) => b.score - a.score);
+    const orderedPassages = orderV15RankedNodes(passageNodes);
+    const orderedEntities = orderV15RankedNodes(entityNodes);
 
     return {
-      rankedPassages: passageNodes.slice(0, topK),
-      rankedEntities: entityNodes.slice(0, topM),
+      rankedPassages: orderedPassages.slice(0, topK),
+      rankedEntities: orderedEntities.slice(0, topM),
       iterations,
       converged,
       l1Delta,

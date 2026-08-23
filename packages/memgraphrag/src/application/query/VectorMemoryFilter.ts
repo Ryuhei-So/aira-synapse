@@ -15,6 +15,10 @@ import type { IMemoryStore } from '../../domain/storage/index.js';
 import type { Schema } from '../../domain/memory/schema.js';
 import type { Fact } from '../../domain/memory/fact.js';
 import type { Passage } from '../../domain/memory/passage.js';
+import {
+  buildV15SearchSlots,
+  orderV15ScoreThenId,
+} from '../../domain/retrieval/v15Plan.js';
 
 export class VectorMemoryFilter implements IMemoryFilter {
   constructor(
@@ -37,27 +41,28 @@ export class VectorMemoryFilter implements IMemoryFilter {
       queryVector = v;
     }
 
+    const [passageSlot, factSlot, schemaSlot] = buildV15SearchSlots(request, queryVector);
     const [passageHits, factHits, schemaHits] = await Promise.all([
       this.vectorIndex.search({
         corpusId: request.corpusId,
-        namespace: 'passage',
-        queryVector,
-        topK: request.topK,
-        threshold: request.threshold,
+        namespace: passageSlot!.namespace,
+        queryVector: passageSlot!.queryVector,
+        topK: passageSlot!.limit,
+        threshold: passageSlot!.threshold,
       }),
       this.vectorIndex.search({
         corpusId: request.corpusId,
-        namespace: 'fact',
-        queryVector,
-        topK: request.topM,
-        threshold: request.threshold,
+        namespace: factSlot!.namespace,
+        queryVector: factSlot!.queryVector,
+        topK: factSlot!.limit,
+        threshold: factSlot!.threshold,
       }),
       this.vectorIndex.search({
         corpusId: request.corpusId,
-        namespace: 'schema',
-        queryVector,
-        topK: 10,
-        threshold: request.threshold,
+        namespace: schemaSlot!.namespace,
+        queryVector: schemaSlot!.queryVector,
+        topK: schemaSlot!.limit,
+        threshold: schemaSlot!.threshold,
       }),
     ]);
 
@@ -68,7 +73,7 @@ export class VectorMemoryFilter implements IMemoryFilter {
     const schemaMap = new Map(snapshot.schemas.map((s) => [s.schemaId, s]));
 
     const passages: MemoryCandidate<Passage>[] = [];
-    for (const hit of passageHits) {
+    for (const hit of orderV15ScoreThenId(passageHits)) {
       // nodeId format: "passage:passage:chunkId" → passageId is the nodeId without prefix
       const nodeId = hit.id;
       const passageId = nodeId.startsWith('passage:') ? nodeId.slice('passage:'.length) : nodeId;
@@ -79,7 +84,7 @@ export class VectorMemoryFilter implements IMemoryFilter {
     }
 
     const facts: MemoryCandidate<Fact>[] = [];
-    for (const hit of factHits) {
+    for (const hit of orderV15ScoreThenId(factHits)) {
       const nodeId = hit.id;
       const factId = nodeId.startsWith('fact:') ? nodeId.slice('fact:'.length) : nodeId;
       const fact = factMap.get(factId) ?? factMap.get(nodeId);
@@ -89,7 +94,7 @@ export class VectorMemoryFilter implements IMemoryFilter {
     }
 
     const ontology: MemoryCandidate<Schema>[] = [];
-    for (const hit of schemaHits) {
+    for (const hit of orderV15ScoreThenId(schemaHits)) {
       const nodeId = hit.id;
       const schemaId = nodeId.startsWith('schema:') ? nodeId.slice('schema:'.length) : nodeId;
       const schema = schemaMap.get(schemaId) ?? schemaMap.get(nodeId);
