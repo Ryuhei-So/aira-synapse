@@ -6,16 +6,28 @@ on:
     paths:
       - 'packages/memgraphrag/**'
       - 'spec/PLAN-MEMGRAPHRAG-001.md'
+      - '.github/workflows/memgraphrag-ci.yml'
+      - '.github/workflows/aira-synapse-backend-compat.yml'
+      - '.github/memgraphrag-coverage-baseline.json'
+      - '.github/memgraphrag-lint-baseline.json'
   push:
-    branches: [main]
+    branches: [main, 'production-runtime/**']
     paths:
       - 'packages/memgraphrag/**'
+      - '.github/workflows/memgraphrag-ci.yml'
+      - '.github/workflows/aira-synapse-backend-compat.yml'
+      - '.github/memgraphrag-coverage-baseline.json'
+      - '.github/memgraphrag-lint-baseline.json'
 
 jobs:
   lint:
     runs-on: ubuntu-latest
+    env:
+      BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -24,35 +36,8 @@ jobs:
       - name: Run full lint against the checked-in ratchet
         working-directory: packages/memgraphrag
         run: |
-          set +e
-          npx eslint src tests --format json > "$RUNNER_TEMP/memgraphrag-lint.json"
-          lint_status=$?
-          LINT_STATUS="$lint_status" LINT_JSON="$RUNNER_TEMP/memgraphrag-lint.json" node <<'NODE'
-          const fs = require('node:fs');
-          const path = require('node:path');
-          const crypto = require('node:crypto');
-
-          const data = JSON.parse(fs.readFileSync(process.env.LINT_JSON, 'utf8'));
-          const normalized = data.flatMap((file) => file.messages.map((message) => ({
-            file: path.relative(process.cwd(), file.filePath),
-            line: message.line,
-            column: message.column,
-            endLine: message.endLine ?? null,
-            endColumn: message.endColumn ?? null,
-            severity: message.severity,
-            ruleId: message.ruleId,
-            message: message.message,
-          }))).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
-          const digest = crypto.createHash('sha256')
-            .update(`${JSON.stringify(normalized)}\n`)
-            .digest('hex');
-          const expected = fs.readFileSync('../../.github/memgraphrag-lint-baseline.sha256', 'utf8').trim();
-          console.log(`full lint status=${process.env.LINT_STATUS}; messages=${normalized.length}; digest=${digest}`);
-          if (digest !== expected) {
-            console.error(`lint baseline changed: expected ${expected}, got ${digest}`);
-            process.exit(1);
-          }
-          NODE
+          npx eslint src tests --format json > "$RUNNER_TEMP/memgraphrag-lint.json" || true
+          node scripts/lint-ratchet.mjs verify "$RUNNER_TEMP/memgraphrag-lint.json" ../../.github/memgraphrag-lint-baseline.json "$BASE_SHA"
 
   test:
     runs-on: ubuntu-latest
@@ -60,6 +45,8 @@ jobs:
       AIRA_GRAPHDB_REPO_PATH: ${{ github.workspace }}/aira-graphdb
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/checkout@v4
         with:
           repository: Ryuhei-So/aira-graphdb
@@ -97,6 +84,8 @@ jobs:
       AIRA_GRAPHDB_REPO_PATH: ${{ github.workspace }}/aira-graphdb
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/checkout@v4
         with:
           repository: Ryuhei-So/aira-graphdb
@@ -111,17 +100,17 @@ jobs:
           python-version: '3.12'
       - uses: dtolnay/rust-toolchain@stable
       - run: npm ci
-      - run: npm run test:coverage -- --config vitest.coverage.config.ts --fileParallelism=false --exclude tests/unit/infrastructure/config/resolveConfigFromEnv.test.ts
-        working-directory: packages/memgraphrag
-      - name: Verify coverage ratchet
-        run: node scripts/coverage-ratchet.mjs verify coverage/coverage-summary.json ../../.github/memgraphrag-coverage-baseline.json
-        working-directory: packages/memgraphrag
-      - name: Run config path test with a deterministic fixture
+      - name: Prepare config fixture for full coverage scope
         working-directory: packages/memgraphrag
         run: |
           printf 'ci-test-key\n' > config/openai_api_key
           trap 'rm -f config/openai_api_key' EXIT
-          npm test -- --fileParallelism=false tests/unit/infrastructure/config/resolveConfigFromEnv.test.ts
+          npm run test:coverage -- --config vitest.coverage.config.ts --fileParallelism=false
+      - name: Verify coverage ratchet
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: node scripts/coverage-ratchet.mjs verify coverage/coverage-summary.json ../../.github/memgraphrag-coverage-baseline.json --base-sha "$BASE_SHA"
+        working-directory: packages/memgraphrag
 
   build:
     runs-on: ubuntu-latest

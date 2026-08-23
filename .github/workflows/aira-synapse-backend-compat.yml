@@ -6,12 +6,18 @@ on:
     paths:
       - 'packages/memgraphrag/**'
       - '.github/workflows/aira-synapse-backend-compat.yml'
+      - '.github/workflows/memgraphrag-ci.yml'
+      - '.github/memgraphrag-coverage-baseline.json'
+      - '.github/memgraphrag-lint-baseline.json'
   merge_group:
   push:
-    branches: [main]
+    branches: [main, 'production-runtime/**']
     paths:
       - 'packages/memgraphrag/**'
       - '.github/workflows/aira-synapse-backend-compat.yml'
+      - '.github/workflows/memgraphrag-ci.yml'
+      - '.github/memgraphrag-coverage-baseline.json'
+      - '.github/memgraphrag-lint-baseline.json'
 
 jobs:
   storage-port-contract:

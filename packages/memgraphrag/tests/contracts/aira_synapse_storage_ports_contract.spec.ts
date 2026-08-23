@@ -12,12 +12,9 @@ type ContractShape = {
   ports: Record<string, ContractPort>;
 };
 
-const contractPath = resolve(
-  process.env.AIRA_GRAPHDB_REPO_PATH ?? resolve(process.cwd(), '..', '..', '..', '..', '..', 'aira-graphdb'),
-  'spec',
-  'contracts',
-  'aira-synapse-storage-ports.v1.0.0.json',
-);
+const graphDbRepoPath = process.env.AIRA_GRAPHDB_REPO_PATH;
+if (!graphDbRepoPath) throw new Error('AIRA_GRAPHDB_REPO_PATH is required for the GraphDB contract test');
+const contractPath = resolve(graphDbRepoPath, 'spec', 'contracts', 'aira-synapse-storage-ports.v1.0.0.json');
 
 const storageInterfacePath = resolve(
   process.cwd(),

@@ -35,4 +35,12 @@ describe('branch-protection-audit GraphDB contract path', () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  it('fails closed when the GraphDB path authority is absent', () => {
+    expect(() => execFileSync(process.execPath, [SCRIPT, '--mode', 'untrusted'], {
+      cwd: process.cwd(),
+      env: { ...process.env, AIRA_GRAPHDB_REPO_PATH: undefined },
+      stdio: 'pipe',
+    })).toThrow();
+  });
 });

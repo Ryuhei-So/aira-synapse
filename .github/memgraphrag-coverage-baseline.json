@@ -4,42 +4,63 @@
   "sourceFileSetSha256": "0d06489961a96cfb5b395a0a193cca6cc3cea12ce9c4ed8a70c84b9fc6c056df",
   "metrics": {
     "lines": {
-      "covered": 8362,
+      "covered": 8560,
       "total": 11741
     },
     "statements": {
-      "covered": 8362,
+      "covered": 8560,
       "total": 11741
     },
     "functions": {
-      "covered": 578,
+      "covered": 581,
       "total": 772
     },
     "branches": {
-      "covered": 1600,
-      "total": 2080
+      "covered": 1620,
+      "total": 2098
     }
   },
   "currentDebt": {
     "lines": {
       "targetPct": 80,
-      "actualPct": 71.22,
-      "debtPct": 8.78
+      "actualPct": 72.91,
+      "debtPct": 7.09
     },
     "statements": {
       "targetPct": 80,
-      "actualPct": 71.22,
-      "debtPct": 8.78
+      "actualPct": 72.91,
+      "debtPct": 7.09
     },
     "functions": {
       "targetPct": 80,
-      "actualPct": 74.87,
-      "debtPct": 5.13
+      "actualPct": 75.26,
+      "debtPct": 4.74
     },
     "branches": {
       "targetPct": 80,
-      "actualPct": 76.89,
-      "debtPct": 3.11
+      "actualPct": 77.22,
+      "debtPct": 2.78
     }
+  },
+  "bootstrapFloor": {
+    "metrics": {
+      "lines": {
+        "covered": 8362,
+        "total": 11741
+      },
+      "statements": {
+        "covered": 8362,
+        "total": 11741
+      },
+      "functions": {
+        "covered": 578,
+        "total": 772
+      },
+      "branches": {
+        "covered": 1600,
+        "total": 2080
+      }
+    },
+    "note": "reviewed hosted seed; branches 1600/2080 = 76.92%"
   }
 }

@@ -41,7 +41,7 @@ const NEO4J_OPTS = {
 const keyFilePath = resolve(process.cwd(), 'config/openai_api_key');
 const apiKey = process.env.OPENAI_API_KEY
   ?? (existsSync(keyFilePath) ? readFileSync(keyFilePath, 'utf-8').trim() : '');
-const describeIf = apiKey ? describe : describe.skip;
+const describeIf = process.env.RUN_NEO4J_E2E === '1' && apiKey ? describe : describe.skip;
 
 describeIf('E2E: Federated Query across EN + JP corpora (Neo4j)', () => {
   let enAdapters: StorageAdapters;

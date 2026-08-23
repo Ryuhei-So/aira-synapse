@@ -83,4 +83,13 @@ describe('TASK-MG-004: CI workflow contract', () => {
       .map((s) => s.run);
     expect(covRuns.some((r) => r?.includes('coverage-ratchet.mjs verify'))).toBe(true);
   });
+
+  it('should run coverage with the full test scope and prepare its fixture first', () => {
+    const steps = jobs['coverage']!.steps;
+    const coverageIndex = steps.findIndex((s) => s.run?.includes('test:coverage'));
+    expect(coverageIndex).toBeGreaterThan(0);
+    expect(steps[coverageIndex]?.run).not.toContain('resolveConfigFromEnv.test.ts');
+    const coverageRun = steps[coverageIndex]?.run ?? '';
+    expect(coverageRun.indexOf('openai_api_key')).toBeLessThan(coverageRun.indexOf('test:coverage'));
+  });
 });
