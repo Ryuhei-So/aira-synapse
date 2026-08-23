@@ -34,6 +34,13 @@ function createPassage(passageId: string, documentId: string, text: string): Pas
   };
 }
 
+async function commitBatch(adapters: Awaited<ReturnType<typeof createStorageAdapters>>, mutate: () => Promise<void>): Promise<void> {
+  expect(adapters.batch).toBeDefined();
+  await adapters.batch!.begin();
+  await mutate();
+  await adapters.batch!.commit();
+}
+
 describe('TASK-AGDB-037 storage-port-compat', () => {
   it('storage-port-compat:graph-crud', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'aira-graphdb-compat-graph-'));
@@ -45,15 +52,17 @@ describe('TASK-AGDB-037 storage-port-compat', () => {
         },
       });
 
-      await adapters.graphStore.upsertNodes([
-        {
-          nodeId: 'n1',
-          corpusId: CORPUS_ID,
-          layer: 'fact',
-          ref: { id: 'r1' },
-          label: 'Node 1',
-        },
-      ]);
+      await commitBatch(adapters, async () => {
+        await adapters.graphStore.upsertNodes([
+          {
+            nodeId: 'n1',
+            corpusId: CORPUS_ID,
+            layer: 'fact',
+            ref: { id: 'r1' },
+            label: 'Node 1',
+          },
+        ]);
+      });
       const found = await adapters.graphStore.getNode(CORPUS_ID, 'n1');
       expect(found?.nodeId).toBe('n1');
       await adapters.close();
@@ -72,22 +81,24 @@ describe('TASK-AGDB-037 storage-port-compat', () => {
         },
       });
 
-      await adapters.vectorIndex.upsert([
-        {
-          id: 'v1',
-          corpusId: CORPUS_ID,
-          namespace: 'fact',
-          values: [1, 0, 0],
-          metadata: { documentId: 'doc-1' },
-        },
-        {
-          id: 'v2',
-          corpusId: CORPUS_ID,
-          namespace: 'fact',
-          values: [0, 1, 0],
-          metadata: { documentId: 'doc-2' },
-        },
-      ]);
+      await commitBatch(adapters, async () => {
+        await adapters.vectorIndex.upsert([
+          {
+            id: 'v1',
+            corpusId: CORPUS_ID,
+            namespace: 'fact',
+            values: [1, 0, 0],
+            metadata: { documentId: 'doc-1' },
+          },
+          {
+            id: 'v2',
+            corpusId: CORPUS_ID,
+            namespace: 'fact',
+            values: [0, 1, 0],
+            metadata: { documentId: 'doc-2' },
+          },
+        ]);
+      });
 
       const hits = await adapters.vectorIndex.search({
         corpusId: CORPUS_ID,
@@ -97,7 +108,7 @@ describe('TASK-AGDB-037 storage-port-compat', () => {
       });
       expect(hits[0]?.id).toBe('v1');
 
-      await adapters.vectorIndex.deleteByDocument(CORPUS_ID, 'doc-1');
+      await commitBatch(adapters, () => adapters.vectorIndex.deleteByDocument(CORPUS_ID, 'doc-1'));
       const afterDelete = await adapters.vectorIndex.search({
         corpusId: CORPUS_ID,
         namespace: 'fact',
@@ -121,10 +132,10 @@ describe('TASK-AGDB-037 storage-port-compat', () => {
         },
       });
 
-      await adapters.lexicalRetriever.indexPassages(CORPUS_ID, [
+      await commitBatch(adapters, () => adapters.lexicalRetriever.indexPassages(CORPUS_ID, [
         createPassage('p1', 'doc-1', 'graph retrieval graph retrieval'),
         createPassage('p2', 'doc-2', 'biology and proteins'),
-      ]);
+      ]));
       const hits = await adapters.lexicalRetriever.search(CORPUS_ID, 'graph retrieval', 2);
       expect(hits[0]?.passageId).toBe('p1');
       await adapters.close();
@@ -143,14 +154,14 @@ describe('TASK-AGDB-037 storage-port-compat', () => {
         },
       });
 
-      await adapters.memoryStore.save({
+      await commitBatch(adapters, () => adapters.memoryStore.save({
         corpusId: CORPUS_ID,
         exportedAt: TS,
         schemas: [],
         facts: [],
         passages: [createPassage('p1', 'doc-1', 'graph retrieval')],
         schemaVersion: 1,
-      });
+      }));
       const loaded = await adapters.memoryStore.load(CORPUS_ID);
       expect(loaded.passages).toHaveLength(1);
       await adapters.close();
@@ -169,20 +180,22 @@ describe('TASK-AGDB-037 storage-port-compat', () => {
         },
       });
 
-      await adapters.graphStore.upsertNodes([
-        { nodeId: 'a', corpusId: CORPUS_ID, layer: 'ontology', ref: { id: 'a' }, label: 'A' },
-        { nodeId: 'b', corpusId: CORPUS_ID, layer: 'fact', ref: { id: 'b' }, label: 'B' },
-      ]);
-      await adapters.graphStore.upsertEdges([
-        {
-          edgeId: 'e1',
-          corpusId: CORPUS_ID,
-          sourceNodeId: 'a',
-          targetNodeId: 'b',
-          relation: 'schema_instance',
-          weight: 1,
-        },
-      ]);
+      await commitBatch(adapters, async () => {
+        await adapters.graphStore.upsertNodes([
+          { nodeId: 'a', corpusId: CORPUS_ID, layer: 'ontology', ref: { id: 'a' }, label: 'A' },
+          { nodeId: 'b', corpusId: CORPUS_ID, layer: 'fact', ref: { id: 'b' }, label: 'B' },
+        ]);
+        await adapters.graphStore.upsertEdges([
+          {
+            edgeId: 'e1',
+            corpusId: CORPUS_ID,
+            sourceNodeId: 'a',
+            targetNodeId: 'b',
+            relation: 'schema_instance',
+            weight: 1,
+          },
+        ]);
+      });
 
       const count = await adapters.graphProjection.getNodeCount(CORPUS_ID);
       expect(count).toBe(2);

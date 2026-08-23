@@ -74,14 +74,14 @@ jobs:
           python-version: '3.12'
       - uses: dtolnay/rust-toolchain@stable
       - run: npm ci
-      - run: npm test -- --exclude tests/unit/infrastructure/config/resolveConfigFromEnv.test.ts
+      - run: npm test -- --fileParallelism=false --exclude tests/unit/infrastructure/config/resolveConfigFromEnv.test.ts
         working-directory: packages/memgraphrag
       - name: Run config path test with a deterministic fixture
         working-directory: packages/memgraphrag
         run: |
           printf 'ci-test-key\n' > config/openai_api_key
           trap 'rm -f config/openai_api_key' EXIT
-          npm test -- tests/unit/infrastructure/config/resolveConfigFromEnv.test.ts
+          npm test -- --fileParallelism=false tests/unit/infrastructure/config/resolveConfigFromEnv.test.ts
 
   coverage:
     runs-on: ubuntu-latest
@@ -104,14 +104,14 @@ jobs:
           python-version: '3.12'
       - uses: dtolnay/rust-toolchain@stable
       - run: npm ci
-      - run: npm run test:coverage -- --exclude tests/unit/infrastructure/config/resolveConfigFromEnv.test.ts
+      - run: npm run test:coverage -- --fileParallelism=false --exclude tests/unit/infrastructure/config/resolveConfigFromEnv.test.ts
         working-directory: packages/memgraphrag
       - name: Run config path test with a deterministic fixture
         working-directory: packages/memgraphrag
         run: |
           printf 'ci-test-key\n' > config/openai_api_key
           trap 'rm -f config/openai_api_key' EXIT
-          npm test -- tests/unit/infrastructure/config/resolveConfigFromEnv.test.ts
+          npm test -- --fileParallelism=false tests/unit/infrastructure/config/resolveConfigFromEnv.test.ts
 
   build:
     runs-on: ubuntu-latest
