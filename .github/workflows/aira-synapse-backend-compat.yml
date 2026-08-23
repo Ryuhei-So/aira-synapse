@@ -51,7 +51,7 @@ jobs:
           cache: 'npm'
       - uses: dtolnay/rust-toolchain@stable
       - run: npm ci
-      - run: npm test -- --fileParallelism=false tests/integration/storage-port-compat/aira_graphdb.storage-port-compat.test.ts
+      - run: npm test -- --config vitest.aira-graphdb.config.ts --fileParallelism=false tests/integration/storage-port-compat/aira_graphdb.storage-port-compat.test.ts
         working-directory: packages/memgraphrag
 
   backend-compat:
@@ -76,7 +76,7 @@ jobs:
         id: backend_compat_tests
         run: |
           set +e
-          (cd packages/memgraphrag && npm test -- --fileParallelism=false tests/integration/backend-compat/vector_lexical_compat.integration.test.ts)
+          (cd packages/memgraphrag && npm test -- --config vitest.aira-graphdb.config.ts --fileParallelism=false tests/integration/backend-compat/vector_lexical_compat.integration.test.ts)
           status=$?
           if [ "$status" -eq 0 ]; then
             node packages/memgraphrag/scripts/backend-compat-report.mjs \
@@ -126,7 +126,7 @@ jobs:
           fi
       - name: Run strict backend compatibility tests
         run: |
-          (cd packages/memgraphrag && npm test -- --fileParallelism=false tests/integration/backend-compat/vector_lexical_compat.integration.test.ts)
+          (cd packages/memgraphrag && npm test -- --config vitest.aira-graphdb.config.ts --fileParallelism=false tests/integration/backend-compat/vector_lexical_compat.integration.test.ts)
           node packages/memgraphrag/scripts/backend-compat-report.mjs \
             --status pass \
             --backend aira-graphdb \
