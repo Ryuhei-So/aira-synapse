@@ -4,42 +4,42 @@
   "sourceFileSetSha256": "0d06489961a96cfb5b395a0a193cca6cc3cea12ce9c4ed8a70c84b9fc6c056df",
   "metrics": {
     "lines": {
-      "covered": 8560,
+      "covered": 8450,
       "total": 11741
     },
     "statements": {
-      "covered": 8560,
+      "covered": 8450,
       "total": 11741
     },
     "functions": {
-      "covered": 581,
-      "total": 772
+      "covered": 606,
+      "total": 717
     },
     "branches": {
-      "covered": 1620,
-      "total": 2098
+      "covered": 1645,
+      "total": 2124
     }
   },
   "currentDebt": {
     "lines": {
       "targetPct": 80,
-      "actualPct": 72.91,
-      "debtPct": 7.09
+      "actualPct": 71.97,
+      "debtPct": 8.03
     },
     "statements": {
       "targetPct": 80,
-      "actualPct": 72.91,
-      "debtPct": 7.09
+      "actualPct": 71.97,
+      "debtPct": 8.03
     },
     "functions": {
       "targetPct": 80,
-      "actualPct": 75.26,
-      "debtPct": 4.74
+      "actualPct": 84.52,
+      "debtPct": -4.52
     },
     "branches": {
       "targetPct": 80,
-      "actualPct": 77.22,
-      "debtPct": 2.78
+      "actualPct": 77.45,
+      "debtPct": 2.55
     }
   },
   "bootstrapFloor": {
