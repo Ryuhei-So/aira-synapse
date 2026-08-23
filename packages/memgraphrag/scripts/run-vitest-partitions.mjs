@@ -6,7 +6,7 @@
  * file inventory so ordinary and resource-heavy tests cannot silently drift.
  */
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -99,7 +99,7 @@ function partition(files) {
   return { regular, resourceFile, resourceCaseFiles };
 }
 
-function runVitest(files, { coverage, blobDir, config }) {
+function runVitest(files, { coverage, blobDir, config, childEnv }) {
   if (files.length === 0) return;
   if (receivedSignal) throw new Error(`Vitest partition runner interrupted by ${receivedSignal}`);
   const args = ['run', '--config', config, ...files];
@@ -121,7 +121,7 @@ function runVitest(files, { coverage, blobDir, config }) {
   }
   const result = spawn(vitest, args, {
     cwd: packageRoot,
-    env: process.env,
+    env: childEnv,
     stdio: 'inherit',
   });
   activeChild = result;
@@ -163,21 +163,25 @@ async function main() {
     ...groups.resourceFile.map((file) => ({ files: [file] })),
     ...resourceTests.map((test) => ({ files: [`${test.file}:${test.line}`], test })),
   ];
+  const plan = {
+    files,
+    ...groups,
+    resource,
+    resourceTests,
+    invocations,
+    coverageMerge: true,
+  };
 
   if (process.argv.includes('--print-partition')) {
-    process.stdout.write(`${JSON.stringify({
-      files,
-      ...groups,
-      resource,
-      resourceTests,
-      invocations,
-      coverageMerge: true,
-    })}\n`);
+    process.stdout.write(`${JSON.stringify(plan)}\n`);
     return;
   }
 
   const temp = mkdtempSync(resolve(tmpdir(), 'aira-synapse-vitest-'));
   const blobDir = resolve(temp, 'blob');
+  const planPath = resolve(temp, 'partition-plan.json');
+  writeFileSync(planPath, `${JSON.stringify(plan)}\n`, { encoding: 'utf8', mode: 0o600 });
+  const childEnv = { ...process.env, VITEST_PARTITION_PLAN_PATH: planPath };
   const cleanup = () => rmSync(temp, { recursive: true, force: true });
   const onSignal = (signal) => {
     if (receivedSignal) return;
@@ -188,12 +192,12 @@ async function main() {
   process.once('SIGINT', onSignal);
   process.once('SIGTERM', onSignal);
   try {
-    await runVitest(groups.regular, { coverage, blobDir, config });
+    await runVitest(groups.regular, { coverage, blobDir, config, childEnv });
     for (const file of groups.resourceFile) {
-      await runVitest([file], { coverage, blobDir, config });
+      await runVitest([file], { coverage, blobDir, config, childEnv });
     }
     for (const test of resourceTests) {
-      await runVitest([`${test.file}:${test.line}`], { coverage, blobDir, config });
+      await runVitest([`${test.file}:${test.line}`], { coverage, blobDir, config, childEnv });
     }
     if (coverage) {
       const merge = spawn(vitest, ['--merge-reports', blobDir, '--coverage', '--config', config], {

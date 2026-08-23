@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const REPO_ROOT = resolve(import.meta.dirname, '..', '..', '..', '..', '..');
@@ -25,6 +26,8 @@ type Partition = {
 };
 
 function readPartition(): Partition {
+  const suppliedPlan = process.env.VITEST_PARTITION_PLAN_PATH;
+  if (suppliedPlan) return JSON.parse(readFileSync(suppliedPlan, 'utf8')) as Partition;
   const output = execFileSync(process.execPath, [RUNNER, '--print-partition'], {
     cwd: PACKAGE_ROOT,
     encoding: 'utf8',
