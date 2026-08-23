@@ -32,7 +32,9 @@ const refProtected = boolEnv('GITHUB_REF_PROTECTED');
 const mergeQueue = boolEnv('GITHUB_MERGE_QUEUE');
 
 const repoRoot = resolve(process.cwd(), '..', '..', '..');
-const contractsRoot = resolve(repoRoot, '..', 'aira-graphdb', 'spec', 'contracts');
+const contractsRoot = process.env.AIRA_GRAPHDB_REPO_PATH
+  ? resolve(process.env.AIRA_GRAPHDB_REPO_PATH, 'spec', 'contracts')
+  : resolve(repoRoot, '..', 'aira-graphdb', 'spec', 'contracts');
 const eventScopeMap = loadJson(resolve(contractsRoot, 'event-scope-map.v1.0.0.json'));
 const branchPolicy = loadJson(resolve(contractsRoot, 'branch-protection-policy.v1.0.0.json'));
 
@@ -92,4 +94,3 @@ if (strictMode && isTrustedScope && !process.env.AIRA_SYNAPSE_ADMIN_TOKEN) {
   };
   writeFileSync(outputPath, `${JSON.stringify(passed, null, 2)}\n`, 'utf8');
 }
-

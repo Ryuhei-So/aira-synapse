@@ -6,7 +6,7 @@
 export interface LadybugModule {
   Database: new (
     path: string,
-    flags?: number,
+    bufferManagerSize?: number,
     enableCompression?: boolean,
     readOnly?: boolean,
     maxDBSize?: number,
