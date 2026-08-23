@@ -86,13 +86,7 @@ export interface V15ExpandedFactSeed {
   readonly score: number;
 }
 
-/**
- * Complete machine-readable policy for exactly one v15 retrieval.
- *
- * `factExpansion` is null when Synapse did not request comparison/entity
- * expansion.  Keeping that choice explicit prevents the data plane from
- * inventing a default operation.
- */
+/** Static machine-readable policy known before any v15 retrieval data access. */
 export interface V15RetrievalRequestPlan {
   readonly version: typeof V15_RETRIEVAL_PLAN_VERSION;
   readonly profile: V15RetrievalProfile;
@@ -364,6 +358,22 @@ export function buildV15FactExpansionPlan(
     attenuation: V15_EXPANSION_ATTENUATION,
     limit: V15_EXPANSION_LIMIT,
     normalizationContractDigest: V15_ENTITY_NORMALIZATION_DIGEST,
+  };
+}
+
+/** Single authority for deciding and scoring one comparison-expansion fact. */
+export function evaluateV15FactExpansionHit(
+  plan: V15FactExpansionPlan,
+  fact: Fact,
+): V15ExpandedFactSeed | null {
+  if (plan.excludedSeedFactIds.includes(fact.factId)) return null;
+  const seeds = new Map(plan.seedEntities.map((seed) => [seed.key, seed.score]));
+  const headScore = seeds.get(normalizeV15Entity(fact.headEntity));
+  const tailScore = seeds.get(normalizeV15Entity(fact.tailEntity));
+  if (headScore === undefined && tailScore === undefined) return null;
+  return {
+    factId: fact.factId,
+    score: Math.max(headScore ?? 0, tailScore ?? 0) * plan.attenuation,
   };
 }
 

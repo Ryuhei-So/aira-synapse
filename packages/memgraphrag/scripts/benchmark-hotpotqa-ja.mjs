@@ -150,7 +150,7 @@ async function evaluateQueries() {
   const nodeInitializer = new SimpleNodeInitializer(memoryStore);
   const contextBuilder = new SimpleContextBuilder(memoryStore);
   const expansionPolicy = new ThesaurusExpansionPolicy(thesaurus, { synonymLimit: 3, hypernymLimit: 0 });
-  const ppr = new SimplePPR(HP_HUB);
+  const ppr = new SimplePPR();
 
   const queryService = new DefaultQueryService({
     dictionary,

@@ -98,6 +98,7 @@ describe('v15 legacy path parity hardenings', () => {
       teleportProbability: 0.5,
       convergenceEpsilon: 1e-12,
       maxIterations: 1,
+      hubDegreeThreshold: 50,
       topK: 2,
       topM: 1,
     }, projection);

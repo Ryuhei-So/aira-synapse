@@ -500,7 +500,7 @@ async function evaluateQueries() {
     featureFlags.enableThesaurusExpansion ? dictionary : undefined,
   );
 
-  const ppr = new SimplePPR(HP_HUB);
+  const ppr = new SimplePPR();
 
   const subQueryDecomposer = featureFlags.enableSubQueryDecomposition
     ? new SubQueryDecomposer(llm, baseInitializer, ppr, graphProjection)

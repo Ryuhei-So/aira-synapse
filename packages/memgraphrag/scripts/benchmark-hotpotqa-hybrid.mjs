@@ -161,7 +161,7 @@ async function main() {
     expansionPolicy,
     memoryFilter: new VectorMemoryFilter(embedding, vectorIndex, memoryStore, graphStore),
     nodeInitializer: new SimpleNodeInitializer(memoryStore),
-    ppr: new SimplePPR(HP_HUB),
+    ppr: new SimplePPR(),
     projection: graphProjection,
     contextBuilder: new SimpleContextBuilder(memoryStore),
     llm,

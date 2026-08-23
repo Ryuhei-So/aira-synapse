@@ -16,6 +16,7 @@ import {
   buildV15InitialVector,
   buildV15PprMaterializationPlan,
   compareV15ScoreThenId,
+  evaluateV15FactExpansionHit,
   validateV15FactExpansionPlan,
   validateV15PprMaterializationPlan,
   V15_RETRIEVAL_PLAN_VERSION,
@@ -366,6 +367,10 @@ function validateFactExpansionResponse(
     if (hit.factId !== hit.fact.factId || hit.fact.corpusId !== corpusId || !Number.isFinite(hit.score)) {
       invalidResponse(`fact expansion hit ${hit.factId} does not match its object, corpus, or score`);
     }
+    const evaluated = evaluateV15FactExpansionHit(plan, hit.fact);
+    if (!evaluated || evaluated.factId !== hit.factId || evaluated.score !== hit.score) {
+      invalidResponse(`fact expansion hit ${hit.factId} violates the Synapse expansion policy`);
+    }
     if (seen.has(hit.factId)) invalidResponse(`fact expansion contains duplicate fact ${hit.factId}`);
     seen.add(hit.factId);
     const current = { id: hit.factId, score: hit.score };
@@ -422,6 +427,7 @@ function validatePprMaterializationResponse(
     || typeof response.converged !== 'boolean'
     || !Number.isFinite(response.l1Delta)
     || response.l1Delta < 0
+    || response.converged !== (response.l1Delta < plan.convergenceEpsilon)
   ) {
     invalidResponse('PPR response metrics are outside the request contract');
   }

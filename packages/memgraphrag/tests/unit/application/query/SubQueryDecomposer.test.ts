@@ -57,7 +57,7 @@ describe('SubQueryDecomposer', () => {
     const decomposer = new SubQueryDecomposer(mockLLM('{}'), mockInitializer(), mockPPR(), mockProjection());
     const base: NodeInitializationVector = { scores: { 'fact:f1': 1.0 }, fallbackTriggered: false };
 
-    const result = await decomposer.decompose(makeRequest('Which city is bigger, Tokyo or Osaka?'), base);
+    const result = await decomposer.decompose(makeRequest('Which city is bigger, Tokyo or Osaka?'), base, 50);
 
     expect(result.decomposed).toBe(false);
     expect(result.fallbackReason).toBe('comparison_query');
@@ -67,7 +67,7 @@ describe('SubQueryDecomposer', () => {
     const decomposer = new SubQueryDecomposer(mockLLM('{}'), mockInitializer(), mockPPR(), mockProjection());
     const base: NodeInitializationVector = { scores: { 'fact:f1': 1.0 }, fallbackTriggered: false };
 
-    const result = await decomposer.decompose(makeRequest('What is the capital of France?'), base);
+    const result = await decomposer.decompose(makeRequest('What is the capital of France?'), base, 50);
 
     expect(result.decomposed).toBe(false);
     expect(result.fallbackReason).toBe('no_bridge_pattern');
@@ -78,17 +78,23 @@ describe('SubQueryDecomposer', () => {
       hop1Query: 'Who directed Inception?',
       expectedBridgeType: 'person',
     });
-    const decomposer = new SubQueryDecomposer(mockLLM(llmResponse), mockInitializer(), mockPPR(), mockProjection());
+    const ppr = mockPPR();
+    const decomposer = new SubQueryDecomposer(mockLLM(llmResponse), mockInitializer(), ppr, mockProjection());
     const base: NodeInitializationVector = { scores: { 'fact:f1': 1.0 }, fallbackTriggered: false };
 
     const result = await decomposer.decompose(
       makeRequest('Where was the person who directed Inception born?'),
       base,
+      7,
     );
 
     expect(result.decomposed).toBe(true);
     expect(result.hop1FactCount).toBeGreaterThan(0);
     expect(result.hop2FactCount).toBeGreaterThan(0);
+    expect(ppr.run).toHaveBeenCalledWith(
+      expect.objectContaining({ hubDegreeThreshold: 7 }),
+      expect.anything(),
+    );
     // Merged vector should be L1 normalized
     const sum = Object.values(result.mergedVector.scores).reduce((a, b) => a + b, 0);
     expect(sum).toBeCloseTo(1.0, 5);
@@ -105,6 +111,7 @@ describe('SubQueryDecomposer', () => {
     const result = await decomposer.decompose(
       makeRequest('Where was the person who directed Inception born?'),
       base,
+      50,
     );
 
     expect(result.decomposed).toBe(false);
@@ -122,6 +129,7 @@ describe('SubQueryDecomposer', () => {
     const result = await decomposer.decompose(
       makeRequest('Where was the person who directed Inception born?'),
       base,
+      50,
     );
 
     expect(result.decomposed).toBe(false);

@@ -253,7 +253,11 @@ export class DefaultQueryService implements QueryService {
     let initialVector = await this.dependencies.nodeInitializer.initialize(initRequest);
 
     if (this.flags.enableSubQueryDecomposition && this.dependencies.subQueryDecomposer) {
-      const subResult = await this.dependencies.subQueryDecomposer.decompose(initRequest, initialVector);
+      const subResult = await this.dependencies.subQueryDecomposer.decompose(
+        initRequest,
+        initialVector,
+        this.hp.hubDegreeThreshold,
+      );
       initialVector = subResult.mergedVector;
     }
 

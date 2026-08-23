@@ -193,7 +193,7 @@ async function main() {
     expansionPolicy: new ThesaurusExpansionPolicy(thesaurus),
     memoryFilter,
     nodeInitializer: new SimpleNodeInitializer(memoryStore),
-    ppr: new SimplePPR(HP_HUB),
+    ppr: new SimplePPR(),
     projection: graphProjection,
     contextBuilder: new SimpleContextBuilder(memoryStore),
     llm,

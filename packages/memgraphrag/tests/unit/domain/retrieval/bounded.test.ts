@@ -156,13 +156,13 @@ describe('BoundedGenerationSession', () => {
       return {
         generation: lease.generation,
         sessionId: lease.sessionId,
-        facts: [{ factId: 'fact-2', score: 0.4, fact: expandedFact }],
+        facts: [{ factId: 'fact-2', score: 0, fact: expandedFact }],
       };
     });
     const pprMaterializeBounded = vi.fn().mockImplementation(async (request) => {
       expect(request.plan.seeds).toEqual([
         { nodeId: 'fact:fact-1', score: -0.25 },
-        { nodeId: 'fact:fact-2', score: 0.4 },
+        { nodeId: 'fact:fact-2', score: 0 },
         { nodeId: 'passage:passage-1', score: -0.2 },
       ]);
       return pprResponse();
@@ -237,6 +237,7 @@ describe('BoundedGenerationSession', () => {
     const expanded = makeFact('fact-2');
     const invalidFacts = [
       [{ factId: 'wrong-id', score: 0.4, fact: expanded }],
+      [{ factId: 'fact-2', score: 0.4, fact: expanded }],
       [{ factId: 'fact-2', score: Number.POSITIVE_INFINITY, fact: expanded }],
       [
         { factId: 'fact-2', score: 0.2, fact: expanded },
@@ -274,6 +275,7 @@ describe('BoundedGenerationSession', () => {
       }),
       pprResponse({ iterations: 101 }),
       pprResponse({ l1Delta: -1 }),
+      pprResponse({ converged: true, l1Delta: 1 }),
     ];
 
     for (const response of invalidResponses) {

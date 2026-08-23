@@ -17,7 +17,7 @@ import type { IMemoryStore } from '../../domain/storage/index.js';
 import {
   buildV15FactExpansionPlan,
   buildV15InitialVector,
-  normalizeV15Entity,
+  evaluateV15FactExpansionHit,
   orderV15ScoreThenId,
 } from '../../domain/retrieval/v15Plan.js';
 
@@ -37,21 +37,10 @@ export class SimpleNodeInitializer implements INodeInitializer {
     if (expansionPlan && this.memoryStore) {
       const snapshot = await this.memoryStore.load(query.corpusId);
 
-      const seedEntities = new Map(expansionPlan.seedEntities.map((seed) => [seed.key, seed.score]));
-      const excludedSeedFacts = new Set(expansionPlan.excludedSeedFactIds);
-      const candidateFactIds = new Set(candidates.facts.map((candidate) => candidate.item.factId));
-
       const expansionCandidates: { id: string; score: number }[] = [];
       for (const fact of snapshot.facts) {
-        if (excludedSeedFacts.has(fact.factId) || candidateFactIds.has(fact.factId)) continue;
-
-        const headScore = seedEntities.get(normalizeV15Entity(fact.headEntity));
-        const tailScore = seedEntities.get(normalizeV15Entity(fact.tailEntity));
-
-        if (headScore !== undefined || tailScore !== undefined) {
-          const entityScore = Math.max(headScore ?? 0, tailScore ?? 0);
-          expansionCandidates.push({ id: fact.factId, score: entityScore * expansionPlan.attenuation });
-        }
+        const evaluated = evaluateV15FactExpansionHit(expansionPlan, fact);
+        if (evaluated) expansionCandidates.push({ id: evaluated.factId, score: evaluated.score });
       }
 
       for (const exp of orderV15ScoreThenId(expansionCandidates).slice(0, expansionPlan.limit)) {
