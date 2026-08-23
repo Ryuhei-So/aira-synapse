@@ -17,7 +17,7 @@ import type { IMemoryStore } from '../../domain/storage/index.js';
 import {
   buildV15FactExpansionPlan,
   buildV15InitialVector,
-  evaluateV15FactExpansionHit,
+  compileV15FactExpansionEvaluator,
   orderV15ScoreThenId,
 } from '../../domain/retrieval/v15Plan.js';
 
@@ -36,10 +36,11 @@ export class SimpleNodeInitializer implements INodeInitializer {
     const expansionPlan = buildV15FactExpansionPlan(candidates, isComparison);
     if (expansionPlan && this.memoryStore) {
       const snapshot = await this.memoryStore.load(query.corpusId);
+      const evaluateExpansion = compileV15FactExpansionEvaluator(expansionPlan);
 
       const expansionCandidates: { id: string; score: number }[] = [];
       for (const fact of snapshot.facts) {
-        const evaluated = evaluateV15FactExpansionHit(expansionPlan, fact);
+        const evaluated = evaluateExpansion(fact);
         if (evaluated) expansionCandidates.push({ id: evaluated.factId, score: evaluated.score });
       }
 

@@ -15,8 +15,8 @@ import {
   buildV15FactExpansionPlan,
   buildV15InitialVector,
   buildV15PprMaterializationPlan,
+  compileV15FactExpansionEvaluator,
   compareV15ScoreThenId,
-  evaluateV15FactExpansionHit,
   validateV15FactExpansionPlan,
   validateV15PprMaterializationPlan,
   V15_RETRIEVAL_PLAN_VERSION,
@@ -363,11 +363,12 @@ function validateFactExpansionResponse(
   }
   let previous: { id: string; score: number } | undefined;
   const seen = new Set<string>();
+  const evaluateExpansion = compileV15FactExpansionEvaluator(plan);
   for (const hit of response.facts) {
     if (hit.factId !== hit.fact.factId || hit.fact.corpusId !== corpusId || !Number.isFinite(hit.score)) {
       invalidResponse(`fact expansion hit ${hit.factId} does not match its object, corpus, or score`);
     }
-    const evaluated = evaluateV15FactExpansionHit(plan, hit.fact);
+    const evaluated = evaluateExpansion(hit.fact);
     if (!evaluated || evaluated.factId !== hit.factId || evaluated.score !== hit.score) {
       invalidResponse(`fact expansion hit ${hit.factId} violates the Synapse expansion policy`);
     }
@@ -428,6 +429,13 @@ function validatePprMaterializationResponse(
     || !Number.isFinite(response.l1Delta)
     || response.l1Delta < 0
     || response.converged !== (response.l1Delta < plan.convergenceEpsilon)
+    || (!response.converged && response.iterations !== plan.maxIterations)
+    || (response.iterations === 0 && (
+      response.rankedPassages.length > 0
+      || response.rankedFacts.length > 0
+      || !response.converged
+      || response.l1Delta !== 0
+    ))
   ) {
     invalidResponse('PPR response metrics are outside the request contract');
   }

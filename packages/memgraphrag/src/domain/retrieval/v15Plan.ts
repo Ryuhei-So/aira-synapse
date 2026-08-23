@@ -361,19 +361,21 @@ export function buildV15FactExpansionPlan(
   };
 }
 
-/** Single authority for deciding and scoring one comparison-expansion fact. */
-export function evaluateV15FactExpansionHit(
+/** Compile the single expansion authority once for a bounded/full fact scan. */
+export function compileV15FactExpansionEvaluator(
   plan: V15FactExpansionPlan,
-  fact: Fact,
-): V15ExpandedFactSeed | null {
-  if (plan.excludedSeedFactIds.includes(fact.factId)) return null;
+): (fact: Fact) => V15ExpandedFactSeed | null {
+  const excluded = new Set(plan.excludedSeedFactIds);
   const seeds = new Map(plan.seedEntities.map((seed) => [seed.key, seed.score]));
-  const headScore = seeds.get(normalizeV15Entity(fact.headEntity));
-  const tailScore = seeds.get(normalizeV15Entity(fact.tailEntity));
-  if (headScore === undefined && tailScore === undefined) return null;
-  return {
-    factId: fact.factId,
-    score: Math.max(headScore ?? 0, tailScore ?? 0) * plan.attenuation,
+  return (fact) => {
+    if (excluded.has(fact.factId)) return null;
+    const headScore = seeds.get(normalizeV15Entity(fact.headEntity));
+    const tailScore = seeds.get(normalizeV15Entity(fact.tailEntity));
+    if (headScore === undefined && tailScore === undefined) return null;
+    return {
+      factId: fact.factId,
+      score: Math.max(headScore ?? 0, tailScore ?? 0) * plan.attenuation,
+    };
   };
 }
 

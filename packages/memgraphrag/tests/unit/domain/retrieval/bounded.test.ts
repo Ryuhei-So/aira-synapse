@@ -238,6 +238,12 @@ describe('BoundedGenerationSession', () => {
     const invalidFacts = [
       [{ factId: 'wrong-id', score: 0.4, fact: expanded }],
       [{ factId: 'fact-2', score: 0.4, fact: expanded }],
+      [{ factId: 'fact-1', score: 0, fact }],
+      [{
+        factId: 'fact-2',
+        score: 0,
+        fact: { ...expanded, headEntity: 'Gamma', tailEntity: 'Delta' },
+      }],
       [{ factId: 'fact-2', score: Number.POSITIVE_INFINITY, fact: expanded }],
       [
         { factId: 'fact-2', score: 0.2, fact: expanded },
@@ -276,6 +282,8 @@ describe('BoundedGenerationSession', () => {
       pprResponse({ iterations: 101 }),
       pprResponse({ l1Delta: -1 }),
       pprResponse({ converged: true, l1Delta: 1 }),
+      pprResponse({ iterations: 1, converged: false, l1Delta: 1 }),
+      pprResponse({ iterations: 0 }),
     ];
 
     for (const response of invalidResponses) {
