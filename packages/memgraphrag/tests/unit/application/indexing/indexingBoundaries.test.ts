@@ -26,6 +26,201 @@ describe('indexing and provider behavioral boundaries', () => {
     expect(extraction.metadata.chunkId).toBe(chunks[0]!.chunkId);
   });
 
+  it('keeps a short no-heading English document as one exact normalized chunk', () => {
+    const request = {
+      corpusId: 'c1',
+      documentId: 'doc-en-short',
+      title: 'Short English',
+      sourceUrl: 'https://example.com/short',
+      language: 'en' as const,
+      markdown: '  Short English paragraph.  ',
+    };
+
+    expect(chunkMarkdownDocument(request)).toEqual([{
+      chunkId: 'doc-en-short:0',
+      text: 'Short English paragraph.',
+      normalizedText: 'short english paragraph.',
+      sectionPath: [],
+      chunkIndex: 0,
+      offsetStart: 0,
+      offsetEnd: 'Short English paragraph.'.length,
+      features: {
+        hasCodeBlock: false,
+        hasTable: false,
+        hasReferences: false,
+      },
+    }]);
+  });
+
+  it('preserves paragraph order, overlap, ids, and offsets for oversized no-heading English text', () => {
+    const firstParagraph = 'first '.repeat(450).trim();
+    const secondParagraph = 'second '.repeat(450).trim();
+    const markdown = `${firstParagraph}\n\n${secondParagraph}`;
+    const request = {
+      corpusId: 'c1',
+      documentId: 'doc-en-large',
+      title: 'Large English',
+      sourceUrl: 'https://example.com/large',
+      language: 'en' as const,
+      markdown,
+    };
+
+    expect(chunkMarkdownDocument(request)).toEqual([
+      {
+        chunkId: 'doc-en-large:0',
+        text: firstParagraph,
+        normalizedText: firstParagraph,
+        sectionPath: [],
+        chunkIndex: 0,
+        offsetStart: 0,
+        offsetEnd: firstParagraph.length,
+        features: {
+          hasCodeBlock: false,
+          hasTable: false,
+          hasReferences: false,
+        },
+      },
+      {
+        chunkId: 'doc-en-large:1',
+        text: `${firstParagraph}\n\n${secondParagraph}`,
+        normalizedText: `${firstParagraph}\n\n${secondParagraph}`,
+        sectionPath: [],
+        chunkIndex: 1,
+        offsetStart: 0,
+        offsetEnd: markdown.length,
+        features: {
+          hasCodeBlock: false,
+          hasTable: false,
+          hasReferences: false,
+        },
+      },
+    ]);
+  });
+
+  it('splits only the oversized Japanese heading section while preserving paths and ids', () => {
+    const longFirstParagraph = 'これは長い文章です。'.repeat(80);
+    const longSecondParagraph = 'こちらも長い文章です。'.repeat(80);
+    const markdown = [
+      '# 短い',
+      '短文です。',
+      '',
+      '# 長い',
+      longFirstParagraph,
+      '',
+      longSecondParagraph,
+    ].join('\n');
+    const longStart = markdown.indexOf('# 長い');
+    const request = {
+      corpusId: 'c1',
+      documentId: 'doc-ja-sync',
+      title: '日本語',
+      sourceUrl: 'https://example.com/ja',
+      language: 'ja' as const,
+      markdown,
+    };
+    const shortText = '# 短い\n短文です。';
+    const longText = `# 長い\n${longFirstParagraph}`;
+    const longOverlapText = `${longText}\n\n${longSecondParagraph}`;
+
+    expect(chunkMarkdownDocument(request)).toEqual([
+      {
+        chunkId: 'doc-ja-sync:0',
+        text: shortText,
+        normalizedText: shortText,
+        sectionPath: ['短い'],
+        chunkIndex: 0,
+        offsetStart: 0,
+        offsetEnd: longStart,
+        features: {
+          hasCodeBlock: false,
+          hasTable: false,
+          hasReferences: false,
+        },
+      },
+      {
+        chunkId: 'doc-ja-sync:1',
+        text: longText,
+        normalizedText: longText,
+        sectionPath: ['長い'],
+        chunkIndex: 1,
+        offsetStart: longStart,
+        offsetEnd: markdown.length,
+        features: {
+          hasCodeBlock: false,
+          hasTable: false,
+          hasReferences: false,
+        },
+      },
+      {
+        chunkId: 'doc-ja-sync:2',
+        text: longOverlapText,
+        normalizedText: longOverlapText,
+        sectionPath: ['長い'],
+        chunkIndex: 2,
+        offsetStart: longStart,
+        offsetEnd: markdown.length,
+        features: {
+          hasCodeBlock: false,
+          hasTable: false,
+          hasReferences: false,
+        },
+      },
+    ]);
+  });
+
+  it('returns empty Ginza results without invoking the sidecar and delegates English', async () => {
+    const sidecar = { chunkSentences: vi.fn(), extractEntitiesJa: vi.fn() };
+    const emptyRequest = {
+      corpusId: 'c1',
+      documentId: 'doc-empty-ginza',
+      title: 'Empty',
+      sourceUrl: 'https://example.com/empty',
+      language: 'ja' as const,
+      markdown: '   ',
+    };
+    await expect(chunkMarkdownDocumentWithGinza(emptyRequest, sidecar)).resolves.toEqual([]);
+    expect(sidecar.chunkSentences).not.toHaveBeenCalled();
+
+    const englishRequest = {
+      ...emptyRequest,
+      documentId: 'doc-en-ginza',
+      language: 'en' as const,
+      markdown: 'English text without headings.',
+    };
+    await expect(chunkMarkdownDocumentWithGinza(englishRequest, sidecar)).resolves.toEqual(
+      chunkMarkdownDocument(englishRequest),
+    );
+    expect(sidecar.chunkSentences).not.toHaveBeenCalled();
+  });
+
+  it('bypasses Ginza for a short no-heading Japanese section with exact metadata', async () => {
+    const sidecar = { chunkSentences: vi.fn(), extractEntitiesJa: vi.fn() };
+    const request = {
+      corpusId: 'c1',
+      documentId: 'doc-ja-short-ginza',
+      title: '短い日本語',
+      sourceUrl: 'https://example.com/ja-short',
+      language: 'ja' as const,
+      markdown: '短い日本語。',
+    };
+
+    await expect(chunkMarkdownDocumentWithGinza(request, sidecar)).resolves.toEqual([{
+      chunkId: 'doc-ja-short-ginza:0',
+      text: '短い日本語。',
+      normalizedText: '短い日本語。',
+      sectionPath: [],
+      chunkIndex: 0,
+      offsetStart: 0,
+      offsetEnd: request.markdown.length,
+      features: {
+        hasCodeBlock: false,
+        hasTable: false,
+        hasReferences: false,
+      },
+    }]);
+    expect(sidecar.chunkSentences).not.toHaveBeenCalled();
+  });
+
   it('uses Ginza chunks for oversized Japanese sections and falls back on sidecar errors', async () => {
     const request = { corpusId: 'c1', documentId: 'doc-ja', title: '日本語', sourceUrl: 'https://example.com', language: 'ja' as const, markdown: '# 見出し\n' + 'これは長い文章です。'.repeat(300) };
     const sidecar = { chunkSentences: vi.fn().mockResolvedValue([{ text: '第一文。', sentenceCount: 1, estimatedTokens: 2 }, { text: '第二文。', sentenceCount: 1, estimatedTokens: 2 }]), extractEntitiesJa: vi.fn() };
