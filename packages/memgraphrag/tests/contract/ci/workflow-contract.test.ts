@@ -136,6 +136,7 @@ describe('TASK-MG-004: CI workflow contract', () => {
       .filter((s) => s.run)
       .map((s) => s.run);
     expect(testRuns.some((r) => r?.includes('test'))).toBe(true);
+    expect(testRuns.some((r) => r?.includes('--fileParallelism=false'))).toBe(true);
   });
 
   it('should run npm run test:coverage in coverage job', () => {
@@ -143,5 +144,6 @@ describe('TASK-MG-004: CI workflow contract', () => {
       .filter((s) => s.run)
       .map((s) => s.run);
     expect(covRuns.some((r) => r?.includes('test:coverage'))).toBe(true);
+    expect(covRuns.some((r) => r?.includes('--fileParallelism=false'))).toBe(true);
   });
 });

@@ -20,8 +20,8 @@ describe('indexing and provider behavioral boundaries', () => {
     expect(chunks.map((x) => x.sectionPath)).toEqual([['Intro'], ['Intro', 'References']]);
     expect(chunks[1]?.features.hasReferences).toBe(true);
     expect(chunks[0]?.features.hasTable).toBe(true);
-    const parts = fallbackParagraphSplit('one\n\ntwo\n\nthree', 1, 1);
-    expect(parts).toEqual(['one', 'one\n\ntwo', 'two\n\nthree']);
+    const parts = fallbackParagraphSplit('one\n\ntwo\n\nthree', 2, 1);
+    expect(parts).toEqual(['one\n\ntwo', 'two\n\nthree']);
     const extraction = toExtractionChunk('c1', chunks[0]!, { ...base, markdown: chunks[0]!.text });
     expect(extraction.metadata.chunkId).toBe(chunks[0]!.chunkId);
   });
