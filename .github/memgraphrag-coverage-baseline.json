@@ -4,11 +4,11 @@
   "sourceFileSetSha256": "0d06489961a96cfb5b395a0a193cca6cc3cea12ce9c4ed8a70c84b9fc6c056df",
   "metrics": {
     "lines": {
-      "covered": 8472,
+      "covered": 8362,
       "total": 11741
     },
     "statements": {
-      "covered": 8472,
+      "covered": 8362,
       "total": 11741
     },
     "functions": {
@@ -16,20 +16,20 @@
       "total": 772
     },
     "branches": {
-      "covered": 1602,
+      "covered": 1600,
       "total": 2080
     }
   },
   "currentDebt": {
     "lines": {
       "targetPct": 80,
-      "actualPct": 72.16,
-      "debtPct": 7.84
+      "actualPct": 71.22,
+      "debtPct": 8.78
     },
     "statements": {
       "targetPct": 80,
-      "actualPct": 72.16,
-      "debtPct": 7.84
+      "actualPct": 71.22,
+      "debtPct": 8.78
     },
     "functions": {
       "targetPct": 80,
@@ -38,8 +38,8 @@
     },
     "branches": {
       "targetPct": 80,
-      "actualPct": 77.02,
-      "debtPct": 2.98
+      "actualPct": 76.89,
+      "debtPct": 3.11
     }
   }
 }
