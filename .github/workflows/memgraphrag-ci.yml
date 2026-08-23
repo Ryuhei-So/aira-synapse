@@ -63,7 +63,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Ryuhei-So/aira-graphdb
-          ref: c2413c1d9dd7903caad19c0b3007f8d6c0b76655
+          ref: 164092aa47f39330c0c771495d9d42e4e935e41b
           path: aira-graphdb
       - uses: actions/setup-node@v4
         with:
@@ -93,7 +93,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Ryuhei-So/aira-graphdb
-          ref: c2413c1d9dd7903caad19c0b3007f8d6c0b76655
+          ref: 164092aa47f39330c0c771495d9d42e4e935e41b
           path: aira-graphdb
       - uses: actions/setup-node@v4
         with:
