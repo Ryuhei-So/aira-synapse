@@ -73,16 +73,25 @@ describe('retrieval-core behavioral boundaries', () => {
     expect(result.converged).toBe(false);
     expect(result.rankedPassages).toHaveLength(1);
     expect(result.rankedPassages[0]?.layer).toBe('passage');
+    expect(result.rankedPassages[0]?.score).toBeCloseTo(0.25);
     expect(result.rankedEntities.map((node) => node.layer)).toEqual(expect.arrayContaining(['fact', 'ontology', 'entity']));
+    expect(Object.fromEntries(result.rankedEntities.map((node) => [node.nodeId, node.score]))).toMatchObject({
+      'entity:a': expect.closeTo(0.1796875),
+      'fact:f': expect.closeTo(0.0625),
+      'schema:s': expect.closeTo(0.0859375),
+    });
   });
 
   it('dampens a high-degree schema target without dropping passage ranking', async () => {
     const entries: TransitionEntry[] = Array.from({ length: 3 }, (_, i) => ({ sourceNodeId: `entity:${i}`, targetNodeId: 'schema:hub', weight: 1 }));
     entries.push({ sourceNodeId: 'schema:hub', targetNodeId: 'passage:p', weight: 1 });
     const projection: IGraphProjection = { getTransitions: () => transitions(entries), getDanglingNodes: vi.fn(), getNodeCount: vi.fn() };
-    const result = await new SimplePPR(1).run({ corpusId: 'c1', initialVector: { scores: { 'entity:0': 1 }, fallbackTriggered: false }, teleportProbability: 0.5, convergenceEpsilon: 1e-6, maxIterations: 50, topK: 3, topM: 3 }, projection);
-    expect(result.rankedPassages[0]?.nodeId).toBe('passage:p');
-    expect(result.rankedEntities.some((node) => node.nodeId === 'schema:hub')).toBe(true);
+    const pprRequest = { corpusId: 'c1', initialVector: { scores: { 'entity:0': 1 }, fallbackTriggered: false }, teleportProbability: 0.5, convergenceEpsilon: 1e-6, maxIterations: 50, topK: 3, topM: 3 };
+    const damped = await new SimplePPR(1).run(pprRequest, projection);
+    const undamped = await new SimplePPR(100).run(pprRequest, projection);
+    expect(damped.rankedPassages[0]?.nodeId).toBe('passage:p');
+    const scoreFor = (result: typeof damped, nodeId: string) => result.rankedEntities.find((node) => node.nodeId === nodeId)?.score;
+    expect(scoreFor(damped, 'schema:hub')).toBeLessThan(scoreFor(undamped, 'schema:hub')!);
   });
 
   it('fails closed on an empty embedding and uses a precomputed vector without embedding', async () => {
@@ -111,7 +120,7 @@ describe('retrieval-core behavioral boundaries', () => {
     const index = vectorIndex({ passage: [{ id: 'p1', score: 0.9 }], fact: [{ id: 'f1', score: 0.8 }], schema: [{ id: 's1', score: 0.7 }] });
     const result = await new HybridMemoryFilter(embedding([[1]]), index, memoryStore(snapshot([passage('p1'), passage('p2')], [fact('f1')], [schema('s1')])), lexical, undefined).filter({ ...request, topK: 2 });
     expect(result.passages.map((x) => x.item.passageId)).toEqual(['p1', 'p2']);
-    expect(result.passages[1]?.similarity).toBeLessThan(0.02);
+    expect(result.passages[1]?.similarity).toBeCloseTo(0.7 / 61);
     expect(result.facts).toHaveLength(1);
     expect(result.ontology).toHaveLength(1);
   });
@@ -133,11 +142,18 @@ describe('retrieval-core behavioral boundaries', () => {
     expect(comparison.confidence).toBeGreaterThan(0);
   });
 
-  it('honors the context token bound and ignores missing ranked nodes', async () => {
-    const builder = new SimpleContextBuilder(memoryStore(snapshot([passage('p1', 'a very long passage that should not fit')], [], [])));
-    const result = await builder.build({ ...request, text: 'plain question', contextTokenLimit: 1 }, { rankedPassages: [{ nodeId: 'passage:missing', score: 1, layer: 'passage' }], rankedEntities: [], iterations: 0, converged: true, l1Delta: 0 });
-    expect(result.citedPassages).toEqual([]);
-    expect(result.promptContext).toBe('');
-    expect(result.confidence).toBe(0);
+  it('ignores missing ranked nodes', async () => {
+    const builder = new SimpleContextBuilder(memoryStore(snapshot([], [], [])));
+    const result = await builder.build(request, { rankedPassages: [{ nodeId: 'passage:missing', score: 1, layer: 'passage' }], rankedEntities: [], iterations: 0, converged: true, l1Delta: 0 });
+    expect(result).toMatchObject({ citedPassages: [], promptContext: '', confidence: 0 });
+  });
+
+  it('does not include an over-budget real passage block', async () => {
+    const longText = 'bounded passage '.repeat(30);
+    const builder = new SimpleContextBuilder(memoryStore(snapshot([passage('p1', longText)], [], [])));
+    const result = await builder.build({ ...request, text: 'plain question', contextTokenLimit: 10 }, { rankedPassages: [{ nodeId: 'passage:p1', score: 1, layer: 'passage' }], rankedEntities: [], iterations: 0, converged: true, l1Delta: 0 });
+    expect(result.citedPassages.map((item) => item.passageId)).toEqual(['p1']);
+    expect(result.promptContext).not.toContain(longText);
+    expect(Math.ceil(result.promptContext.length / 4)).toBeLessThanOrEqual(10);
   });
 });
