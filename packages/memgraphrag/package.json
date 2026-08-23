@@ -28,11 +28,6 @@
     "check:bounded-domain-fixture": "npm run build && node scripts/generate-bounded-domain-fixture.mjs --check",
     "generate:unicode16-lowercase": "node scripts/generate-unicode16-lowercase.mjs",
     "check:unicode16-lowercase": "node scripts/generate-unicode16-lowercase.mjs --check",
-    "generate:v15-parity-schemas": "npm run build && node scripts/generate-v15-parity-schemas.mjs",
-    "check:v15-parity-schemas": "npm run build && node scripts/generate-v15-parity-schemas.mjs --check",
-    "check:v15-parity-private": "npm run build && node scripts/v15-parity-evidence.mjs --check-private",
-    "project:v15-parity-public": "npm run build && node scripts/v15-parity-evidence.mjs --project-private",
-    "check:v15-parity-public": "npm run build && node scripts/v15-parity-evidence.mjs --check-public",
     "lint": "eslint src/ tests/",
     "bench": "vitest bench",
     "start:mcp": "node dist/interface/mcp/server.js",
@@ -58,8 +53,7 @@
     "commander": "^15.0.0",
     "neo4j-driver": "^6.1.0",
     "undici": "^8.10.0",
-    "yaml": "^2.9.0",
-    "zod": "^4.4.3"
+    "yaml": "^2.9.0"
   },
   "optionalDependencies": {
     "@ladybugdb/core": "^0.17.1"
