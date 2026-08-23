@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import contractArtifact from '../../../fixtures/bounded-domain-contract.json';
 import fixture from '../../../fixtures/bounded-domain-fixture.json';
 import manifest from '../../../fixtures/bounded-domain-fixture.manifest.json';
 import {
@@ -20,9 +21,14 @@ function fixtureItem(namespace: string): FixtureObject {
 describe('bounded domain structural contract', () => {
   it('accepts complete generated Passage, Fact, and Schema shapes', () => {
     expect(fixture.contractVersion).toBe(DOMAIN_CONTRACT_VERSION);
+    const contractSha256 = createHash('sha256')
+      .update(readFileSync(new URL('../../../fixtures/bounded-domain-contract.json', import.meta.url)))
+      .digest('hex');
     const fixtureSha256 = createHash('sha256')
       .update(readFileSync(new URL('../../../fixtures/bounded-domain-fixture.json', import.meta.url)))
       .digest('hex');
+    expect(contractArtifact.contractVersion).toBe(DOMAIN_CONTRACT_VERSION);
+    expect(manifest.contractSha256).toBe(contractSha256);
     expect(manifest.fixtureSha256).toBe(fixtureSha256);
     for (const namespace of ['passage', 'fact', 'schema'] as const) {
       const result = validateDomainObject(namespace, fixtureItem(namespace));
@@ -106,5 +112,15 @@ describe('bounded domain structural contract', () => {
     const decoratedFactIds = [...passage.factIds as string[]] as string[] & { extra?: boolean };
     decoratedFactIds.extra = true;
     expect(validateDomainObject('passage', { ...passage, factIds: decoratedFactIds }).valid).toBe(false);
+
+    const boundaryDecoratedFactIds = [...passage.factIds as string[]];
+    Object.defineProperty(boundaryDecoratedFactIds, '4294967295', {
+      value: 'hidden',
+      enumerable: true,
+    });
+    expect(validateDomainObject('passage', {
+      ...passage,
+      factIds: boundaryDecoratedFactIds,
+    }).valid).toBe(false);
   });
 });

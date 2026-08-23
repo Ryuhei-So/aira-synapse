@@ -5,12 +5,14 @@ import { open, mkdir, readFile, rename, unlink } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  DOMAIN_CONTRACT_ARTIFACT,
   DOMAIN_CONTRACT_VERSION,
   validateDomainObject,
 } from '../dist/domain/memory/domainContract.js';
 
 const FIXTURE_VERSION = 'aira-synapse-bounded-domain-fixture@1';
 const MANIFEST_VERSION = 'aira-synapse-bounded-domain-manifest@1';
+const contractPath = fileURLToPath(new URL('../tests/fixtures/bounded-domain-contract.json', import.meta.url));
 const fixturePath = fileURLToPath(new URL('../tests/fixtures/bounded-domain-fixture.json', import.meta.url));
 const manifestPath = fileURLToPath(new URL('../tests/fixtures/bounded-domain-fixture.manifest.json', import.meta.url));
 
@@ -192,16 +194,20 @@ function encode(value) {
 }
 
 function expectedArtifacts() {
+  const contractText = encode(DOMAIN_CONTRACT_ARTIFACT);
+  const contractSha256 = createHash('sha256').update(contractText).digest('hex');
   const fixtureText = encode(buildFixture());
   const fixtureSha256 = createHash('sha256').update(fixtureText).digest('hex');
   const manifestText = encode({
     manifestVersion: MANIFEST_VERSION,
-    fixtureVersion: FIXTURE_VERSION,
     contractVersion: DOMAIN_CONTRACT_VERSION,
+    contractFile: 'bounded-domain-contract.json',
+    contractSha256,
+    fixtureVersion: FIXTURE_VERSION,
     fixtureFile: 'bounded-domain-fixture.json',
     fixtureSha256,
   });
-  return { fixtureText, manifestText };
+  return { contractText, fixtureText, manifestText };
 }
 
 async function writeSyncedTemp(targetPath, text) {
@@ -249,40 +255,67 @@ async function removeOwnedTemp(path) {
   }
 }
 
-async function publishArtifacts(fixtureText, manifestText) {
+async function publishArtifacts(contractText, fixtureText, manifestText) {
   const fixtureDir = dirname(fixturePath);
   await mkdir(fixtureDir, { recursive: true, mode: 0o700 });
+  let contractTemp;
   let fixtureTemp;
   let manifestTemp;
+  let primaryError;
   try {
+    contractTemp = await writeSyncedTemp(contractPath, contractText);
     fixtureTemp = await writeSyncedTemp(fixturePath, fixtureText);
     manifestTemp = await writeSyncedTemp(manifestPath, manifestText);
-    // The manifest is the publication token.  A crash after the fixture rename
-    // but before the manifest rename is fail-closed as a SHA mismatch.
+    // The manifest is the publication token.  A crash after either data-file
+    // rename but before the manifest rename is fail-closed as a SHA mismatch.
+    await rename(contractTemp, contractPath);
+    contractTemp = undefined;
     await rename(fixtureTemp, fixturePath);
     fixtureTemp = undefined;
     await syncDirectory(fixtureDir);
     await rename(manifestTemp, manifestPath);
     manifestTemp = undefined;
     await syncDirectory(fixtureDir);
-  } finally {
-    await Promise.all([removeOwnedTemp(fixtureTemp), removeOwnedTemp(manifestTemp)]);
+  } catch (error) {
+    primaryError = error;
+  }
+
+  const cleanupResults = await Promise.allSettled([
+    removeOwnedTemp(contractTemp),
+    removeOwnedTemp(fixtureTemp),
+    removeOwnedTemp(manifestTemp),
+  ]);
+  const cleanupErrors = cleanupResults
+    .filter((result) => result.status === 'rejected')
+    .map((result) => result.reason);
+  if (primaryError && cleanupErrors.length > 0) {
+    throw new AggregateError(
+      [primaryError, ...cleanupErrors],
+      'bounded domain publication and cleanup failed',
+    );
+  }
+  if (primaryError) throw primaryError;
+  if (cleanupErrors.length > 0) {
+    throw new AggregateError(cleanupErrors, 'bounded domain cleanup failed');
   }
 }
 
 const check = process.argv.includes('--check');
-const { fixtureText, manifestText } = expectedArtifacts();
+const { contractText, fixtureText, manifestText } = expectedArtifacts();
 
 if (check) {
-  const [actualFixture, actualManifest] = await Promise.all([
+  const [actualContract, actualFixture, actualManifest] = await Promise.all([
+    readFile(contractPath, 'utf8'),
     readFile(fixturePath, 'utf8'),
     readFile(manifestPath, 'utf8'),
   ]);
-  if (actualFixture !== fixtureText || actualManifest !== manifestText) {
+  if (actualContract !== contractText || actualFixture !== fixtureText || actualManifest !== manifestText) {
     throw new Error('bounded domain fixture drift detected; run the generator and review the diff');
   }
-  console.log(`bounded domain fixture is current (${JSON.parse(manifestText).fixtureSha256})`);
+  const parsedManifest = JSON.parse(manifestText);
+  console.log(`bounded domain contract and fixture are current (${parsedManifest.contractSha256}, ${parsedManifest.fixtureSha256})`);
 } else {
-  await publishArtifacts(fixtureText, manifestText);
-  console.log(`wrote bounded domain fixture (${JSON.parse(manifestText).fixtureSha256})`);
+  await publishArtifacts(contractText, fixtureText, manifestText);
+  const parsedManifest = JSON.parse(manifestText);
+  console.log(`wrote bounded domain contract and fixture (${parsedManifest.contractSha256}, ${parsedManifest.fixtureSha256})`);
 }

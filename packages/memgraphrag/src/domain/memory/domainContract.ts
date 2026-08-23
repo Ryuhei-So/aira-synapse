@@ -274,6 +274,17 @@ export const DOMAIN_CONTRACTS = {
   schema: SCHEMA_CONTRACT,
 } as const satisfies Readonly<Record<DomainObjectKind, ContractNode>>;
 
+/**
+ * Complete machine-readable boundary authority.  The generated contract
+ * artifact hashes this value independently from the example fixture, so a
+ * field, optionality, nesting, or literal-set change cannot retain the old
+ * cross-repository contract identity merely because the examples still fit.
+ */
+export const DOMAIN_CONTRACT_ARTIFACT = {
+  contractVersion: DOMAIN_CONTRACT_VERSION,
+  contracts: DOMAIN_CONTRACTS,
+} as const;
+
 export interface DomainContractValidation {
   readonly valid: boolean;
   readonly errors: readonly string[];
@@ -319,7 +330,13 @@ function validateNode(
         errors.push(`${path} must use the plain Array prototype`);
       }
       for (const key of Reflect.ownKeys(value)) {
-        if (typeof key === 'symbol' || (key !== 'length' && !/^(0|[1-9]\d*)$/u.test(key))) {
+        const numericKey = typeof key === 'string' && /^(0|[1-9]\d*)$/u.test(key)
+          ? Number(key)
+          : Number.NaN;
+        const isPresentIndex = Number.isSafeInteger(numericKey)
+          && numericKey >= 0
+          && numericKey < value.length;
+        if (key !== 'length' && !isPresentIndex) {
           errors.push(`${path}.${displayKey(key)} is an unknown array field`);
         }
       }
