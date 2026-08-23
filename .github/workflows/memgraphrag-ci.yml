@@ -37,6 +37,20 @@ jobs:
       - run: npm run check:unicode16-lowercase --workspace=packages/memgraphrag
       - run: npm test --workspace=packages/memgraphrag -- tests/unit/domain/text/unicode16Lowercase.test.ts tests/unit/scripts/unicode16LowercaseGenerator.test.ts
 
+  unicode16-oracle:
+    runs-on: ubuntu-latest
+    env:
+      UNICODE16_AMBIENT_ORACLE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.11.1'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run check:unicode16-lowercase --workspace=packages/memgraphrag
+      - run: npm test --workspace=packages/memgraphrag -- tests/unit/domain/text/unicode16Lowercase.test.ts tests/unit/scripts/unicode16LowercaseGenerator.test.ts
+
   lint:
     runs-on: ubuntu-latest
     steps:

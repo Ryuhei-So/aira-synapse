@@ -38,6 +38,7 @@ describe('TASK-MG-004: CI workflow contract', () => {
     expect(Object.keys(jobs)).toEqual(
       expect.arrayContaining([
         'unicode16-conformance',
+        'unicode16-oracle',
         'lint',
         'test',
         'coverage',
@@ -74,6 +75,25 @@ describe('TASK-MG-004: CI workflow contract', () => {
     );
     expect(nodeStep?.with?.['node-version']).toBe('${{ matrix.node-version }}');
 
+    const runs = job!.steps.flatMap((step) =>
+      typeof step.run === 'string' ? [step.run] : [],
+    );
+    expect(runs).toContain(
+      'npm run check:unicode16-lowercase --workspace=packages/memgraphrag',
+    );
+    expect(runs).toContain(
+      'npm test --workspace=packages/memgraphrag -- tests/unit/domain/text/unicode16Lowercase.test.ts tests/unit/scripts/unicode16LowercaseGenerator.test.ts',
+    );
+  });
+
+  it('should pin the ambient Unicode 16 oracle to Node 24.11.1', () => {
+    const job = jobs['unicode16-oracle'];
+    expect(job).toBeDefined();
+    expect(job!.env).toEqual({ UNICODE16_AMBIENT_ORACLE: '1' });
+    const nodeStep = job!.steps.find(
+      (s) => s.uses?.startsWith('actions/setup-node'),
+    );
+    expect(nodeStep?.with?.['node-version']).toBe('24.11.1');
     const runs = job!.steps.flatMap((step) =>
       typeof step.run === 'string' ? [step.run] : [],
     );

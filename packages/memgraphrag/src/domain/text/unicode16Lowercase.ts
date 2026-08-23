@@ -23,47 +23,106 @@ function inRanges(value: number, ranges: readonly (readonly [number, number])[])
   return false;
 }
 
-function validatedScalars(value: string): number[] {
-  const scalars: number[] = [];
-  for (let index = 0; index < value.length; index += 1) {
-    const first = value.charCodeAt(index);
-    if (first >= 0xD800 && first <= 0xDBFF) {
-      const second = value.charCodeAt(index + 1);
-      if (!(second >= 0xDC00 && second <= 0xDFFF)) {
-        throw new TypeError('v15 entity normalization rejects an unpaired high surrogate');
-      }
-      scalars.push(((first - 0xD800) * 0x400) + (second - 0xDC00) + 0x10000);
-      index += 1;
-      continue;
+function scalarAt(value: string, index: number): number {
+  const first = value.charCodeAt(index);
+  if (first >= 0xD800 && first <= 0xDBFF) {
+    const second = value.charCodeAt(index + 1);
+    if (!(second >= 0xDC00 && second <= 0xDFFF)) {
+      throw new TypeError('v15 entity normalization rejects an unpaired high surrogate');
     }
-    if (first >= 0xDC00 && first <= 0xDFFF) {
-      throw new TypeError('v15 entity normalization rejects an unpaired low surrogate');
-    }
-    scalars.push(first);
+    return ((first - 0xD800) * 0x400) + (second - 0xDC00) + 0x10000;
   }
-  return scalars;
+  if (first >= 0xDC00 && first <= 0xDFFF) {
+    throw new TypeError('v15 entity normalization rejects an unpaired low surrogate');
+  }
+  return first;
 }
 
-function isFinalSigma(scalars: readonly number[], index: number): boolean {
-  let before = index - 1;
-  while (before >= 0 && inRanges(scalars[before]!, UNICODE16_CASE_IGNORABLE_RANGES)) before -= 1;
-  if (before < 0 || !inRanges(scalars[before]!, UNICODE16_CASED_RANGES)) return false;
-  let after = index + 1;
-  while (after < scalars.length && inRanges(scalars[after]!, UNICODE16_CASE_IGNORABLE_RANGES)) after += 1;
-  return after >= scalars.length || !inRanges(scalars[after]!, UNICODE16_CASED_RANGES);
+function scalarWidth(value: string, index: number): number {
+  const first = value.charCodeAt(index);
+  if (first >= 0xD800 && first <= 0xDBFF) {
+    const second = value.charCodeAt(index + 1);
+    if (!(second >= 0xDC00 && second <= 0xDFFF)) {
+      throw new TypeError('v15 entity normalization rejects an unpaired high surrogate');
+    }
+    return 2;
+  }
+  if (first >= 0xDC00 && first <= 0xDFFF) {
+    throw new TypeError('v15 entity normalization rejects an unpaired low surrogate');
+  }
+  return 1;
+}
+
+function validateUtf16(value: string): void {
+  for (let index = 0; index < value.length;) index += scalarWidth(value, index);
+}
+
+function previousScalarStart(value: string, index: number): number {
+  let start = index - 1;
+  const last = value.charCodeAt(start);
+  if (last >= 0xDC00 && last <= 0xDFFF) start -= 1;
+  return start;
+}
+
+function isFinalSigma(value: string, start: number, end: number): boolean {
+  let before = previousScalarStart(value, start);
+  while (before >= 0) {
+    const scalar = scalarAt(value, before);
+    if (!inRanges(scalar, UNICODE16_CASE_IGNORABLE_RANGES)) {
+      if (!inRanges(scalar, UNICODE16_CASED_RANGES)) return false;
+      break;
+    }
+    before = previousScalarStart(value, before);
+  }
+  if (before < 0) return false;
+  let after = end;
+  while (after < value.length) {
+    const scalar = scalarAt(value, after);
+    if (!inRanges(scalar, UNICODE16_CASE_IGNORABLE_RANGES)) {
+      return !inRanges(scalar, UNICODE16_CASED_RANGES);
+    }
+    after += scalar > 0xFFFF ? 2 : 1;
+  }
+  return true;
 }
 
 /** Unicode 16.0.0 full lowercase for the v15 entity-comparison contract. */
 export function unicode16Lowercase(value: string): string {
-  const scalars = validatedScalars(value);
-  const output: string[] = [];
-  for (let index = 0; index < scalars.length; index += 1) {
-    const scalar = scalars[index]!;
-    if (scalar === 0x03A3 && isFinalSigma(scalars, index)) {
-      output.push('ς');
+  validateUtf16(value);
+  const chunks: string[] = [];
+  const chunk = value.length > 4096 ? new Uint32Array(4096) : undefined;
+  let chunkLength = 0;
+  let smallOutput = '';
+  const flush = (): void => {
+    if (!chunk || chunkLength === 0) return;
+    chunks.push(String.fromCodePoint(...chunk.subarray(0, chunkLength)));
+    chunkLength = 0;
+  };
+  const append = (scalar: number): void => {
+    if (!chunk) {
+      smallOutput += String.fromCodePoint(scalar);
+      return;
+    }
+    if (chunkLength === chunk.length) flush();
+    chunk[chunkLength] = scalar;
+    chunkLength += 1;
+  };
+  for (let index = 0; index < value.length;) {
+    const start = index;
+    const scalar = scalarAt(value, index);
+    const next = index + (scalar > 0xFFFF ? 2 : 1);
+    index = next;
+    if (scalar === 0x03A3 && isFinalSigma(value, start, next)) {
+      append(0x03C2);
       continue;
     }
-    output.push(String.fromCodePoint(...(mappings.get(scalar) ?? [scalar])));
+    const mapping = mappings.get(scalar);
+    if (mapping === undefined) {
+      append(scalar);
+      continue;
+    }
+    for (const mappedScalar of mapping) append(mappedScalar);
   }
-  return output.join('');
+  flush();
+  return chunk ? chunks.join('') : smallOutput;
 }

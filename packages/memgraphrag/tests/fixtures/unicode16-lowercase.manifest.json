@@ -7,9 +7,9 @@
     "scalarValues": 1112064
   },
   "generator": {
-    "bytes": 16044,
+    "bytes": 17915,
     "file": "scripts/generate-unicode16-lowercase.mjs",
-    "sha256": "20de6eabff131d0c7f92bfb96ab122b70df30a698d293a987e0fe9b27c8cf258"
+    "sha256": "cb3f1cb481338dcd3906cc0bc343a29cb37fc3ef5e2bfceeb2c319488f2c24b7"
   },
   "inputs": {
     "DerivedCoreProperties.txt": {
@@ -38,9 +38,9 @@
       "sha256": "c89cc745f040ba8518473fb8b1511596a34e48616e2f3f3609237fdd74e4ae8a"
     },
     "generatedRuntimeTypeScript": {
-      "bytes": 2577,
+      "bytes": 4181,
       "file": "src/domain/text/unicode16Lowercase.ts",
-      "sha256": "83cb4ac16db8477772623c32b2f09c189258a3c54da651df9c24f65d6ede5bcf"
+      "sha256": "5551a724f04ec40c90c019103f6ea27c0d6bff11c129ccde39c516e268f0de60"
     },
     "generatedTypeScript": {
       "bytes": 45561,

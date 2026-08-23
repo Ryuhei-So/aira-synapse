@@ -7,8 +7,35 @@ import {
 } from '../../../../src/domain/text/unicode16Lowercase.js';
 
 const fixturePath = fileURLToPath(new URL('../../../fixtures/unicode16-lowercase.conformance.bin', import.meta.url));
+const ambientOracleEnabled = process.env.UNICODE16_AMBIENT_ORACLE === '1';
+if (ambientOracleEnabled && (process.version !== 'v24.11.1' || process.versions.unicode !== '16.0')) {
+  throw new Error('UNICODE16_AMBIENT_ORACLE requires Node v24.11.1 with Unicode 16.0');
+}
 
 describe('Unicode 16 lowercase authority', () => {
+  it.skipIf(!ambientOracleEnabled)(
+    'matches Node 24 for every Unicode scalar in all Final Sigma contexts',
+    () => {
+      const mismatches: Array<{ input: string; actual: string; expected: string }> = [];
+      const check = (input: string): void => {
+        const expected = input.toLowerCase();
+        const actual = unicode16Lowercase(input);
+        if (actual !== expected && mismatches.length < 5) mismatches.push({ input, actual, expected });
+      };
+
+      for (let value = 0; value <= 0x10FFFF; value += 1) {
+        if (value >= 0xD800 && value <= 0xDFFF) continue;
+        const scalar = String.fromCodePoint(value);
+        check(`${scalar}Σ`);
+        check(`AΣ${scalar}`);
+        check(`A${scalar}Σ`);
+        check(`AΣ${scalar}A`);
+      }
+
+      expect(mismatches).toEqual([]);
+    },
+  );
+
   it('matches every Unicode scalar and all manifested Final Sigma vectors', async () => {
     const fixture = await readFile(fixturePath);
     expect(fixture.subarray(0, 8).toString('ascii')).toBe('U16LOW1\0');
@@ -67,7 +94,16 @@ describe('Unicode 16 lowercase authority', () => {
   });
 
   it('normalizes long values without spreading the complete output as call arguments', () => {
-    expect(unicode16Lowercase('A'.repeat(200_000))).toBe('a'.repeat(200_000));
+    expect(unicode16Lowercase('A'.repeat(1_000_000))).toBe('a'.repeat(1_000_000));
+  });
+
+  it('handles a long contextual value without retaining scalar or chunk arrays', () => {
+    const input = `${'A'.repeat(100_000)}Σ${'\u0301'.repeat(100_000)}!`;
+    const output = unicode16Lowercase(input);
+    expect(output.startsWith(`${'a'.repeat(100_000)}ς`)).toBe(true);
+    expect(output.endsWith(`${'́'.repeat(100_000)}!`)).toBe(true);
+    expect(output).toHaveLength(input.length);
+    expect(() => unicode16Lowercase(`${input}\uD800`)).toThrow(/unpaired high surrogate/);
   });
 
   it('uses the pinned table even when the ambient runtime has a newer Unicode mapping', () => {
