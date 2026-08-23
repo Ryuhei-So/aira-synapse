@@ -36,6 +36,7 @@ function createPassage(passageId: string, documentId: string, text: string): Pas
 }
 
 describe('TASK-AGDB-038 vector/lexical compatibility', () => {
+  // Hosted runners may compile the Rust native backend on the first request.
   it('keeps vector topK set equal between sqlite baseline and aira-graphdb backend', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'backend-compat-vector-'));
     const evaluator = new VectorLexicalCompatEvaluator();
@@ -88,7 +89,7 @@ describe('TASK-AGDB-038 vector/lexical compatibility', () => {
       await candidate.close();
       rmSync(dir, { recursive: true, force: true });
     }
-  });
+  }, 30_000);
 
   it('validates lexical schema and ordering', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'backend-compat-lexical-'));
