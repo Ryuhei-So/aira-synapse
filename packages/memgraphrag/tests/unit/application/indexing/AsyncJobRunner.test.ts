@@ -106,7 +106,27 @@ describe('TASK-MG-035: AsyncJobRunner and DefaultIndexingService', () => {
     await runner.execute('job-1');
 
     const row = db.prepare('SELECT status, errors_json FROM jobs WHERE job_id = ?').get('job-1') as { status: string; errors_json: string };
-    expect(row.status).toBe('failed');
-    expect(JSON.parse(row.errors_json)).toEqual(['boom']);
+    expect(row.status).toBe('completed');
+    expect(JSON.parse(row.errors_json)).toEqual([expect.objectContaining({
+      code: 'DOCUMENT_ERROR',
+      documentId: 'doc-1',
+      message: expect.stringContaining('boom'),
+    })]);
+  });
+
+  it('preserves typed infrastructure codes in per-document errors', async () => {
+    const error = Object.assign(new Error('owner rejected mutation'), { code: 'METHOD_DENIED' });
+    const pipeline = { processDocument: vi.fn().mockRejectedValue(error) };
+    const runner = new AsyncJobRunner(db, memoryStore, pipeline);
+    runner.registerJob('job-1', command());
+    await runner.enqueue('job-1');
+    await runner.execute('job-1');
+
+    const row = db.prepare('SELECT errors_json FROM jobs WHERE job_id = ?').get('job-1') as { errors_json: string };
+    expect(JSON.parse(row.errors_json)).toEqual([expect.objectContaining({
+      code: 'METHOD_DENIED',
+      documentId: 'doc-1',
+      message: expect.stringContaining('owner rejected mutation'),
+    })]);
   });
 });

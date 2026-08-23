@@ -40,6 +40,14 @@ interface RpcResponse {
   error?: RpcError;
 }
 
+function withFallbackErrorCode(error: unknown, fallbackCode: string): Error {
+  const typed = error instanceof Error
+    ? error as Error & { code?: unknown }
+    : new Error(String(error)) as Error & { code?: unknown };
+  if (typeof typed.code !== 'string' || typed.code.length === 0) typed.code = fallbackCode;
+  return typed;
+}
+
 function defaultCommand(dbPath: string): { command: string; args: string[] } {
   const fromEnv = process.env.AIRA_GRAPHDB_REPO_PATH;
   const repoPathCandidates = [
@@ -102,12 +110,14 @@ export class AiraGraphDbNativeClient {
 
     const lineReader = createInterface({ input: this.child.stdout });
     lineReader.on('line', (line) => this.onLine(line));
-    this.child.on('error', (error) => this.rejectAll(error));
+    this.child.on('error', (error) => this.rejectAll(withFallbackErrorCode(error, 'NATIVE_SPAWN_FAILED')));
     this.child.on('exit', (code, signal) => {
       const details = this.stderrTail.length > 0
         ? `; stderr=${this.stderrTail}`
         : '';
-      this.rejectAll(new Error(`aira-graphdb-native exited (code=${code ?? 'null'}, signal=${signal ?? 'null'})${details}`));
+      const error = new Error(`aira-graphdb-native exited (code=${code ?? 'null'}, signal=${signal ?? 'null'})${details}`) as Error & { code?: string };
+      error.code = 'NATIVE_CHILD_EXIT';
+      this.rejectAll(error);
     });
     this.child.stderr.on('data', (chunk) => {
       // Keep stderr consumed to avoid backpressure deadlocks.
@@ -126,7 +136,7 @@ export class AiraGraphDbNativeClient {
       this.child.stdin.write(encoded, (error) => {
         if (error) {
           this.pending.delete(id);
-          rejectRequest(error);
+          rejectRequest(withFallbackErrorCode(error, 'NATIVE_WRITE_FAILED'));
         }
       });
     });
