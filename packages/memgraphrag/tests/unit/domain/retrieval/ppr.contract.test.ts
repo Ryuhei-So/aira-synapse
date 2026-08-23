@@ -22,6 +22,7 @@ describe('TASK-MG-016: ppr and retrieval contracts', () => {
           teleportProbability: 0.5,
           convergenceEpsilon: 1e-6,
           maxIterations: 50,
+          hubDegreeThreshold: 50,
           topK: 10,
           topM: 5,
         },
