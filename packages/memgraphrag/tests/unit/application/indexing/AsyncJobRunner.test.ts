@@ -26,7 +26,7 @@ function command(documentId = 'doc-1'): IndexDocumentsCommand {
   };
 }
 
-const fakeOwnerNative = fileURLToPath(new URL('../../../fixtures/fake-owner-native.mjs', import.meta.url));
+const fakeOwnerNative = fileURLToPath(new URL('../../../support/fake-owner-native.mjs', import.meta.url));
 
 const ownerErrorContract = JSON.parse(readFileSync(resolve(
   import.meta.dirname,
