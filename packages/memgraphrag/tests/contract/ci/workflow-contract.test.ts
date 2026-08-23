@@ -12,6 +12,7 @@ const BACKEND_WORKFLOW_PATH = resolve(
   REPO_ROOT,
   '.github/workflows/aira-synapse-backend-compat.yml',
 );
+const PACKAGE_PATH = resolve(REPO_ROOT, 'packages/memgraphrag/package.json');
 
 type WorkflowStep = {
   run?: string;
@@ -135,15 +136,21 @@ describe('TASK-MG-004: CI workflow contract', () => {
     const testRuns = jobs['test']!.steps
       .filter((s) => s.run)
       .map((s) => s.run);
-    expect(testRuns.some((r) => r?.includes('test'))).toBe(true);
-    expect(testRuns.some((r) => r?.includes('--fileParallelism=false'))).toBe(true);
+    expect(testRuns.some((r) => r === 'npm run test:ci --workspace=packages/memgraphrag')).toBe(true);
+    const packageJson = JSON.parse(readFileSync(PACKAGE_PATH, 'utf8')) as {
+      scripts?: { 'test:ci'?: string };
+    };
+    expect(packageJson.scripts?.['test:ci']).toBe('node scripts/run-vitest-partitions.mjs');
   });
 
   it('should run npm run test:coverage in coverage job', () => {
     const covRuns = jobs['coverage']!.steps
       .filter((s) => s.run)
       .map((s) => s.run);
-    expect(covRuns.some((r) => r?.includes('test:coverage'))).toBe(true);
-    expect(covRuns.some((r) => r?.includes('--fileParallelism=false'))).toBe(true);
+    expect(covRuns.some((r) => r === 'npm run test:coverage:ci --workspace=packages/memgraphrag')).toBe(true);
+    const packageJson = JSON.parse(readFileSync(PACKAGE_PATH, 'utf8')) as {
+      scripts?: { 'test:coverage:ci'?: string };
+    };
+    expect(packageJson.scripts?.['test:coverage:ci']).toBe('node scripts/run-vitest-partitions.mjs --coverage');
   });
 });

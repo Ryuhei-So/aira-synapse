@@ -50,7 +50,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo build --locked --release --bin aira-graphdb-native --manifest-path "$AIRA_GRAPHDB_REPO_PATH/Cargo.toml"
       - run: npm ci
-      - run: npm run test --workspace=packages/memgraphrag -- --fileParallelism=false
+      - run: npm run test:ci --workspace=packages/memgraphrag
 
   coverage:
     runs-on: ubuntu-latest
@@ -76,7 +76,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo build --locked --release --bin aira-graphdb-native --manifest-path "$AIRA_GRAPHDB_REPO_PATH/Cargo.toml"
       - run: npm ci
-      - run: npm run test:coverage --workspace=packages/memgraphrag -- --fileParallelism=false
+      - run: npm run test:coverage:ci --workspace=packages/memgraphrag
 
   build:
     runs-on: ubuntu-latest
