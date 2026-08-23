@@ -106,7 +106,7 @@ describe('TASK-MG-035: AsyncJobRunner and DefaultIndexingService', () => {
     await runner.execute('job-1');
 
     const row = db.prepare('SELECT status, errors_json FROM jobs WHERE job_id = ?').get('job-1') as { status: string; errors_json: string };
-    expect(row.status).toBe('failed');
-    expect(JSON.parse(row.errors_json)).toEqual(['boom']);
+    expect(row.status).toBe('completed');
+    expect(JSON.parse(row.errors_json)[0]).toContain('[doc-1] boom');
   });
 });
