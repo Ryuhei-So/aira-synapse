@@ -74,7 +74,14 @@ jobs:
           python-version: '3.12'
       - uses: dtolnay/rust-toolchain@stable
       - run: npm ci
-      - run: npm test -- --fileParallelism=false --exclude tests/unit/infrastructure/config/resolveConfigFromEnv.test.ts
+      - name: Run resource-heavy native/Ladybug suites in fresh processes
+        working-directory: packages/memgraphrag
+        env:
+          AIRA_GRAPHDB_REPO_PATH: ${{ github.workspace }}/aira-graphdb
+        run: |
+          npm test -- --fileParallelism=false tests/infrastructure/storage/ladybug/LadybugConnection.test.ts
+          npm test -- --fileParallelism=false tests/integration/interface/runtime/MemGraphRagRuntime.test.ts
+      - run: npm test -- --fileParallelism=false --exclude tests/unit/infrastructure/config/resolveConfigFromEnv.test.ts --exclude tests/infrastructure/storage/ladybug/LadybugConnection.test.ts --exclude tests/integration/interface/runtime/MemGraphRagRuntime.test.ts
         working-directory: packages/memgraphrag
       - name: Run config path test with a deterministic fixture
         working-directory: packages/memgraphrag
