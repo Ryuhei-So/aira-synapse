@@ -4,26 +4,31 @@
  */
 
 // --- Language ---
-export type LanguageCode = 'en' | 'ja' | 'mixed' | 'unknown';
+export const LANGUAGE_CODE_VALUES = ['en', 'ja', 'mixed', 'unknown'] as const;
+export type LanguageCode = typeof LANGUAGE_CODE_VALUES[number];
 
-const LANGUAGE_CODES = new Set<string>(['en', 'ja', 'mixed', 'unknown']);
+const LANGUAGE_CODES = new Set<string>(LANGUAGE_CODE_VALUES);
 
 export function isLanguageCode(value: unknown): value is LanguageCode {
   return typeof value === 'string' && LANGUAGE_CODES.has(value);
 }
 
 // --- Schema state ---
-export type SchemaState = 'pending' | 'stable';
+export const SCHEMA_STATE_VALUES = ['pending', 'stable'] as const;
+export type SchemaState = typeof SCHEMA_STATE_VALUES[number];
+const SCHEMA_STATES = new Set<string>(SCHEMA_STATE_VALUES);
 
 export function isSchemaState(value: unknown): value is SchemaState {
-  return value === 'pending' || value === 'stable';
+  return typeof value === 'string' && SCHEMA_STATES.has(value);
 }
 
 // --- Fact state ---
-export type FactState = 'active' | 'inactive';
+export const FACT_STATE_VALUES = ['active', 'inactive'] as const;
+export type FactState = typeof FACT_STATE_VALUES[number];
+const FACT_STATES = new Set<string>(FACT_STATE_VALUES);
 
 export function isFactState(value: unknown): value is FactState {
-  return value === 'active' || value === 'inactive';
+  return typeof value === 'string' && FACT_STATES.has(value);
 }
 
 // --- Memory layer ---
@@ -43,17 +48,12 @@ export function isBridgeKind(value: unknown): value is BridgeKind {
 }
 
 // --- Provenance source ---
-export type ProvenanceSource =
-  | 'llm'
-  | 'nlp'
-  | 'dictionary'
-  | 'thesaurus'
-  | 'manual'
-  | 'import';
-
-const PROVENANCE_SOURCES = new Set<string>([
+export const PROVENANCE_SOURCE_VALUES = [
   'llm', 'nlp', 'dictionary', 'thesaurus', 'manual', 'import',
-]);
+] as const;
+export type ProvenanceSource = typeof PROVENANCE_SOURCE_VALUES[number];
+
+const PROVENANCE_SOURCES = new Set<string>(PROVENANCE_SOURCE_VALUES);
 
 export function isProvenanceSource(value: unknown): value is ProvenanceSource {
   return typeof value === 'string' && PROVENANCE_SOURCES.has(value);

@@ -101,3 +101,4 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - run: npm run build --workspace=packages/memgraphrag
+      - run: npm run check:bounded-domain-fixture --workspace=packages/memgraphrag

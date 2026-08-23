@@ -10,8 +10,15 @@
  */
 
 import type { Fact } from './fact.js';
-import type { Passage } from './passage.js';
-import type { Schema } from './schema.js';
+import { DOCUMENT_SOURCE_TYPE_VALUES, type DocumentMetadata, type Passage } from './passage.js';
+import type { Schema, SchemaAlias } from './schema.js';
+import {
+  FACT_STATE_VALUES,
+  LANGUAGE_CODE_VALUES,
+  PROVENANCE_SOURCE_VALUES,
+  SCHEMA_STATE_VALUES,
+  type LanguageCode,
+} from './types.js';
 
 export const DOMAIN_CONTRACT_VERSION = 'aira-synapse-domain-contract@1' as const;
 
@@ -128,6 +135,16 @@ type ContractValue<Node extends ContractNode> =
 
 /** A type-level witness that the contract and domain interface are equivalent at the boundary. */
 type AssertAssignable<From extends To, To> = From;
+type SameKeys<Left, Right> = keyof Left extends keyof Right
+  ? keyof Right extends keyof Left ? true : false
+  : false;
+type SameType<Left, Right> = (<Value>() => Value extends Left ? 1 : 2) extends
+  (<Value>() => Value extends Right ? 1 : 2)
+  ? (<Value>() => Value extends Right ? 1 : 2) extends
+    (<Value>() => Value extends Left ? 1 : 2) ? true : false
+  : false;
+type AssertTrue<Value extends true> = Value;
+type AssertFalse<Value extends false> = Value;
 
 const DOCUMENT_METADATA_CONTRACT = objectContract({
   documentId: stringContract(),
@@ -135,8 +152,8 @@ const DOCUMENT_METADATA_CONTRACT = objectContract({
   sourceUrl: stringContract(),
   doi: optionalContract(stringContract()),
   sourceDb: optionalContract(stringContract()),
-  sourceType: optionalContract(literalContract('pdf', 'html', 'docx', 'pptx', 'md')),
-  language: literalContract('en', 'ja', 'mixed', 'unknown'),
+  sourceType: optionalContract(literalContract(...DOCUMENT_SOURCE_TYPE_VALUES)),
+  language: literalContract(...LANGUAGE_CODE_VALUES),
   convertedAt: optionalContract(stringContract()),
   sectionPath: arrayContract(stringContract()),
   chunkId: stringContract(),
@@ -147,8 +164,8 @@ const DOCUMENT_METADATA_CONTRACT = objectContract({
 
 const SCHEMA_ALIAS_CONTRACT = objectContract({
   label: stringContract(),
-  language: literalContract('en', 'ja', 'mixed', 'unknown'),
-  source: literalContract('llm', 'nlp', 'dictionary', 'thesaurus', 'manual', 'import'),
+  language: literalContract(...LANGUAGE_CODE_VALUES),
+  source: literalContract(...PROVENANCE_SOURCE_VALUES),
   confidence: numberContract(),
   isCanonical: booleanContract(),
 });
@@ -178,7 +195,7 @@ export const FACT_CONTRACT = objectContract({
   relation: stringContract(),
   tailEntity: stringContract(),
   tailType: stringContract(),
-  state: literalContract('active', 'inactive'),
+  state: literalContract(...FACT_STATE_VALUES),
   passageIds: arrayContract(stringContract()),
   sourceDocumentIds: arrayContract(stringContract()),
   confidence: numberContract(),
@@ -197,7 +214,7 @@ export const SCHEMA_CONTRACT = objectContract({
   canonicalKey: stringContract(),
   aliases: arrayContract(SCHEMA_ALIAS_CONTRACT),
   frequency: numberContract(),
-  state: literalContract('pending', 'stable'),
+  state: literalContract(...SCHEMA_STATE_VALUES),
   stabilizationThreshold: numberContract(),
   factIds: arrayContract(stringContract()),
   sourceDocumentIds: arrayContract(stringContract()),
@@ -222,11 +239,28 @@ type SchemaContractMatchesDomain = [
   AssertAssignable<Schema, ContractValue<typeof SCHEMA_CONTRACT>>,
 ];
 
+type DomainContractExactKeys = [
+  AssertTrue<SameKeys<ContractValue<typeof PASSAGE_CONTRACT>, Passage>>,
+  AssertTrue<SameKeys<ContractValue<typeof DOCUMENT_METADATA_CONTRACT>, DocumentMetadata>>,
+  AssertTrue<SameKeys<ContractValue<typeof FACT_CONTRACT>, Fact>>,
+  AssertTrue<SameKeys<ContractValue<typeof SCHEMA_CONTRACT>, Schema>>,
+  AssertTrue<SameKeys<ContractValue<typeof SCHEMA_ALIAS_CONTRACT>, SchemaAlias>>,
+];
+
+// Compile-negative witnesses: optional/nested/enum drift must make exactness false.
+type DomainContractRejectsDrift = [
+  AssertFalse<SameKeys<ContractValue<typeof PASSAGE_CONTRACT>, Passage & { futureOptional?: string }>>,
+  AssertFalse<SameKeys<ContractValue<typeof DOCUMENT_METADATA_CONTRACT>, DocumentMetadata & { futureNested?: string }>>,
+  AssertFalse<SameType<ContractValue<typeof SCHEMA_ALIAS_CONTRACT>['language'], LanguageCode | 'future-language'>>,
+];
+
 // Keep these aliases referenced so noUnusedLocals catches a broken witness.
 export type DomainContractTypeWitness =
   | PassageContractMatchesDomain
   | FactContractMatchesDomain
-  | SchemaContractMatchesDomain;
+  | SchemaContractMatchesDomain
+  | DomainContractExactKeys
+  | DomainContractRejectsDrift;
 
 export type DomainObjectKind = 'passage' | 'fact' | 'schema';
 export type DomainObjectByKind<Kind extends DomainObjectKind> =
@@ -281,6 +315,17 @@ function validateNode(
         errors.push(`${path} must be an array`);
         return;
       }
+      if (Object.getPrototypeOf(value) !== Array.prototype) {
+        errors.push(`${path} must use the plain Array prototype`);
+      }
+      for (const key of Reflect.ownKeys(value)) {
+        if (typeof key === 'symbol' || (key !== 'length' && !/^(0|[1-9]\d*)$/u.test(key))) {
+          errors.push(`${path}.${displayKey(key)} is an unknown array field`);
+        }
+      }
+      for (let index = 0; index < value.length; index += 1) {
+        if (!hasOwn(value, String(index))) errors.push(`${path}[${index}] must not be sparse`);
+      }
       value.forEach((item, index) => validateNode(node.items, item, `${path}[${index}]`, errors));
       return;
     case 'optional':
@@ -292,6 +337,10 @@ function validateNode(
       if (typeof value !== 'object' || value === null || Array.isArray(value)) {
         errors.push(`${path} must be an object`);
         return;
+      }
+      const prototype = Object.getPrototypeOf(value);
+      if (prototype !== Object.prototype && prototype !== null) {
+        errors.push(`${path} must use a plain or null prototype`);
       }
       const fields = node.fields;
       for (const key of Reflect.ownKeys(value)) {

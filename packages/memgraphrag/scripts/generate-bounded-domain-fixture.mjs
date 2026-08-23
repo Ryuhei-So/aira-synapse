@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
-import { createHash } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import { open, mkdir, readFile, rename, unlink } from 'node:fs/promises';
+import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   DOMAIN_CONTRACT_VERSION,
@@ -203,6 +204,72 @@ function expectedArtifacts() {
   return { fixtureText, manifestText };
 }
 
+async function writeSyncedTemp(targetPath, text) {
+  const tempPath = `${targetPath}.tmp-${process.pid}-${randomUUID()}`;
+  const handle = await open(tempPath, 'wx', 0o600);
+  let closed = false;
+  try {
+    await handle.writeFile(text, 'utf8');
+    await handle.sync();
+    await handle.close();
+    closed = true;
+    return tempPath;
+  } catch (error) {
+    const cleanupErrors = [];
+    if (!closed) {
+      try { await handle.close(); } catch (cleanupError) { cleanupErrors.push(cleanupError); }
+    }
+    try {
+      await unlink(tempPath);
+    } catch (cleanupError) {
+      if (cleanupError?.code !== 'ENOENT') cleanupErrors.push(cleanupError);
+    }
+    if (cleanupErrors.length > 0) {
+      throw new AggregateError([error, ...cleanupErrors], `failed to write and clean ${tempPath}`);
+    }
+    throw error;
+  }
+}
+
+async function syncDirectory(path) {
+  const handle = await open(path, 'r');
+  try {
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+}
+
+async function removeOwnedTemp(path) {
+  if (!path) return;
+  try {
+    await unlink(path);
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+  }
+}
+
+async function publishArtifacts(fixtureText, manifestText) {
+  const fixtureDir = dirname(fixturePath);
+  await mkdir(fixtureDir, { recursive: true, mode: 0o700 });
+  let fixtureTemp;
+  let manifestTemp;
+  try {
+    fixtureTemp = await writeSyncedTemp(fixturePath, fixtureText);
+    manifestTemp = await writeSyncedTemp(manifestPath, manifestText);
+    // The manifest is the publication token.  A crash after the fixture rename
+    // but before the manifest rename is fail-closed as a SHA mismatch.
+    await rename(fixtureTemp, fixturePath);
+    fixtureTemp = undefined;
+    await syncDirectory(fixtureDir);
+    await rename(manifestTemp, manifestPath);
+    manifestTemp = undefined;
+    await syncDirectory(fixtureDir);
+  } finally {
+    await Promise.all([removeOwnedTemp(fixtureTemp), removeOwnedTemp(manifestTemp)]);
+  }
+}
+
 const check = process.argv.includes('--check');
 const { fixtureText, manifestText } = expectedArtifacts();
 
@@ -216,10 +283,6 @@ if (check) {
   }
   console.log(`bounded domain fixture is current (${JSON.parse(manifestText).fixtureSha256})`);
 } else {
-  await mkdir(fileURLToPath(new URL('../tests/fixtures/', import.meta.url)), { recursive: true });
-  await Promise.all([
-    writeFile(fixturePath, fixtureText),
-    writeFile(manifestPath, manifestText),
-  ]);
+  await publishArtifacts(fixtureText, manifestText);
   console.log(`wrote bounded domain fixture (${JSON.parse(manifestText).fixtureSha256})`);
 }

@@ -14,7 +14,7 @@ type FixtureObject = Record<string, unknown>;
 function fixtureItem(namespace: string): FixtureObject {
   const hit = fixture.candidateHits.find((candidate) => candidate.namespace === namespace);
   if (!hit) throw new Error(`missing ${namespace} fixture`);
-  return hit.item as FixtureObject;
+  return structuredClone(hit.item) as FixtureObject;
 }
 
 describe('bounded domain structural contract', () => {
@@ -87,5 +87,24 @@ describe('bounded domain structural contract', () => {
     expect(validateDomainObject('schema', { ...schema, aliases }).valid).toBe(false);
     aliases[0] = { ...aliases[0], unknownAliasField: true };
     expect(validateDomainObject('schema', { ...schema, aliases }).valid).toBe(false);
+  });
+
+  it('rejects non-JSON prototypes, symbols, and sparse or decorated arrays', () => {
+    const passage = fixtureItem('passage');
+    expect(validateDomainObject('passage', Object.assign(
+      Object.create({ inherited: true }) as FixtureObject,
+      passage,
+    )).valid).toBe(false);
+
+    const withSymbol = { ...passage, [Symbol('hidden')]: true };
+    expect(validateDomainObject('passage', withSymbol).valid).toBe(false);
+
+    const sparseFactIds = Array<string>(2);
+    sparseFactIds[1] = 'fixture-fact-inactive';
+    expect(validateDomainObject('passage', { ...passage, factIds: sparseFactIds }).valid).toBe(false);
+
+    const decoratedFactIds = [...passage.factIds as string[]] as string[] & { extra?: boolean };
+    decoratedFactIds.extra = true;
+    expect(validateDomainObject('passage', { ...passage, factIds: decoratedFactIds }).valid).toBe(false);
   });
 });
