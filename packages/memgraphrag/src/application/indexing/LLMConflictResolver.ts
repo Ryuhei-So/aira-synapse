@@ -17,6 +17,7 @@ import type {
   ConflictResolutionState,
   ResolutionEvidence,
 } from '../../domain/agent/conflictResolution.js';
+import type { ConflictType } from '../../domain/agent/conflictDetection.js';
 
 function buildResolutionPrompt(request: ConflictResolutionRequest): string {
   const { conflictSet, evidencePassages } = request;
@@ -72,27 +73,82 @@ interface LLMResolutionResponse {
   discard_fact_indices?: number[];
 }
 
-function parseResolutionResponse(text: string): LLMResolutionResponse {
+const RESOLUTION_DECISIONS = new Set<LLMResolutionResponse['decision']>([
+  'keep_new',
+  'keep_existing',
+  'keep_both',
+  'discard_both',
+]);
+
+function parseResolutionResponse(text: string): LLMResolutionResponse | null {
   // Extract JSON from response (may have markdown code blocks)
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
-    return { decision: 'keep_both', confidence: 0.3, rationale: 'Could not parse LLM response' };
+    return null;
   }
   try {
-    return JSON.parse(jsonMatch[0]) as LLMResolutionResponse;
+    const parsed: unknown = JSON.parse(jsonMatch[0]);
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
+    const value = parsed as Record<string, unknown>;
+    if (typeof value.decision !== 'string'
+      || !RESOLUTION_DECISIONS.has(value.decision as LLMResolutionResponse['decision'])
+      || typeof value.confidence !== 'number'
+      || !Number.isFinite(value.confidence)
+      || value.confidence < 0
+      || value.confidence > 1
+      || typeof value.rationale !== 'string'
+      || value.rationale.trim().length === 0) {
+      return null;
+    }
+    for (const field of ['keep_fact_indices', 'discard_fact_indices'] as const) {
+      const indices = value[field];
+      if (indices !== undefined && (!Array.isArray(indices)
+        || indices.some((index) => !Number.isSafeInteger(index) || (index as number) < 0))) {
+        return null;
+      }
+    }
+    return {
+      decision: value.decision as LLMResolutionResponse['decision'],
+      confidence: value.confidence,
+      rationale: value.rationale,
+      ...(value.keep_fact_indices === undefined
+        ? {} : { keep_fact_indices: value.keep_fact_indices as number[] }),
+      ...(value.discard_fact_indices === undefined
+        ? {} : { discard_fact_indices: value.discard_fact_indices as number[] }),
+    };
   } catch {
-    return { decision: 'keep_both', confidence: 0.3, rationale: 'JSON parse error' };
+    return null;
   }
 }
 
-function mapDecisionToState(decision: string): ConflictResolutionState {
-  switch (decision) {
-    case 'keep_new': return 'resolved_keep_new';
-    case 'keep_existing': return 'resolved_keep_existing';
-    case 'keep_both': return 'merged';
-    case 'discard_both': return 'resolved_keep_existing';
-    default: return 'unresolved';
+function retainedStateForKeepBoth(conflictType: ConflictType): ConflictResolutionState {
+  switch (conflictType) {
+    case 'temporal': return 'temporalized';
+    case 'granularity': return 'granularity_linked';
+    case 'mutually_exclusive': return 'unresolved';
   }
+}
+
+function unresolvedResolution(
+  request: ConflictResolutionRequest,
+  rationale: string,
+): ConflictResolution {
+  const allFactIds = [
+    request.conflictSet.newFact.factId,
+    ...request.conflictSet.conflictingFacts.map((fact) => fact.factId),
+  ];
+  return {
+    state: 'unresolved',
+    confidence: 0,
+    keptFactIds: allFactIds,
+    inactivatedFactIds: [],
+    derivedFacts: [],
+    evidence: request.evidencePassages.map((passage) => ({
+      passageId: passage.passageId,
+      supportsFactIds: allFactIds,
+      rationale,
+    })),
+  };
 }
 
 export class LLMConflictResolver implements IConflictResolver {
@@ -105,6 +161,9 @@ export class LLMConflictResolver implements IConflictResolver {
     try {
       const result = await this.llm.generate({ prompt, temperature: 0.0 });
       const parsed = parseResolutionResponse(result.text);
+      if (!parsed) {
+        return unresolvedResolution(request, 'Invalid LLM conflict resolution response');
+      }
 
       const allFactIds = [
         conflictSet.newFact.factId,
@@ -114,26 +173,25 @@ export class LLMConflictResolver implements IConflictResolver {
       let keptFactIds: string[];
       let inactivatedFactIds: string[];
 
+      let state: ConflictResolutionState;
       switch (parsed.decision) {
         case 'keep_new':
+          state = 'resolved_keep_new';
           keptFactIds = [conflictSet.newFact.factId];
           inactivatedFactIds = conflictSet.conflictingFacts.map(f => f.factId);
           break;
         case 'keep_existing':
+          state = 'resolved_keep_existing';
           keptFactIds = conflictSet.conflictingFacts.map(f => f.factId);
           inactivatedFactIds = [conflictSet.newFact.factId];
           break;
         case 'keep_both':
+          state = retainedStateForKeepBoth(conflictSet.conflictType);
           keptFactIds = allFactIds;
           inactivatedFactIds = [];
           break;
         case 'discard_both':
-          keptFactIds = [];
-          inactivatedFactIds = allFactIds;
-          break;
-        default:
-          keptFactIds = allFactIds;
-          inactivatedFactIds = [];
+          return unresolvedResolution(request, parsed.rationale);
       }
 
       const evidence: ResolutionEvidence[] = evidencePassages.map(p => ({
@@ -143,7 +201,7 @@ export class LLMConflictResolver implements IConflictResolver {
       }));
 
       return {
-        state: mapDecisionToState(parsed.decision),
+        state,
         confidence: parsed.confidence,
         keptFactIds,
         inactivatedFactIds,
@@ -151,18 +209,7 @@ export class LLMConflictResolver implements IConflictResolver {
         evidence,
       };
     } catch {
-      // On LLM failure, keep all facts (conservative)
-      return {
-        state: 'unresolved',
-        confidence: 0,
-        keptFactIds: [
-          conflictSet.newFact.factId,
-          ...conflictSet.conflictingFacts.map(f => f.factId),
-        ],
-        inactivatedFactIds: [],
-        derivedFacts: [],
-        evidence: [],
-      };
+      return unresolvedResolution(request, 'LLM conflict resolution provider failure');
     }
   }
 }

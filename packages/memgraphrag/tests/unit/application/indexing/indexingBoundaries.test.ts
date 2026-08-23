@@ -29,13 +29,13 @@ function passage(): Passage {
   return { passageId: 'p1', corpusId: 'c1', text: 'TP53 regulates apoptosis.', normalizedText: 'tp53 regulates apoptosis.', metadata, factIds: [], entityMentions: [], qualityFlags: [], createdAt: now, updatedAt: now };
 }
 
-function conflictRequest(): ConflictResolutionRequest {
-  return { conflictSet: { conflictType: 'mutual_exclusion', newFact: fact('new', 'necrosis'), conflictingFacts: [fact('old', 'apoptosis')] }, evidencePassages: [passage()] };
+function conflictRequest(conflictType: ConflictResolutionRequest['conflictSet']['conflictType'] = 'mutually_exclusive'): ConflictResolutionRequest {
+  return { conflictSet: { corpusId: 'c1', conflictType, newFact: fact('new', 'necrosis'), conflictingFacts: [fact('old', 'apoptosis')], candidates: [], scanLimit: 100 }, evidencePassages: [passage()] };
 }
 
 describe('indexing and provider behavioral boundaries', () => {
   it('extracts valid JSON, strips fences, drops malformed entries, and preserves metadata', async () => {
-    const llm = provider('```json\n{"entities":[{"name":"TP53","type":"Gene"},{"name":3}],"relations":[{"head":"TP53","headType":"Gene","relation":"regulates","tail":"apoptosis","tailType":"Process","confidence":0.9},{"head":"bad"}]}\n```');
+    const llm = provider('```json\n{"entities":[{"name":"TP53","type":"Gene"},{"name":3}],"relations":[{"head":"TP53","headType":"Gene","relation":"regulates","tail":"apoptosis","tailType":"Process","confidence":0.9},{"head":"bad"},{"head":"TP53","headType":"Gene","relation":"regulates","tail":"bad-string","tailType":"Process","confidence":"high"},{"head":"TP53","headType":"Gene","relation":"regulates","tail":"bad-low","tailType":"Process","confidence":-0.1},{"head":"TP53","headType":"Gene","relation":"regulates","tail":"bad-high","tailType":"Process","confidence":1.1},{"head":" ","headType":"Gene","relation":"regulates","tail":"bad-empty","tailType":"Process","confidence":0.8}]}\n```');
     const result = await new LLMExtractionAgent(llm).extract(chunk);
     expect(result.rawEntities).toEqual(['TP53']);
     expect(result.candidateFacts).toHaveLength(1);
@@ -54,8 +54,6 @@ describe('indexing and provider behavioral boundaries', () => {
   it.each([
     ['keep_new', 'resolved_keep_new', ['new'], ['old']],
     ['keep_existing', 'resolved_keep_existing', ['old'], ['new']],
-    ['keep_both', 'merged', ['new', 'old'], []],
-    ['discard_both', 'resolved_keep_existing', [], ['new', 'old']],
   ] as const)('maps conflict decision %s to durable ids/state', async (decision, state, kept, inactive) => {
     const resolver = new LLMConflictResolver(provider(JSON.stringify({ decision, confidence: 0.8, rationale: 'evidence' })));
     const result = await resolver.resolve(conflictRequest());
@@ -65,15 +63,44 @@ describe('indexing and provider behavioral boundaries', () => {
     expect(result.evidence[0]?.supportsFactIds).toEqual(kept);
   });
 
+  it.each([
+    ['temporal', 'temporalized'],
+    ['granularity', 'granularity_linked'],
+    ['mutually_exclusive', 'unresolved'],
+  ] as const)('retains both facts with a truthful %s conflict state', async (conflictType, state) => {
+    const resolver = new LLMConflictResolver(provider(JSON.stringify({ decision: 'keep_both', confidence: 0.8, rationale: 'contexts coexist' })));
+    const result = await resolver.resolve(conflictRequest(conflictType));
+    expect(result).toMatchObject({ state, keptFactIds: ['new', 'old'], inactivatedFactIds: [] });
+  });
+
+  it('does not inactivate either fact when both lack sufficient evidence', async () => {
+    const resolver = new LLMConflictResolver(provider(JSON.stringify({ decision: 'discard_both', confidence: 0.2, rationale: 'insufficient evidence' })));
+    const result = await resolver.resolve(conflictRequest());
+    expect(result).toMatchObject({ state: 'unresolved', confidence: 0, keptFactIds: ['new', 'old'], inactivatedFactIds: [] });
+    expect(result.evidence[0]).toMatchObject({ supportsFactIds: ['new', 'old'], rationale: 'insufficient evidence' });
+  });
+
   it('uses conservative unresolved fallback for malformed and failed conflict responses', async () => {
     const malformed = await new LLMConflictResolver(provider('no json')).resolve(conflictRequest());
-    expect(malformed.state).toBe('merged');
-    expect(malformed.confidence).toBe(0.3);
+    expect(malformed).toMatchObject({ state: 'unresolved', confidence: 0, keptFactIds: ['new', 'old'], inactivatedFactIds: [] });
+    expect(malformed.evidence[0]?.rationale).toContain('Invalid LLM');
     const rejected: ILLMProvider = { generate: vi.fn().mockRejectedValue(new Error('provider down')), healthCheck: vi.fn() };
     const result = await new LLMConflictResolver(rejected).resolve(conflictRequest());
     expect(result.state).toBe('unresolved');
     expect(result.keptFactIds).toEqual(['new', 'old']);
-    expect(result.evidence).toEqual([]);
+    expect(result.evidence[0]).toMatchObject({ passageId: 'p1', supportsFactIds: ['new', 'old'] });
+  });
+
+  it.each([
+    { decision: 'delete_all', confidence: 1, rationale: 'invalid decision' },
+    { decision: 'keep_new', confidence: 'high', rationale: 'invalid type' },
+    { decision: 'keep_new', confidence: -0.1, rationale: 'invalid range' },
+    { decision: 'keep_new', confidence: 1.1, rationale: 'invalid range' },
+    { decision: 'keep_new', confidence: 0.9, rationale: ' ' },
+    { decision: 'keep_new', confidence: 0.9, rationale: 'bad index', keep_fact_indices: [-1] },
+  ])('fails closed for structurally invalid conflict output %#', async (payload) => {
+    const result = await new LLMConflictResolver(provider(JSON.stringify(payload))).resolve(conflictRequest());
+    expect(result).toMatchObject({ state: 'unresolved', keptFactIds: ['new', 'old'], inactivatedFactIds: [] });
   });
 
   it('chunks empty, heading, feature-rich, and oversized fallback markdown with stable metadata', () => {
@@ -84,7 +111,7 @@ describe('indexing and provider behavioral boundaries', () => {
     expect(chunks[1]?.features.hasReferences).toBe(true);
     expect(chunks[0]?.features.hasTable).toBe(true);
     const parts = fallbackParagraphSplit('one\n\ntwo\n\nthree', 1, 1);
-    expect(parts.length).toBeGreaterThan(1);
+    expect(parts).toEqual(['one', 'one\n\ntwo', 'two\n\nthree']);
     const extraction = toExtractionChunk('c1', chunks[0]!, { ...base, markdown: chunks[0]!.text });
     expect(extraction.metadata.chunkId).toBe(chunks[0]!.chunkId);
   });
@@ -94,8 +121,16 @@ describe('indexing and provider behavioral boundaries', () => {
     const sidecar = { chunkSentences: vi.fn().mockResolvedValue([{ text: '第一文。', sentenceCount: 1, estimatedTokens: 2 }, { text: '第二文。', sentenceCount: 1, estimatedTokens: 2 }]), extractEntitiesJa: vi.fn() };
     const chunks = await chunkMarkdownDocumentWithGinza(request, sidecar);
     expect(chunks.map((x) => x.text)).toEqual(['第一文。', '第二文。']);
+    expect(chunks.every((item) => item.sectionPath[0] === '見出し')).toBe(true);
+    expect(sidecar.chunkSentences).toHaveBeenCalledWith(request.markdown.trim(), 500);
     const fallback = await chunkMarkdownDocumentWithGinza(request, { ...sidecar, chunkSentences: vi.fn().mockRejectedValue(new Error('sidecar unavailable')) });
-    expect(fallback.length).toBeGreaterThan(0);
+    expect(fallback).toHaveLength(1);
+    expect(fallback[0]).toMatchObject({
+      text: request.markdown.trim(),
+      sectionPath: ['見出し'],
+      offsetStart: 0,
+      offsetEnd: request.markdown.length,
+    });
   });
 
   it('commits document metadata and stops before downstream stages for empty input', async () => {
@@ -166,8 +201,11 @@ describe('indexing and provider behavioral boundaries', () => {
         new Response(JSON.stringify({ id: 'batch-1', status: 'failed' }), { status: 200 }),
         new Response(JSON.stringify({ id: 'batch-1', status: 'failed' }), { status: 200 }),
       ];
-      vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => failedResponses.shift()!));
-      await expect(new BatchEmbeddingProvider({ apiKey: 'key', model: 'embed', outputDir, pollIntervalMs: 0, maxWaitMs: 100 }).embed({ texts: ['x'] })).rejects.toThrow();
+      const failedFetch = vi.fn().mockImplementation(async () => failedResponses.shift()!);
+      vi.stubGlobal('fetch', failedFetch);
+      await expect(new BatchEmbeddingProvider({ apiKey: 'key', model: 'embed', outputDir, pollIntervalMs: 0, maxWaitMs: 100 }).embed({ texts: ['x'] })).rejects.toThrow('Batch batch-1 ended with status: failed');
+      expect(failedFetch).toHaveBeenCalledTimes(3);
+      expect(failedFetch.mock.calls.every(([url]) => !String(url).includes('/files/undefined/content'))).toBe(true);
 
       const incompleteResponses = [
         new Response(JSON.stringify({ id: 'file-2' }), { status: 200 }),

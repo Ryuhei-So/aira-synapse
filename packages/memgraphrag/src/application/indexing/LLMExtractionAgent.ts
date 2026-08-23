@@ -66,19 +66,39 @@ interface LLMExtractionResult {
   }[];
 }
 
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function isConfidence(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1;
+}
+
 function parseLLMResponse(text: string): LLMExtractionResult {
   const cleaned = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
   try {
-    const parsed = JSON.parse(cleaned) as LLMExtractionResult;
+    const parsed: unknown = JSON.parse(cleaned);
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      return { entities: [], relations: [] };
+    }
+    const value = parsed as Record<string, unknown>;
     // LLMs (especially small local models) sometimes emit items with missing
     // fields; drop them here so downstream canonicalization never sees them.
-    const entities = (Array.isArray(parsed.entities) ? parsed.entities : []).filter(
-      (e) => typeof e?.name === 'string' && typeof e?.type === 'string',
+    const entities = (Array.isArray(value.entities) ? value.entities : []).filter(
+      (entity): entity is { name: string; type: string } => typeof entity === 'object'
+        && entity !== null
+        && isNonEmptyString((entity as Record<string, unknown>).name)
+        && isNonEmptyString((entity as Record<string, unknown>).type),
     );
-    const relations = (Array.isArray(parsed.relations) ? parsed.relations : []).filter(
-      (r) => typeof r?.head === 'string' && typeof r?.headType === 'string'
-        && typeof r?.relation === 'string' && typeof r?.tail === 'string'
-        && typeof r?.tailType === 'string',
+    const relations = (Array.isArray(value.relations) ? value.relations : []).filter(
+      (relation): relation is LLMExtractionResult['relations'][number] => typeof relation === 'object'
+        && relation !== null
+        && isNonEmptyString((relation as Record<string, unknown>).head)
+        && isNonEmptyString((relation as Record<string, unknown>).headType)
+        && isNonEmptyString((relation as Record<string, unknown>).relation)
+        && isNonEmptyString((relation as Record<string, unknown>).tail)
+        && isNonEmptyString((relation as Record<string, unknown>).tailType)
+        && isConfidence((relation as Record<string, unknown>).confidence),
     );
     return { entities, relations };
   } catch {
