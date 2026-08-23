@@ -89,6 +89,7 @@ describe('TASK-MG-004: CI workflow contract', () => {
       expect(job.env).toEqual(expect.objectContaining({
         AIRA_GRAPHDB_REPO_PATH: '${{ github.workspace }}/aira-graphdb',
         AIRA_GRAPHDB_EXPECTED_SHA: '164092aa47f39330c0c771495d9d42e4e935e41b',
+        AIRA_GRAPHDB_NATIVE_CMD: '${{ github.workspace }}/aira-graphdb/target/release/aira-graphdb-native',
       }));
       const graphDbCheckout = job.steps.find(
         (step) => step.uses === 'actions/checkout@v4'
@@ -99,6 +100,13 @@ describe('TASK-MG-004: CI workflow contract', () => {
         ref: '164092aa47f39330c0c771495d9d42e4e935e41b',
         path: 'aira-graphdb',
       }));
+      const nativeBuild = job.steps.find((step) => step.run?.includes('cargo build'));
+      expect(nativeBuild?.run).toContain(
+        'cargo build --locked --release --bin aira-graphdb-native',
+      );
+      expect(nativeBuild?.run).toContain(
+        '--manifest-path "$AIRA_GRAPHDB_REPO_PATH/Cargo.toml"',
+      );
     }
   });
 

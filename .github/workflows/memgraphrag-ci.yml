@@ -32,6 +32,7 @@ jobs:
     env:
       AIRA_GRAPHDB_REPO_PATH: ${{ github.workspace }}/aira-graphdb
       AIRA_GRAPHDB_EXPECTED_SHA: 164092aa47f39330c0c771495d9d42e4e935e41b
+      AIRA_GRAPHDB_NATIVE_CMD: ${{ github.workspace }}/aira-graphdb/target/release/aira-graphdb-native
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
@@ -47,6 +48,7 @@ jobs:
         with:
           python-version: '3.12'
       - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --locked --release --bin aira-graphdb-native --manifest-path "$AIRA_GRAPHDB_REPO_PATH/Cargo.toml"
       - run: npm ci
       - run: npm run test --workspace=packages/memgraphrag
 
@@ -56,6 +58,7 @@ jobs:
     env:
       AIRA_GRAPHDB_REPO_PATH: ${{ github.workspace }}/aira-graphdb
       AIRA_GRAPHDB_EXPECTED_SHA: 164092aa47f39330c0c771495d9d42e4e935e41b
+      AIRA_GRAPHDB_NATIVE_CMD: ${{ github.workspace }}/aira-graphdb/target/release/aira-graphdb-native
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
@@ -71,6 +74,7 @@ jobs:
         with:
           python-version: '3.12'
       - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --locked --release --bin aira-graphdb-native --manifest-path "$AIRA_GRAPHDB_REPO_PATH/Cargo.toml"
       - run: npm ci
       - run: npm run test:coverage --workspace=packages/memgraphrag
 

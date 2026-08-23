@@ -1,5 +1,7 @@
-import { describe, expect, it, vi } from 'vitest';
-import { DictionaryContextEnricher } from '../../../../src/application/query/DictionaryContextEnricher.js';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parseDbSpec, validateDbSpecs } from '../../../../src/application/query/dbValidation.js';
 import { SQLiteGraphProjection } from '../../../../src/application/query/SQLiteGraphProjection.js';
 import type {
@@ -42,6 +44,19 @@ function makeDictionary(matches: readonly DictionaryMatch[]): ITermDictionary {
   };
 }
 
+async function loadDictionaryContextEnricher() {
+  vi.stubEnv('DICT_MAX_HINTS', '5');
+  vi.stubEnv('DICT_MIN_CONFIDENCE', '0.7');
+  vi.resetModules();
+  return (await import('../../../../src/application/query/DictionaryContextEnricher.js'))
+    .DictionaryContextEnricher;
+}
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.resetModules();
+});
+
 describe('query boundary utilities', () => {
   describe('database specification validation', () => {
     it('parses alias assignments and derives an id from a basename', () => {
@@ -56,35 +71,34 @@ describe('query boundary utilities', () => {
     });
 
     it('reports invalid ids, duplicate ids, unsupported extensions, and missing paths', () => {
-      const errors = validateDbSpecs([
-        { dbId: 'bad id', dbPath: 'not-a-database.sqlite' },
-        { dbId: 'same', dbPath: 'missing-one.agdb' },
-        { dbId: 'same', dbPath: 'missing-two.agdb' },
-      ]);
+      const directory = mkdtempSync(join(tmpdir(), 'memgraphrag-db-spec-'));
+      const invalidPath = join(directory, 'not-a-database.sqlite');
+      const missingOne = join(directory, 'missing-one.agdb');
+      const missingTwo = join(directory, 'missing-two.agdb');
+      try {
+        const errors = validateDbSpecs([
+          { dbId: 'bad id', dbPath: invalidPath },
+          { dbId: 'same', dbPath: missingOne },
+          { dbId: 'same', dbPath: missingTwo },
+        ]);
 
-      expect(errors).toEqual([
-        {
-          dbId: 'bad id',
-          reason: 'Invalid dbId "bad id": must match [a-zA-Z0-9_-]',
-        },
-        {
-          dbId: 'bad id',
-          reason: 'Path "not-a-database.sqlite" must be an .agdb file (aira-graphdb only)',
-        },
-        {
-          dbId: 'bad id',
-          reason: 'Path "not-a-database.sqlite" does not exist',
-        },
-        {
-          dbId: 'same',
-          reason: 'Path "missing-one.agdb" does not exist',
-        },
-        { dbId: 'same', reason: 'Duplicate dbId "same"' },
-        {
-          dbId: 'same',
-          reason: 'Path "missing-two.agdb" does not exist',
-        },
-      ]);
+        expect(errors).toEqual([
+          {
+            dbId: 'bad id',
+            reason: 'Invalid dbId "bad id": must match [a-zA-Z0-9_-]',
+          },
+          {
+            dbId: 'bad id',
+            reason: `Path "${invalidPath}" must be an .agdb file (aira-graphdb only)`,
+          },
+          { dbId: 'bad id', reason: `Path "${invalidPath}" does not exist` },
+          { dbId: 'same', reason: `Path "${missingOne}" does not exist` },
+          { dbId: 'same', reason: 'Duplicate dbId "same"' },
+          { dbId: 'same', reason: `Path "${missingTwo}" does not exist` },
+        ]);
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
     });
 
     it('allows a non-existent agdb path when path checking is explicitly disabled', () => {
@@ -96,6 +110,7 @@ describe('query boundary utilities', () => {
 
   describe('dictionary context enrichment', () => {
     it('filters by confidence, sorts by confidence, and caps hints at five', async () => {
+      const DictionaryContextEnricher = await loadDictionaryContextEnricher();
       const dictionary = makeDictionary([
         makeDictionaryMatch('low', 0.69),
         makeDictionaryMatch('third', 0.85),
@@ -120,7 +135,8 @@ describe('query boundary utilities', () => {
       });
     });
 
-    it('formats aliases and categories while handling empty fields', () => {
+    it('formats aliases and categories while handling empty fields', async () => {
+      const DictionaryContextEnricher = await loadDictionaryContextEnricher();
       const enricher = new DictionaryContextEnricher(makeDictionary([]));
       const hints = [
         {
@@ -146,6 +162,7 @@ describe('query boundary utilities', () => {
     });
 
     it('enriches a query in one call and preserves an empty result', async () => {
+      const DictionaryContextEnricher = await loadDictionaryContextEnricher();
       const empty = new DictionaryContextEnricher(makeDictionary([]));
       await expect(empty.enrich('nothing')).resolves.toBe('');
 
