@@ -17,19 +17,24 @@ const LIMITS = {
 export async function readV15ParityInput(path: string, limit: number): Promise<Buffer> {
   const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
-    const before = await handle.stat();
-    if (!before.isFile() || before.nlink !== 1 || before.size > limit) throw new Error('UNSAFE_INPUT_FILE');
+    const before = await handle.stat({ bigint: true });
+    if (!before.isFile() || before.nlink !== 1n || before.size > BigInt(limit)) throw new Error('UNSAFE_INPUT_FILE');
     const bytes = await handle.readFile();
-    const after = await handle.stat();
+    const after = await handle.stat({ bigint: true });
     const pathAfter = await lstat(path, { bigint: true });
     if (
-      bytes.length !== before.size
+      BigInt(bytes.length) !== before.size
       || before.dev !== after.dev
       || before.ino !== after.ino
       || before.size !== after.size
-      || BigInt(after.dev) !== pathAfter.dev
-      || BigInt(after.ino) !== pathAfter.ino
-      || BigInt(after.size) !== pathAfter.size
+      || before.mtimeNs !== after.mtimeNs
+      || before.ctimeNs !== after.ctimeNs
+      || before.nlink !== after.nlink
+      || after.dev !== pathAfter.dev
+      || after.ino !== pathAfter.ino
+      || after.size !== pathAfter.size
+      || after.mtimeNs !== pathAfter.mtimeNs
+      || after.ctimeNs !== pathAfter.ctimeNs
       || !pathAfter.isFile()
       || pathAfter.nlink !== 1n
     ) throw new Error('INPUT_IDENTITY_CHANGED');
