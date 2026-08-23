@@ -34,7 +34,7 @@
     "functions": {
       "targetPct": 80,
       "actualPct": 84.52,
-      "debtPct": -4.52
+      "debtPct": 0
     },
     "branches": {
       "targetPct": 80,
