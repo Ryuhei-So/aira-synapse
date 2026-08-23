@@ -1,18 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import Database from 'better-sqlite3';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { IMemoryStore } from '../../../../src/domain/storage/index.js';
 import { runMigrations } from '../../../../src/infrastructure/storage/migrate.js';
 import { createNotImplementedStub } from '../../../setup/testDoubles.js';
 import { AsyncJobRunner } from '../../../../src/application/indexing/AsyncJobRunner.js';
 import { DefaultIndexingService } from '../../../../src/application/indexing/IndexingService.js';
+import { AiraGraphDbNativeClient } from '../../../../src/infrastructure/storage/aira-graphdb/NativeClient.js';
 import type { IndexDocumentsCommand } from '../../../../src/application/indexing/IndexingService.js';
 import type { DeleteDocumentResult } from '../../../../src/application/indexing/DeleteDocumentService.js';
 
-function command(): IndexDocumentsCommand {
+function command(documentId = 'doc-1'): IndexDocumentsCommand {
   return {
     corpusId: 'corpus-1',
     documents: [{
-      documentId: 'doc-1',
+      documentId,
       markdown: '# Intro\nContent',
       title: 'Doc',
       sourceUrl: 'https://example.com/doc',
@@ -21,6 +25,17 @@ function command(): IndexDocumentsCommand {
     }],
   };
 }
+
+const fakeOwnerNative = fileURLToPath(new URL('../../../support/fake-owner-native.mjs', import.meta.url));
+
+const ownerErrorContract = JSON.parse(readFileSync(resolve(
+  import.meta.dirname,
+  '../../../fixtures/graphdb-owner-job-errors.json',
+), 'utf8')) as {
+  contract: string;
+  version: number;
+  ownerError: { code: string; documentId: string };
+};
 
 describe('TASK-MG-035: AsyncJobRunner and DefaultIndexingService', () => {
   let db: Database.Database;
@@ -106,7 +121,59 @@ describe('TASK-MG-035: AsyncJobRunner and DefaultIndexingService', () => {
     await runner.execute('job-1');
 
     const row = db.prepare('SELECT status, errors_json FROM jobs WHERE job_id = ?').get('job-1') as { status: string; errors_json: string };
-    expect(row.status).toBe('failed');
-    expect(JSON.parse(row.errors_json)).toEqual(['boom']);
+    expect(row.status).toBe('completed');
+    expect(JSON.parse(row.errors_json)).toEqual([expect.objectContaining({
+      code: 'DOCUMENT_ERROR',
+      documentId: 'doc-1',
+      message: expect.stringContaining('boom'),
+    })]);
+  });
+
+  it('preserves typed infrastructure codes in per-document errors', async () => {
+    expect(ownerErrorContract).toMatchObject({ contract: 'graphdb-owner-job-errors', version: 1 });
+    const error = Object.assign(new Error('owner rejected mutation'), { code: ownerErrorContract.ownerError.code });
+    const pipeline = { processDocument: vi.fn().mockRejectedValue(error) };
+    const runner = new AsyncJobRunner(db, memoryStore, pipeline);
+    runner.registerJob('job-1', command());
+    await runner.enqueue('job-1');
+    await runner.execute('job-1');
+
+    const row = db.prepare('SELECT errors_json FROM jobs WHERE job_id = ?').get('job-1') as { errors_json: string };
+    const serialized = JSON.parse(row.errors_json) as Array<{ code: string; documentId?: string; message: string }>;
+    expect(serialized).toEqual([expect.objectContaining({
+      code: ownerErrorContract.ownerError.code,
+      documentId: 'doc-1',
+      message: expect.stringContaining('owner rejected mutation'),
+    })]);
+    expect(serialized[0]).toEqual(expect.objectContaining({ documentId: 'doc-1' }));
+  });
+
+  it('serializes the real NativeClient owner error for Hub consumption', async () => {
+    const previousCommand = process.env.AIRA_GRAPHDB_NATIVE_CMD;
+    process.env.AIRA_GRAPHDB_NATIVE_CMD = `${process.execPath} ${fakeOwnerNative}`;
+    const client = new AiraGraphDbNativeClient('/tmp/graphdb-owner-contract-test');
+    const pipeline = {
+      processDocument: vi.fn(async () => {
+        await client.request('memory_upsert', { corpusId: 'corpus-1', delta: [] });
+        return { processedDocumentId: 'doc_0123456789ab', addedNodes: 0, addedEdges: 0, conflicts: 0 };
+      }),
+    };
+    try {
+      const runner = new AsyncJobRunner(db, memoryStore, pipeline);
+      runner.registerJob('job-owner-contract', command('doc_0123456789ab'));
+      await runner.enqueue('job-owner-contract');
+      await runner.execute('job-owner-contract');
+
+      const row = db.prepare('SELECT errors_json FROM jobs WHERE job_id = ?')
+        .get('job-owner-contract') as { errors_json: string };
+      expect(JSON.parse(row.errors_json)).toEqual([expect.objectContaining({
+        code: ownerErrorContract.ownerError.code,
+        documentId: ownerErrorContract.ownerError.documentId,
+      })]);
+    } finally {
+      await client.close();
+      if (previousCommand === undefined) delete process.env.AIRA_GRAPHDB_NATIVE_CMD;
+      else process.env.AIRA_GRAPHDB_NATIVE_CMD = previousCommand;
+    }
   });
 });

@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3';
+import type { JobError } from '../corpus/corpusDtos.js';
 import type { IMemoryStore } from '../../domain/storage/index.js';
 import type { IndexDocumentsCommand } from './IndexingService.js';
 
@@ -22,6 +23,20 @@ export interface StorageWriteBatch {
 }
 
 const BATCH_COMMIT_EVERY_DOCS = 15;
+
+function errorCode(error: unknown, fallback: string): string {
+  if (typeof error === 'object' && error !== null
+    && 'code' in error && typeof error.code === 'string' && error.code.length > 0) {
+    return error.code;
+  }
+  return fallback;
+}
+
+function errorMessage(error: unknown, stackLines: number): string {
+  return error instanceof Error
+    ? `${error.message}\n${(error.stack ?? '').split('\n').slice(1, stackLines + 1).join('\n')}`
+    : String(error);
+}
 
 export class AsyncJobRunner {
   private readonly jobs = new Map<string, IndexDocumentsCommand>();
@@ -82,7 +97,7 @@ export class AsyncJobRunner {
       let addedNodes = 0;
       let addedEdges = 0;
       let conflicts = 0;
-      const documentErrors: string[] = [];
+      const documentErrors: JobError[] = [];
 
       for (const document of command.documents) {
         // Honor cancellations recorded in the DB (e.g. by an operator or
@@ -108,10 +123,12 @@ export class AsyncJobRunner {
         } catch (error) {
           // Isolate per-document failures: one malformed document must not
           // abort the whole job. Record and continue.
-          const message = error instanceof Error
-            ? `${error.message}\n${(error.stack ?? '').split('\n').slice(1, 4).join('\n')}`
-            : String(error);
-          documentErrors.push(`[${document.documentId}] ${message}`);
+          const message = errorMessage(error, 3);
+          documentErrors.push({
+            code: errorCode(error, 'DOCUMENT_ERROR'),
+            message,
+            documentId: document.documentId,
+          });
           console.log(`  [${document.title}] FAILED (skipping): ${message.split('\n')[0]}`);
           continue;
         }
@@ -151,12 +168,13 @@ export class AsyncJobRunner {
     } catch (error) {
       // Record the stack, not just the message — message-only errors made
       // pipeline failures undiagnosable.
-      const message = error instanceof Error
-        ? `${error.message}\n${(error.stack ?? '').split('\n').slice(1, 6).join('\n')}`
-        : String(error);
+      const message = errorMessage(error, 5);
       this.db.prepare(
         `UPDATE jobs SET status = 'failed', errors_json = ?, updated_at = ? WHERE job_id = ?`,
-      ).run(JSON.stringify([message]), new Date().toISOString(), jobId);
+      ).run(JSON.stringify([{
+        code: errorCode(error, 'JOB_ERROR'),
+        message,
+      }]), new Date().toISOString(), jobId);
     } finally {
       try {
         await this.storageBatch?.commit();

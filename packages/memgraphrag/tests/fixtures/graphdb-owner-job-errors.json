@@ -1,0 +1,14 @@
+{
+  "contract": "graphdb-owner-job-errors",
+  "version": 1,
+  "ownerError": {
+    "code": "METHOD_DENIED",
+    "documentId": "doc_0123456789ab",
+    "message": "owner rejected mutation"
+  },
+  "documentError": {
+    "code": "DOCUMENT_ERROR",
+    "documentId": "doc_0123456789ab",
+    "message": "malformed metadata"
+  }
+}
