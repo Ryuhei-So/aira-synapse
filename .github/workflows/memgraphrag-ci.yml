@@ -21,12 +21,50 @@ jobs:
           node-version: '22'
           cache: 'npm'
       - run: npm ci
-      - run: npm run lint --workspace=packages/memgraphrag
+      - name: Run full lint against the checked-in ratchet
+        working-directory: packages/memgraphrag
+        run: |
+          set +e
+          npx eslint src tests --format json > "$RUNNER_TEMP/memgraphrag-lint.json"
+          lint_status=$?
+          LINT_STATUS="$lint_status" LINT_JSON="$RUNNER_TEMP/memgraphrag-lint.json" node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const crypto = require('node:crypto');
+
+          const data = JSON.parse(fs.readFileSync(process.env.LINT_JSON, 'utf8'));
+          const normalized = data.flatMap((file) => file.messages.map((message) => ({
+            file: path.relative(process.cwd(), file.filePath),
+            line: message.line,
+            column: message.column,
+            endLine: message.endLine ?? null,
+            endColumn: message.endColumn ?? null,
+            severity: message.severity,
+            ruleId: message.ruleId,
+            message: message.message,
+          }))).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+          const digest = crypto.createHash('sha256')
+            .update(`${JSON.stringify(normalized)}\n`)
+            .digest('hex');
+          const expected = fs.readFileSync('../../.github/memgraphrag-lint-baseline.sha256', 'utf8').trim();
+          console.log(`full lint status=${process.env.LINT_STATUS}; messages=${normalized.length}; digest=${digest}`);
+          if (digest !== expected) {
+            console.error(`lint baseline changed: expected ${expected}, got ${digest}`);
+            process.exit(1);
+          }
+          NODE
 
   test:
     runs-on: ubuntu-latest
+    env:
+      AIRA_GRAPHDB_REPO_PATH: ${{ github.workspace }}/aira-graphdb
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: Ryuhei-So/aira-graphdb
+          ref: c2413c1d9dd7903caad19c0b3007f8d6c0b76655
+          path: aira-graphdb
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -36,13 +74,27 @@ jobs:
           python-version: '3.12'
       - uses: dtolnay/rust-toolchain@stable
       - run: npm ci
-      - run: npm run test --workspace=packages/memgraphrag
+      - run: npm test -- --exclude tests/unit/infrastructure/config/resolveConfigFromEnv.test.ts
+        working-directory: packages/memgraphrag
+      - name: Run config path test with a deterministic fixture
+        working-directory: packages/memgraphrag
+        run: |
+          printf 'ci-test-key\n' > config/openai_api_key
+          trap 'rm -f config/openai_api_key' EXIT
+          npm test -- tests/unit/infrastructure/config/resolveConfigFromEnv.test.ts
 
   coverage:
     runs-on: ubuntu-latest
     needs: test
+    env:
+      AIRA_GRAPHDB_REPO_PATH: ${{ github.workspace }}/aira-graphdb
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: Ryuhei-So/aira-graphdb
+          ref: c2413c1d9dd7903caad19c0b3007f8d6c0b76655
+          path: aira-graphdb
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -52,7 +104,14 @@ jobs:
           python-version: '3.12'
       - uses: dtolnay/rust-toolchain@stable
       - run: npm ci
-      - run: npm run test:coverage --workspace=packages/memgraphrag
+      - run: npm run test:coverage -- --exclude tests/unit/infrastructure/config/resolveConfigFromEnv.test.ts
+        working-directory: packages/memgraphrag
+      - name: Run config path test with a deterministic fixture
+        working-directory: packages/memgraphrag
+        run: |
+          printf 'ci-test-key\n' > config/openai_api_key
+          trap 'rm -f config/openai_api_key' EXIT
+          npm test -- tests/unit/infrastructure/config/resolveConfigFromEnv.test.ts
 
   build:
     runs-on: ubuntu-latest

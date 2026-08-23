@@ -13,13 +13,7 @@ type ContractShape = {
 };
 
 const contractPath = resolve(
-  process.cwd(),
-  '..',
-  '..',
-  '..',
-  '..',
-  '..',
-  'aira-graphdb',
+  process.env.AIRA_GRAPHDB_REPO_PATH ?? resolve(process.cwd(), '..', '..', '..', '..', '..', 'aira-graphdb'),
   'spec',
   'contracts',
   'aira-synapse-storage-ports.v1.0.0.json',
@@ -47,7 +41,7 @@ function extractInterfaceMethods(source: string, interfaceName: string): string[
   );
   if (!bodyMatch?.[1]) return [];
   const body = bodyMatch[1];
-  const methods = [...body.matchAll(/^\s*([A-Za-z_]\w*)\s*(?:<[^>]+>)?\s*\(/gm)]
+  const methods = [...body.matchAll(/^\s*([A-Za-z_]\w*)\s*(?:<[^()\n]*>)?\s*\(/gm)]
     .map((m) => m[1]!)
     .filter((name, index, all) => all.indexOf(name) === index);
   return methods.sort();
