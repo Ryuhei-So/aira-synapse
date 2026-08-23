@@ -22,7 +22,7 @@ import { createNeo4jAdapters } from '../../src/infrastructure/storage/ladybug/st
 import { OpenAIEmbeddingProvider } from '../../src/infrastructure/embedding/OpenAIEmbeddingProvider.js';
 import { OpenAILLMProvider } from '../../src/infrastructure/llm/OpenAILLMProvider.js';
 import { resolveApiKey } from '../../src/infrastructure/config/resolveApiKey.js';
-import { shouldRunNeo4jE2E } from './neo4j-e2e-gate.js';
+import { enforceNeo4jE2E } from './neo4j-e2e-gate.js';
 import type { StorageAdapters } from '../../src/infrastructure/storage/ladybug/storageFactory.js';
 import type { FederatedDbConfig, FederatedQueryConfig } from '../../src/application/query/federationTypes.js';
 import type { ITermDictionary, IThesaurus } from '../../src/domain/index.js';
@@ -41,9 +41,8 @@ const NEO4J_OPTS = {
 // Resolve API key from env or file
 const keyFilePath = resolve(process.cwd(), 'config/openai_api_key');
 const apiKey = resolveApiKey(keyFilePath, process.env, process.cwd());
-const describeIf = shouldRunNeo4jE2E(process.env.RUN_NEO4J_E2E, apiKey, NEO4J_OPTS)
-  ? describe
-  : describe.skip;
+const neo4jGate = enforceNeo4jE2E(process.env.RUN_NEO4J_E2E, apiKey, NEO4J_OPTS);
+const describeIf = neo4jGate.state === 'run' ? describe : describe.skip;
 
 describeIf('E2E: Federated Query across EN + JP corpora (Neo4j)', () => {
   let enAdapters: StorageAdapters;

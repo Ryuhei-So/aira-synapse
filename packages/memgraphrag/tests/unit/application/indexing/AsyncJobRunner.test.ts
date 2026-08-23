@@ -52,6 +52,26 @@ describe('TASK-MG-035: AsyncJobRunner and DefaultIndexingService', () => {
     expect(row).toEqual({ status: 'completed', processed: 1, total: 1 });
   });
 
+  it('commits the backend before the durable completed status', async () => {
+    const pipeline = { processDocument: vi.fn().mockResolvedValue({ processedDocumentId: 'doc-1', addedNodes: 3, addedEdges: 2, conflicts: 0 }) };
+    const statusesAtCommit: string[] = [];
+    const storageBatch = {
+      begin: vi.fn<() => Promise<void>>().mockResolvedValue(),
+      commit: vi.fn<() => Promise<void>>().mockImplementation(async () => {
+        const row = db.prepare('SELECT status FROM jobs WHERE job_id = ?').get('job-1') as { status: string };
+        statusesAtCommit.push(row.status);
+      }),
+    };
+    const runner = new AsyncJobRunner(db, memoryStore, pipeline, storageBatch);
+    runner.registerJob('job-1', command());
+    await runner.enqueue('job-1');
+    await runner.execute('job-1');
+
+    expect(storageBatch.commit).toHaveBeenCalledTimes(1);
+    expect(statusesAtCommit).toEqual(['running']);
+    expect((db.prepare('SELECT status FROM jobs WHERE job_id = ?').get('job-1') as { status: string }).status).toBe('completed');
+  });
+
   it('resumes from saved checkpoints by skipping processed documents', async () => {
     memoryStore = {
       ...memoryStore,
@@ -139,5 +159,46 @@ describe('TASK-MG-035: AsyncJobRunner and DefaultIndexingService', () => {
     }]);
     expect(pipeline.processDocument).not.toHaveBeenCalled();
     expect(storageBatch.commit).not.toHaveBeenCalled();
+  });
+
+  it('records checkpoint failures as failed structured job errors', async () => {
+    memoryStore = {
+      ...memoryStore,
+      saveCheckpoint: vi.fn<IMemoryStore['saveCheckpoint']>().mockRejectedValue(new Error('checkpoint boom')),
+    } satisfies IMemoryStore;
+    const pipeline = { processDocument: vi.fn().mockResolvedValue({ processedDocumentId: 'doc-1', addedNodes: 1, addedEdges: 1, conflicts: 0 }) };
+    const runner = new AsyncJobRunner(db, memoryStore, pipeline);
+    runner.registerJob('job-1', command());
+    await runner.enqueue('job-1');
+    await runner.execute('job-1');
+
+    const row = db.prepare('SELECT status, processed, errors_json FROM jobs WHERE job_id = ?').get('job-1') as { status: string; processed: number; errors_json: string };
+    expect(row.status).toBe('failed');
+    expect(row.processed).toBe(0);
+    expect(JSON.parse(row.errors_json)).toEqual([{
+      code: 'JOB_EXECUTION_FAILED',
+      message: expect.stringContaining('checkpoint boom'),
+    }]);
+  });
+
+  it('records final storage commit failures as failed without retrying commit', async () => {
+    const pipeline = { processDocument: vi.fn().mockResolvedValue({ processedDocumentId: 'doc-1', addedNodes: 1, addedEdges: 1, conflicts: 0 }) };
+    const storageBatch = {
+      begin: vi.fn<() => Promise<void>>().mockResolvedValue(),
+      commit: vi.fn<() => Promise<void>>().mockRejectedValue(new Error('final commit boom')),
+    };
+    const runner = new AsyncJobRunner(db, memoryStore, pipeline, storageBatch);
+    runner.registerJob('job-1', command());
+    await runner.enqueue('job-1');
+    await runner.execute('job-1');
+
+    const row = db.prepare('SELECT status, processed, errors_json FROM jobs WHERE job_id = ?').get('job-1') as { status: string; processed: number; errors_json: string };
+    expect(row.status).toBe('failed');
+    expect(row.processed).toBe(1);
+    expect(JSON.parse(row.errors_json)).toEqual([{
+      code: 'JOB_EXECUTION_FAILED',
+      message: expect.stringContaining('final commit boom'),
+    }]);
+    expect(storageBatch.commit).toHaveBeenCalledTimes(1);
   });
 });

@@ -69,6 +69,13 @@ export class AsyncJobRunner {
     }
 
     let batchStarted = false;
+    const commitOpenBatch = async (): Promise<void> => {
+      if (!batchStarted) return;
+      // Consume ownership before awaiting so a failed commit is propagated by
+      // the outer catch exactly once; finally must not retry the same commit.
+      batchStarted = false;
+      await this.storageBatch?.commit();
+    };
     try {
       const checkpoint = await this.memoryStore.loadCheckpoint(jobId);
       const processed = new Set(checkpoint?.processedDocumentIds ?? []);
@@ -142,14 +149,16 @@ export class AsyncJobRunner {
 
         sinceCommit += 1;
         if (this.storageBatch && sinceCommit >= BATCH_COMMIT_EVERY_DOCS) {
-          await this.storageBatch.commit();
-          batchStarted = false;
+          await commitOpenBatch();
           await this.storageBatch.begin();
           batchStarted = true;
           sinceCommit = 0;
         }
       }
 
+      // The backend commit is part of the job's success boundary. A failed
+      // final commit must leave the durable job row failed, never completed.
+      await commitOpenBatch();
       this.db.prepare(
         `UPDATE jobs SET status = 'completed', processed = ?, summary = ?, errors_json = ?, updated_at = ? WHERE job_id = ?`,
       ).run(
@@ -175,7 +184,7 @@ export class AsyncJobRunner {
     } finally {
       if (batchStarted) {
         try {
-          await this.storageBatch?.commit();
+          await commitOpenBatch();
         } catch (err) {
           console.log(`  [job ${jobId}] final storage commit failed: ${err instanceof Error ? err.message : String(err)}`);
         }
