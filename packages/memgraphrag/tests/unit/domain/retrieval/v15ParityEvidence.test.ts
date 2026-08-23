@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import type { Fact } from '../../../../src/domain/memory/fact.js';
 import type { Passage } from '../../../../src/domain/memory/passage.js';
 import type { RankedNode } from '../../../../src/domain/retrieval/ppr.js';
@@ -298,6 +299,45 @@ describe('V15 copied-production parity evidence authority', () => {
     const undeclared = buildInput();
     undeclared.acceptedSemanticChanges.splice(0);
     expect(() => buildArtifact(undeclared)).toThrow('expansion:UNACCEPTED_RANK_CHANGE');
+
+    const unorderedCandidate = buildInput();
+    const unordered = [
+      { id: 'beta', rank: 1, score: 0.4 },
+      { id: 'alpha', rank: 2, score: 0.5 },
+    ];
+    unorderedCandidate.comparisons.candidate = { before: unordered, after: unordered };
+    expect(() => buildArtifact(unorderedCandidate)).toThrow('candidate:INVALID_AFTER_ORDER');
+  });
+
+  it('accepts generation zero and rejects contradictory public summaries', () => {
+    const input = buildInput();
+    const manifest = JSON.parse(input.copyManifestBytes.toString('utf8'));
+    manifest.generation = 0;
+    manifest.descriptor.generation = 0;
+    input.copyManifestBytes = serializeV15ParityJson(manifest);
+    const artifact = buildArtifact(input);
+    expect(artifact.generation).toBe(0);
+
+    const artifactBytes = serializeV15ParityJson(artifact);
+    const attestation = projectV15ParityAttestation(artifactBytes, input.copyManifestBytes, input.fixtureBytes);
+    const contradictory = {
+      ...attestation,
+      aggregate: {
+        ...attestation.aggregate,
+        candidate: { ...attestation.aggregate.candidate, afterCount: 2 },
+      },
+    };
+    expect(() => checkV15ParityAttestation(serializeV15ParityJson(contradictory)))
+      .toThrow('candidate:INVALID_PUBLIC_SUMMARY');
+  });
+
+  it('publishes a generated copy schema with exact three-entry arity', () => {
+    const schema = JSON.parse(readFileSync(
+      new URL('../../../../config/v15-parity/copy-manifest.schema.json', import.meta.url),
+      'utf8',
+    ));
+    expect(schema.properties.entries.minItems).toBe(3);
+    expect(schema.properties.entries.maxItems).toBe(3);
   });
 
   it('rejects a measured association changed from the existing shared helper output', () => {

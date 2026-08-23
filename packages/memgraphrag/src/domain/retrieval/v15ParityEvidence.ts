@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { associateV15RankedObjects } from './v15Plan.js';
+import { associateV15RankedObjects, compareV15ScoreThenId } from './v15Plan.js';
 
 export const V15_COPY_MANIFEST_SCHEMA = 'V15CopiedProductionCopyManifest@1' as const;
 export const V15_PARITY_ARTIFACT_SCHEMA = 'V15CopiedProductionParityArtifact@1' as const;
@@ -39,16 +39,18 @@ const count = z.number().int().nonnegative().max(1_000_000);
 const rank = z.number().int().positive().max(1_000_000);
 const fileSize = z.number().int().nonnegative().max(64 * 1024 ** 3);
 
+const copyManifestEntrySchema = z.discriminatedUnion('role', [
+  z.strictObject({ role: z.literal('canonical'), path: nonEmpty, size: fileSize, sha256 }),
+  z.strictObject({ role: z.literal('ownerManifest'), path: nonEmpty, size: fileSize, sha256 }),
+  z.strictObject({ role: z.literal('vectorBlob'), path: nonEmpty, size: fileSize, sha256 }),
+]);
+
 export const v15CopyManifestSchema = z.strictObject({
   schema: z.literal(V15_COPY_MANIFEST_SCHEMA),
-  generation: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
-  entries: z.tuple([
-    z.strictObject({ role: z.literal('canonical'), path: nonEmpty, size: fileSize, sha256 }),
-    z.strictObject({ role: z.literal('ownerManifest'), path: nonEmpty, size: fileSize, sha256 }),
-    z.strictObject({ role: z.literal('vectorBlob'), path: nonEmpty, size: fileSize, sha256 }),
-  ]),
+  generation: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  entries: z.array(copyManifestEntrySchema).length(3),
   descriptor: z.strictObject({
-    generation: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+    generation: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
     vectorBlob: z.strictObject({
       basename: nonEmpty,
       size: fileSize,
@@ -60,6 +62,10 @@ export const v15CopyManifestSchema = z.strictObject({
   if (manifest.descriptor.generation !== manifest.generation) {
     context.addIssue({ code: 'custom', message: 'descriptor generation mismatch' });
   }
+  const expectedRoles = ['canonical', 'ownerManifest', 'vectorBlob'];
+  if (manifest.entries.some((entry, index) => entry.role !== expectedRoles[index])) {
+    context.addIssue({ code: 'custom', message: 'copy roles must use canonical order' });
+  }
   const paths = manifest.entries.map((entry) => entry.path);
   if (new Set(paths).size !== paths.length) {
     context.addIssue({ code: 'custom', message: 'copy role paths must be unique' });
@@ -69,7 +75,7 @@ export const v15CopyManifestSchema = z.strictObject({
       context.addIssue({ code: 'custom', message: 'copy paths must be normalized relative paths' });
     }
   }
-  const blob = manifest.entries[2];
+  const blob = manifest.entries[2]!;
   if (
     manifest.descriptor.vectorBlob.basename !== blob.path.split('/').at(-1)
     || manifest.descriptor.vectorBlob.size !== blob.size
@@ -146,7 +152,7 @@ const aggregateSchema = z.strictObject({
 export const v15ParityArtifactSchema = z.strictObject({
   schema: z.literal(V15_PARITY_ARTIFACT_SCHEMA),
   generatedAt: z.iso.datetime({ offset: true }),
-  generation: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  generation: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
   canonicalSha256: sha256,
   ownerManifestSha256: sha256,
   vectorBlobSha256: sha256,
@@ -276,11 +282,11 @@ function deriveComparison(
       }
     }
   }
-  if (mode !== 'candidate') {
+  if (mode === 'candidate' || mode === 'expansion' || mode === 'ppr') {
     for (let index = 1; index < after.length; index += 1) {
       const previous = after[index - 1]!;
       const current = after[index]!;
-      if (previous.score < current.score || (previous.score === current.score && previous.id.localeCompare(current.id) > 0)) {
+      if (compareV15ScoreThenId(previous, current) > 0) {
         throw new Error(`${mode}:INVALID_AFTER_ORDER`);
       }
     }
@@ -410,9 +416,9 @@ export function buildV15ParityArtifact(input: V15ParityArtifactBuildInput): V15P
     schema: V15_PARITY_ARTIFACT_SCHEMA,
     ...fields,
     generation: manifest.generation,
-    canonicalSha256: manifest.entries[0].sha256,
-    ownerManifestSha256: manifest.entries[1].sha256,
-    vectorBlobSha256: manifest.entries[2].sha256,
+    canonicalSha256: manifest.entries[0]!.sha256,
+    ownerManifestSha256: manifest.entries[1]!.sha256,
+    vectorBlobSha256: manifest.entries[2]!.sha256,
     copyManifestSha256: sha256V15ParityBytes(copyManifestBytes),
     fixtureSha256: sha256V15ParityBytes(fixtureBytes),
     comparisons: {
@@ -446,9 +452,9 @@ export function checkV15ParityArtifact(
   if (artifact.copyManifestSha256 !== sha256V15ParityBytes(copyManifestBytes)
     || artifact.fixtureSha256 !== sha256V15ParityBytes(fixtureBytes)) throw new Error('BYTE_AUTHORITY_MISMATCH');
   if (artifact.generation !== manifest.generation
-    || artifact.canonicalSha256 !== manifest.entries[0].sha256
-    || artifact.ownerManifestSha256 !== manifest.entries[1].sha256
-    || artifact.vectorBlobSha256 !== manifest.entries[2].sha256) throw new Error('COPY_MANIFEST_BINDING_MISMATCH');
+    || artifact.canonicalSha256 !== manifest.entries[0]!.sha256
+    || artifact.ownerManifestSha256 !== manifest.entries[1]!.sha256
+    || artifact.vectorBlobSha256 !== manifest.entries[2]!.sha256) throw new Error('COPY_MANIFEST_BINDING_MISMATCH');
   deriveAndCheckArtifact(artifact);
   return artifact;
 }
@@ -486,6 +492,55 @@ export function checkV15ParityAttestation(attestationBytes: Uint8Array): V15Pari
   if (attestation.verdict !== expectedVerdict) throw new Error('DECLARED_VERDICT_MISMATCH');
   if (new Set(attestation.acceptedSemanticChanges).size !== attestation.acceptedSemanticChanges.length) {
     throw new Error('DUPLICATE_SEMANTIC_CHANGE');
+  }
+  for (const [name, summary] of Object.entries({
+    candidate: attestation.aggregate.candidate,
+    expansion: attestation.aggregate.expansion,
+    ppr: attestation.aggregate.ppr,
+  })) {
+    if (summary.beforeCount !== summary.afterCount || summary.matchedCount !== summary.beforeCount
+      || summary.changedRankCount > summary.matchedCount) throw new Error(`${name}:INVALID_PUBLIC_SUMMARY`);
+    if (summary.matchedCount === 0 && (summary.changedRankCount !== 0
+      || summary.maxAbsScoreDelta !== 0 || summary.maxRankDelta !== 0)) {
+      throw new Error(`${name}:INVALID_PUBLIC_SUMMARY`);
+    }
+    if ((summary.changedRankCount === 0) !== (summary.maxRankDelta === 0)
+      || summary.maxRankDelta > Math.max(0, summary.matchedCount - 1)) {
+      throw new Error(`${name}:INVALID_PUBLIC_SUMMARY`);
+    }
+  }
+  if (attestation.aggregate.candidate.changedRankCount !== 0
+    || attestation.aggregate.candidate.maxAbsScoreDelta !== 0
+    || attestation.aggregate.candidate.maxRankDelta !== 0) throw new Error('candidate:INVALID_PUBLIC_SUMMARY');
+  if (attestation.aggregate.expansion.maxAbsScoreDelta > V15_PARITY_SCORE_TOLERANCE
+    || attestation.aggregate.ppr.maxAbsScoreDelta > V15_PARITY_SCORE_TOLERANCE) {
+    throw new Error('INVALID_PUBLIC_SCORE_DELTA');
+  }
+  if (attestation.aggregate.expansion.changedRankCount > 0
+    && !attestation.acceptedSemanticChanges.includes('semantic-expansion-tie-order')) {
+    throw new Error('expansion:UNACCEPTED_PUBLIC_RANK_CHANGE');
+  }
+  if (attestation.aggregate.ppr.changedRankCount > 0
+    && !attestation.acceptedSemanticChanges.includes('semantic-ppr-tie-order')) {
+    throw new Error('ppr:UNACCEPTED_PUBLIC_RANK_CHANGE');
+  }
+  if (attestation.aggregate.idAssociationChangedRowCount > 0
+    && !attestation.acceptedSemanticChanges.includes('semantic-id-keyed-context-association')) {
+    throw new Error('idAssociation:UNACCEPTED_PUBLIC_CHANGE');
+  }
+  const expectedMaxScore = Math.max(
+    attestation.aggregate.candidate.maxAbsScoreDelta,
+    attestation.aggregate.expansion.maxAbsScoreDelta,
+    attestation.aggregate.ppr.maxAbsScoreDelta,
+  );
+  const expectedMaxRank = Math.max(
+    attestation.aggregate.candidate.maxRankDelta,
+    attestation.aggregate.expansion.maxRankDelta,
+    attestation.aggregate.ppr.maxRankDelta,
+  );
+  if (attestation.aggregate.maximumAbsScoreDelta !== expectedMaxScore
+    || attestation.aggregate.maximumRankDelta !== expectedMaxRank) {
+    throw new Error('INVALID_PUBLIC_AGGREGATE');
   }
   return attestation;
 }
