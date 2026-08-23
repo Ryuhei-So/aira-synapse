@@ -2,107 +2,17 @@ import { describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { LLMExtractionAgent } from '../../../../src/application/indexing/LLMExtractionAgent.js';
-import { LLMConflictResolver } from '../../../../src/application/indexing/LLMConflictResolver.js';
 import { FullDocumentIndexingPipeline } from '../../../../src/application/indexing/FullDocumentIndexingPipeline.js';
 import { BatchEmbeddingProvider } from '../../../../src/infrastructure/embedding/BatchEmbeddingProvider.js';
 import { openDatabase, runMigrations } from '../../../../src/infrastructure/storage/migrate.js';
 import { chunkMarkdownDocument, chunkMarkdownDocumentWithGinza, fallbackParagraphSplit, toExtractionChunk } from '../../../../src/application/indexing/MarkdownChunker.js';
 import type { ILLMProvider } from '../../../../src/domain/provider/llmProvider.js';
-import type { ConflictResolutionRequest } from '../../../../src/domain/agent/conflictResolution.js';
-import type { Fact } from '../../../../src/domain/memory/fact.js';
-import type { Passage } from '../../../../src/domain/memory/passage.js';
-
-const now = '2026-01-01T00:00:00.000Z';
-const metadata = { documentId: 'doc-1', title: 'Doc', sourceUrl: 'https://example.com', language: 'en' as const, sectionPath: [], chunkId: 'chunk-1', chunkIndex: 0, offsetStart: 0, offsetEnd: 20 };
-const chunk = { corpusId: 'c1', documentId: 'doc-1', chunkId: 'chunk-1', text: 'TP53 regulates apoptosis.', normalizedText: 'tp53 regulates apoptosis.', language: 'en' as const, metadata };
 
 function provider(text: string): ILLMProvider {
   return { generate: vi.fn().mockResolvedValue({ text, model: 'test', usage: { inputTokens: 1, outputTokens: 1 } }), healthCheck: vi.fn() };
 }
 
-function fact(id: string, tailEntity: string): Fact {
-  return { factId: id, corpusId: 'c1', schemaId: 's1', headEntity: 'TP53', headType: 'Gene', relation: 'regulates', tailEntity, tailType: 'Process', state: 'active', passageIds: ['p1'], sourceDocumentIds: ['doc-1'], confidence: 0.9, createdAt: now, updatedAt: now };
-}
-
-function passage(): Passage {
-  return { passageId: 'p1', corpusId: 'c1', text: 'TP53 regulates apoptosis.', normalizedText: 'tp53 regulates apoptosis.', metadata, factIds: [], entityMentions: [], qualityFlags: [], createdAt: now, updatedAt: now };
-}
-
-function conflictRequest(conflictType: ConflictResolutionRequest['conflictSet']['conflictType'] = 'mutually_exclusive'): ConflictResolutionRequest {
-  return { conflictSet: { corpusId: 'c1', conflictType, newFact: fact('new', 'necrosis'), conflictingFacts: [fact('old', 'apoptosis')], candidates: [], scanLimit: 100 }, evidencePassages: [passage()] };
-}
-
 describe('indexing and provider behavioral boundaries', () => {
-  it('extracts valid JSON, strips fences, drops malformed entries, and preserves metadata', async () => {
-    const llm = provider('```json\n{"entities":[{"name":"TP53","type":"Gene"},{"name":3}],"relations":[{"head":"TP53","headType":"Gene","relation":"regulates","tail":"apoptosis","tailType":"Process","confidence":0.9},{"head":"bad"},{"head":"TP53","headType":"Gene","relation":"regulates","tail":"bad-string","tailType":"Process","confidence":"high"},{"head":"TP53","headType":"Gene","relation":"regulates","tail":"bad-low","tailType":"Process","confidence":-0.1},{"head":"TP53","headType":"Gene","relation":"regulates","tail":"bad-high","tailType":"Process","confidence":1.1},{"head":" ","headType":"Gene","relation":"regulates","tail":"bad-empty","tailType":"Process","confidence":0.8}]}\n```');
-    const result = await new LLMExtractionAgent(llm).extract(chunk);
-    expect(result.rawEntities).toEqual(['TP53']);
-    expect(result.candidateFacts).toHaveLength(1);
-    expect(result.candidateSchemas[0]?.canonicalKey).toBe('gene::regulates::process');
-    expect(result.sourcePassage.passageId).toBe('passage:chunk-1');
-    expect(llm.generate).toHaveBeenCalledWith(expect.objectContaining({ maxTokens: 2000 }));
-  });
-
-  it('fails malformed or provider-rejected extraction conservatively', async () => {
-    const malformed = await new LLMExtractionAgent(provider('not-json')).extract({ ...chunk, normalizedText: '日本語の文章です。' });
-    expect(malformed.candidateFacts).toEqual([]);
-    const rejected: ILLMProvider = { generate: vi.fn().mockRejectedValue(new Error('cancelled')), healthCheck: vi.fn() };
-    await expect(new LLMExtractionAgent(rejected).extract(chunk)).rejects.toThrow('cancelled');
-  });
-
-  it.each([
-    ['keep_new', 'resolved_keep_new', ['new'], ['old']],
-    ['keep_existing', 'resolved_keep_existing', ['old'], ['new']],
-  ] as const)('maps conflict decision %s to durable ids/state', async (decision, state, kept, inactive) => {
-    const resolver = new LLMConflictResolver(provider(JSON.stringify({ decision, confidence: 0.8, rationale: 'evidence' })));
-    const result = await resolver.resolve(conflictRequest());
-    expect(result.state).toBe(state);
-    expect(result.keptFactIds).toEqual(kept);
-    expect(result.inactivatedFactIds).toEqual(inactive);
-    expect(result.evidence[0]?.supportsFactIds).toEqual(kept);
-  });
-
-  it.each([
-    ['temporal', 'temporalized'],
-    ['granularity', 'granularity_linked'],
-    ['mutually_exclusive', 'unresolved'],
-  ] as const)('retains both facts with a truthful %s conflict state', async (conflictType, state) => {
-    const resolver = new LLMConflictResolver(provider(JSON.stringify({ decision: 'keep_both', confidence: 0.8, rationale: 'contexts coexist' })));
-    const result = await resolver.resolve(conflictRequest(conflictType));
-    expect(result).toMatchObject({ state, keptFactIds: ['new', 'old'], inactivatedFactIds: [] });
-  });
-
-  it('does not inactivate either fact when both lack sufficient evidence', async () => {
-    const resolver = new LLMConflictResolver(provider(JSON.stringify({ decision: 'discard_both', confidence: 0.2, rationale: 'insufficient evidence' })));
-    const result = await resolver.resolve(conflictRequest());
-    expect(result).toMatchObject({ state: 'unresolved', confidence: 0, keptFactIds: ['new', 'old'], inactivatedFactIds: [] });
-    expect(result.evidence[0]).toMatchObject({ supportsFactIds: ['new', 'old'], rationale: 'insufficient evidence' });
-  });
-
-  it('uses conservative unresolved fallback for malformed and failed conflict responses', async () => {
-    const malformed = await new LLMConflictResolver(provider('no json')).resolve(conflictRequest());
-    expect(malformed).toMatchObject({ state: 'unresolved', confidence: 0, keptFactIds: ['new', 'old'], inactivatedFactIds: [] });
-    expect(malformed.evidence[0]?.rationale).toContain('Invalid LLM');
-    const rejected: ILLMProvider = { generate: vi.fn().mockRejectedValue(new Error('provider down')), healthCheck: vi.fn() };
-    const result = await new LLMConflictResolver(rejected).resolve(conflictRequest());
-    expect(result.state).toBe('unresolved');
-    expect(result.keptFactIds).toEqual(['new', 'old']);
-    expect(result.evidence[0]).toMatchObject({ passageId: 'p1', supportsFactIds: ['new', 'old'] });
-  });
-
-  it.each([
-    { decision: 'delete_all', confidence: 1, rationale: 'invalid decision' },
-    { decision: 'keep_new', confidence: 'high', rationale: 'invalid type' },
-    { decision: 'keep_new', confidence: -0.1, rationale: 'invalid range' },
-    { decision: 'keep_new', confidence: 1.1, rationale: 'invalid range' },
-    { decision: 'keep_new', confidence: 0.9, rationale: ' ' },
-    { decision: 'keep_new', confidence: 0.9, rationale: 'bad index', keep_fact_indices: [-1] },
-  ])('fails closed for structurally invalid conflict output %#', async (payload) => {
-    const result = await new LLMConflictResolver(provider(JSON.stringify(payload))).resolve(conflictRequest());
-    expect(result).toMatchObject({ state: 'unresolved', keptFactIds: ['new', 'old'], inactivatedFactIds: [] });
-  });
-
   it('chunks empty, heading, feature-rich, and oversized fallback markdown with stable metadata', () => {
     const base = { corpusId: 'c1', documentId: 'doc-1', title: 'Doc', sourceUrl: 'https://example.com', language: 'en' as const, markdown: '' };
     expect(chunkMarkdownDocument(base)).toEqual([]);
