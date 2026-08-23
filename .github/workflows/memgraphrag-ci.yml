@@ -6,10 +6,14 @@ on:
     paths:
       - 'packages/memgraphrag/**'
       - 'spec/PLAN-MEMGRAPHRAG-001.md'
+      - '.github/workflows/aira-synapse-backend-compat.yml'
+      - '.github/workflows/memgraphrag-ci.yml'
   push:
-    branches: [main]
+    branches: [main, 'production-runtime/**']
     paths:
       - 'packages/memgraphrag/**'
+      - '.github/workflows/aira-synapse-backend-compat.yml'
+      - '.github/workflows/memgraphrag-ci.yml'
 
 jobs:
   lint:
@@ -25,8 +29,16 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    env:
+      AIRA_GRAPHDB_REPO_PATH: ${{ github.workspace }}/aira-graphdb
+      AIRA_GRAPHDB_EXPECTED_SHA: 164092aa47f39330c0c771495d9d42e4e935e41b
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: Ryuhei-So/aira-graphdb
+          ref: 164092aa47f39330c0c771495d9d42e4e935e41b
+          path: aira-graphdb
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -41,8 +53,16 @@ jobs:
   coverage:
     runs-on: ubuntu-latest
     needs: test
+    env:
+      AIRA_GRAPHDB_REPO_PATH: ${{ github.workspace }}/aira-graphdb
+      AIRA_GRAPHDB_EXPECTED_SHA: 164092aa47f39330c0c771495d9d42e4e935e41b
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: Ryuhei-So/aira-graphdb
+          ref: 164092aa47f39330c0c771495d9d42e4e935e41b
+          path: aira-graphdb
       - uses: actions/setup-node@v4
         with:
           node-version: '22'

@@ -13,7 +13,8 @@
   },
   "files": [
     "dist",
-    "config"
+    "config",
+    "scripts/graphdb-repository-authority.mjs"
   ],
   "scripts": {
     "build": "tsc -b tsconfig.build.json && cp -r src/infrastructure/storage/migrations dist/infrastructure/storage/",
