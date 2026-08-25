@@ -91,11 +91,20 @@ function detectFeatures(text: string, sectionPath: readonly string[]): MarkdownC
     hasCodeBlock: /```/.test(text),
     hasTable: /\|.+\|/.test(text),
     hasReferences:
-      // sectionPath can contain non-string entries for malformed headings
-      sectionPath.some((section) => typeof section === 'string'
-        && section.toLowerCase().includes('reference'))
+      sectionPath.some((section) => section.toLowerCase().includes('reference'))
       || /(^|\n)\[[0-9]+\]/.test(normalized),
   };
+}
+
+interface SectionFrame {
+  readonly level: number;
+  readonly title: string;
+}
+
+function enterSection(stack: SectionFrame[], level: number, title: string): readonly string[] {
+  while (stack.length > 0 && stack[stack.length - 1]!.level >= level) stack.pop();
+  stack.push({ level, title });
+  return stack.map((section) => section.title);
 }
 
 export function chunkMarkdownDocument(request: ChunkDocumentRequest): readonly MarkdownChunk[] {
@@ -137,7 +146,7 @@ export function chunkMarkdownDocument(request: ChunkDocumentRequest): readonly M
   }
 
   const rawChunks: MarkdownChunk[] = [];
-  const sectionStack: string[] = [];
+  const sectionStack: SectionFrame[] = [];
 
   for (let index = 0; index < matches.length; index += 1) {
     const match = matches[index];
@@ -150,8 +159,7 @@ export function chunkMarkdownDocument(request: ChunkDocumentRequest): readonly M
     const nextStart = matches[index + 1]?.index ?? request.markdown.length;
     const text = request.markdown.slice(start, nextStart).trim();
 
-    sectionStack.splice(headingLevel - 1);
-    sectionStack[headingLevel - 1] = heading;
+    const sectionPath = enterSection(sectionStack, headingLevel, heading);
 
     if (text.length === 0) {
       continue;
@@ -161,11 +169,11 @@ export function chunkMarkdownDocument(request: ChunkDocumentRequest): readonly M
       chunkId: `${request.documentId}:${rawChunks.length}`,
       text,
       normalizedText: normalizeChunkText(text),
-      sectionPath: [...sectionStack],
+      sectionPath,
       chunkIndex: rawChunks.length,
       offsetStart: start,
       offsetEnd: nextStart,
-      features: detectFeatures(text, sectionStack),
+      features: detectFeatures(text, sectionPath),
     });
   }
 
@@ -244,13 +252,14 @@ export async function chunkMarkdownDocumentWithGinza(
   }
 
   const result: MarkdownChunk[] = [];
-  const sectionStack: string[] = [];
+  const sectionStack: SectionFrame[] = [];
 
   for (const section of sections) {
     if (section.level > 0) {
-      sectionStack.splice(section.level - 1);
-      sectionStack[section.level - 1] = section.heading;
+      enterSection(sectionStack, section.level, section.heading);
     }
+
+    const sectionPath = sectionStack.map((entry) => entry.title);
 
     const sectionTokens = jaStrategy.estimateTokens(section.text);
 
@@ -260,11 +269,11 @@ export async function chunkMarkdownDocumentWithGinza(
         chunkId: `${request.documentId}:${result.length}`,
         text: section.text,
         normalizedText: normalizeChunkText(section.text),
-        sectionPath: [...sectionStack],
+        sectionPath,
         chunkIndex: result.length,
         offsetStart: section.start,
         offsetEnd: section.end,
-        features: detectFeatures(section.text, sectionStack),
+        features: detectFeatures(section.text, sectionPath),
       });
     } else {
       // Use GINZA sentence splitting for oversized sections
@@ -275,11 +284,11 @@ export async function chunkMarkdownDocumentWithGinza(
             chunkId: `${request.documentId}:${result.length}`,
             text: chunk.text,
             normalizedText: normalizeChunkText(chunk.text),
-            sectionPath: [...sectionStack],
+            sectionPath,
             chunkIndex: result.length,
             offsetStart: section.start,
             offsetEnd: section.end,
-            features: detectFeatures(chunk.text, sectionStack),
+            features: detectFeatures(chunk.text, sectionPath),
           });
         }
       } catch {
@@ -290,11 +299,11 @@ export async function chunkMarkdownDocumentWithGinza(
             chunkId: `${request.documentId}:${result.length}`,
             text: part,
             normalizedText: normalizeChunkText(part),
-            sectionPath: [...sectionStack],
+            sectionPath,
             chunkIndex: result.length,
             offsetStart: section.start,
             offsetEnd: section.end,
-            features: detectFeatures(part, sectionStack),
+            features: detectFeatures(part, sectionPath),
           });
         }
       }
@@ -313,9 +322,9 @@ export function toExtractionChunk(
     documentId: request.documentId,
     title: request.title,
     sourceUrl: request.sourceUrl,
-    doi: request.doi,
-    sourceDb: request.sourceDb,
-    sourceType: request.sourceType,
+    ...(request.doi !== undefined ? { doi: request.doi } : {}),
+    ...(request.sourceDb !== undefined ? { sourceDb: request.sourceDb } : {}),
+    ...(request.sourceType !== undefined ? { sourceType: request.sourceType } : {}),
     language: request.language,
     sectionPath: chunk.sectionPath,
     chunkId: chunk.chunkId,
