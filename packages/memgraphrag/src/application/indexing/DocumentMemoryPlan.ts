@@ -78,7 +78,9 @@ export function buildDocumentFacts(
       const canonicalHeadType = normalizeSchemaTerm(matchedSchema.headType);
       const canonicalRelation = normalizeSchemaTerm(matchedSchema.relation);
       const canonicalTailType = normalizeSchemaTerm(matchedSchema.tailType);
-      const factId = `fact:${documentId}:${candidate.headEntity}:${canonicalRelation}:${candidate.tailEntity}`
+      // Fact meaning includes its canonical schema: identical entity/relation text
+      // can legitimately occur under different typed schemas in one document.
+      const factId = `fact:${documentId}:${matchedSchema.schemaId}:${candidate.headEntity}:${canonicalRelation}:${candidate.tailEntity}`
         .replace(/\s+/g, '_');
       const incoming: Fact = {
         factId,
