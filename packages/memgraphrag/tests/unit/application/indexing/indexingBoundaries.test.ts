@@ -7,6 +7,7 @@ import { DocumentMutationError } from '../../../../src/application/indexing/Asyn
 import { BatchEmbeddingProvider } from '../../../../src/infrastructure/embedding/BatchEmbeddingProvider.js';
 import { openDatabase, runMigrations } from '../../../../src/infrastructure/storage/migrate.js';
 import { chunkMarkdownDocument, chunkMarkdownDocumentWithGinza, fallbackParagraphSplit, toExtractionChunk } from '../../../../src/application/indexing/MarkdownChunker.js';
+import { validateDomainObject } from '../../../../src/domain/memory/domainContract.js';
 import type { ILLMProvider } from '../../../../src/domain/provider/llmProvider.js';
 import { computeCanonicalKey, normalizeSchemaTerm } from '../../../../src/domain/memory/schema.js';
 
@@ -101,6 +102,33 @@ describe('indexing and provider behavioral boundaries', () => {
     expect(extraction.metadata.chunkId).toBe(chunks[0]!.chunkId);
   });
 
+  it('keeps jumped heading levels dense and omits absent optional metadata', () => {
+    const request = {
+      corpusId: 'c1', documentId: 'doc-jump', title: 'Title', sourceUrl: 'local.md',
+      markdown: '## Methods\nAlpha\n#### Details\nBeta\n## Results\nGamma', language: 'en' as const,
+    };
+    const chunks = chunkMarkdownDocument(request);
+    expect(chunks.map((chunk) => chunk.sectionPath)).toEqual([
+      ['Methods'],
+      ['Methods', 'Details'],
+      ['Results'],
+    ]);
+    for (const chunk of chunks) {
+      const extraction = toExtractionChunk('c1', chunk, request);
+      expect(Object.hasOwn(extraction.metadata, 'doi')).toBe(false);
+      expect(Object.hasOwn(extraction.metadata, 'sourceDb')).toBe(false);
+      expect(Object.hasOwn(extraction.metadata, 'sourceType')).toBe(false);
+      const passage = {
+        passageId: `passage:${chunk.chunkId}`, corpusId: 'c1', text: chunk.text,
+        normalizedText: chunk.normalizedText, metadata: extraction.metadata,
+        factIds: [], entityMentions: [], qualityFlags: [],
+        createdAt: '2026-08-25T00:00:00.000Z', updatedAt: '2026-08-25T00:00:00.000Z',
+      };
+      expect(validateDomainObject('passage', passage)).toEqual({ valid: true, errors: [] });
+      expect(validateDomainObject('passage', JSON.parse(JSON.stringify(passage)))).toEqual({ valid: true, errors: [] });
+    }
+  });
+
   it('keeps a short no-heading English document as one exact normalized chunk', () => {
     const request = {
       corpusId: 'c1',
@@ -177,6 +205,22 @@ describe('indexing and provider behavioral boundaries', () => {
         hasReferences: false,
       },
     }]);
+    expect(sidecar.chunkSentences).not.toHaveBeenCalled();
+  });
+
+  it('keeps jumped Japanese heading levels dense on the Ginza path', async () => {
+    const sidecar = { chunkSentences: vi.fn(), extractEntitiesJa: vi.fn() };
+    const request = {
+      corpusId: 'c1', documentId: 'doc-ja-jump', title: '日本語',
+      sourceUrl: 'local.md', language: 'ja' as const,
+      markdown: '## 方法\n短い本文。\n#### 詳細\n別の短い本文。\n## 結果\n結果本文。',
+    };
+    const chunks = await chunkMarkdownDocumentWithGinza(request, sidecar);
+    expect(chunks.map((chunk) => chunk.sectionPath)).toEqual([
+      ['方法'],
+      ['方法', '詳細'],
+      ['結果'],
+    ]);
     expect(sidecar.chunkSentences).not.toHaveBeenCalled();
   });
 
