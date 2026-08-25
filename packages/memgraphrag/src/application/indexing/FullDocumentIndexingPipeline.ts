@@ -3,27 +3,37 @@
  * Replaces MinimalDocumentIndexingPipeline for real indexing.
  */
 import type Database from 'better-sqlite3';
-import type { DocumentIndexingPipeline, ProcessDocumentResult } from './AsyncJobRunner.js';
+import {
+  DocumentMutationError,
+  type DocumentIndexingPipeline,
+  type ProcessDocumentResult,
+} from './AsyncJobRunner.js';
 import type { IndexDocumentInput } from './StageIExtractor.js';
 import { StageIExtractor } from './StageIExtractor.js';
 import { StageIICanonicalizer } from './StageIICanonicalizer.js';
-import { projectGraph, upsertVectors } from './StageIVGraphProjector.js';
+import {
+  buildVectorRecords,
+  persistGraphProjection,
+  persistVectorRecords,
+  planGraphProjection,
+} from './StageIVGraphProjector.js';
 import { SymbolicCanonicalizer } from './SymbolicCanonicalizer.js';
 import { SymbolicConflictDetector } from './SymbolicConflictDetector.js';
 import { LLMConflictResolver } from './LLMConflictResolver.js';
 import { detectConflicts, resolveConflicts, recordConflictAudit } from './StageIIIConflictPipeline.js';
 import type { ILLMProvider, IEmbeddingProvider, INLPExtractor } from '../../domain/provider/index.js';
-import type { IGraphStore, IVectorIndex, IMemoryStore } from '../../domain/storage/index.js';
+import type { IGraphStore, IIndexingMemory, IVectorIndex } from '../../domain/storage/index.js';
 import type { Fact } from '../../domain/memory/fact.js';
 import type { ITermDictionary } from '../../domain/dictionary/termDictionary.js';
 import { LLMExtractionAgent } from './LLMExtractionAgent.js';
 import { LexiconBuilder } from './LexiconBuilder.js';
+import { buildDocumentFacts, buildDocumentMemoryDelta } from './DocumentMemoryPlan.js';
 
 export interface FullPipelineOptions {
   readonly db: Database.Database;
   readonly graphStore: IGraphStore;
   readonly vectorIndex: IVectorIndex;
-  readonly memoryStore: IMemoryStore;
+  readonly indexingMemory: IIndexingMemory;
   readonly llmProvider: ILLMProvider;
   readonly embeddingProvider: IEmbeddingProvider;
   readonly nlpExtractor: INLPExtractor;
@@ -73,55 +83,33 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
     }
 
     // Stage II: Canonicalize schemas and merge into memory
-    const stageII = new StageIICanonicalizer(corpusId, this.options.memoryStore);
-    const schemas = await stageII.canonicalizeSchemas(records, this.canonicalizer);
-    await stageII.incrementSchemaFrequency(schemas);
-    const stableIds = await stageII.promoteStableSchemas();
-    await stageII.cascadeActivateFacts(stableIds);
+    const stageII = new StageIICanonicalizer(corpusId, this.options.indexingMemory);
+    const candidateSchemas = await stageII.canonicalizeSchemas(records, this.canonicalizer);
+    const { finalSchemas: schemas, newlyStableSchemaIds } = await stageII.prepareSchemas(candidateSchemas);
 
-    // Build facts from candidates (use normalized types for matching)
-    const allFacts: Fact[] = [];
-    for (const record of records) {
-      for (const candidate of record.candidateFacts) {
-        // LLM extractors occasionally omit type/relation fields; skip such
-        // malformed candidates instead of crashing the whole document job.
-        if (!candidate.headType || !candidate.relation || !candidate.tailType) continue;
-        const normHead = candidate.headType.toLowerCase().trim();
-        const normRel = candidate.relation.toLowerCase().trim();
-        const normTail = candidate.tailType.toLowerCase().trim();
-        const matchedSchema = schemas.find(
-          (s) => s.headType === normHead && s.relation === normRel && s.tailType === normTail,
-        );
-        if (!matchedSchema) continue;
-
-        const factId = `fact:${document.documentId}:${candidate.headEntity}:${candidate.relation}:${candidate.tailEntity}`.replace(/\s+/g, '_');
-        allFacts.push({
-          factId,
-          corpusId,
-          schemaId: matchedSchema.schemaId,
-          headEntity: candidate.headEntity,
-          headType: candidate.headType,
-          relation: candidate.relation,
-          tailEntity: candidate.tailEntity,
-          tailType: candidate.tailType,
-          state: matchedSchema.state === 'stable' ? 'active' : 'inactive',
-          passageIds: [record.sourcePassage.passageId],
-          sourceDocumentIds: [document.documentId],
-          confidence: candidate.confidence,
-          createdAt: now,
-          updatedAt: now,
-        });
-      }
-    }
+    // Schema candidates retain occurrence pressure, while repeated fact
+    // candidates fold to one identity with all supporting passage provenance.
+    const allFacts: Fact[] = [...buildDocumentFacts(
+      corpusId,
+      document.documentId,
+      records,
+      schemas,
+      now,
+    )];
 
     // Stage III: Conflict detection and resolution
     let conflictCount = 0;
     if (this.options.enableConflictResolution !== false) {
       const passages = records.map((r) => r.sourcePassage);
+      const activeFacts = allFacts.some((fact) => fact.state === 'active')
+        ? await this.options.indexingMemory.getActiveFacts({ corpusId, limit: 100 })
+        : [];
       const detector = new SymbolicConflictDetector({
         loadFacts: async (cid) => {
-          const snap = await this.options.memoryStore.load(cid);
-          return snap.facts;
+          if (cid !== corpusId) {
+            throw new Error('conflict detector requested the wrong corpus');
+          }
+          return activeFacts;
         },
       });
       const conflictSets = await detectConflicts(detector, allFacts);
@@ -147,61 +135,72 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
       }
     }
 
-    // Save facts and passages to memory (incremental — avoid full snapshot reload)
     const passages = records.map((r) => r.sourcePassage);
-    const snapshot = await this.options.memoryStore.load(corpusId);
-    // Only save schemas (which need full state for canonicalization) + new data
-    // Using upsert semantics: existing passages/facts won't be deleted
-    await this.options.memoryStore.save({
-      corpusId,
-      schemas: snapshot.schemas,
-      facts: allFacts,
-      passages,
-      exportedAt: new Date().toISOString(),
-      schemaVersion: snapshot.schemaVersion ?? 1,
-    });
+    const delta = buildDocumentMemoryDelta(corpusId, schemas, allFacts, passages, now);
+    const activation = newlyStableSchemaIds.length > 0
+      ? { corpusId, schemaIds: newlyStableSchemaIds, updatedAt: now }
+      : undefined;
 
-    const tMemSave = Date.now();
-    // Stage IV: Project graph and upsert vectors
-    const { nodes, edges } = await projectGraph(
-      this.options.graphStore, allFacts, schemas, passages,
+    // Complete deterministic validation and external provider work before the
+    // first mutation. Admission failures after this boundary are uncertain and
+    // must poison the whole owner transaction.
+    this.options.indexingMemory.preflightMutation(
+      activation ? { delta, activation } : { delta },
+    );
+    const graphPlan = planGraphProjection(delta.facts, delta.schemas, delta.passages);
+    const vectorRecords = await buildVectorRecords(
+      this.options.embeddingProvider,
+      graphPlan.nodes,
     );
 
-    await upsertVectors(this.options.vectorIndex, this.options.embeddingProvider, nodes);
+    try {
+      await this.options.indexingMemory.upsertDelta(delta);
+      if (activation) {
+        await this.options.indexingMemory.activateFactsBySchemaIds(activation);
+      }
 
-    // Stage V: Lexicon construction (dictionary + thesaurus from extracted facts)
-    if (this.options.enableDictionaryIndexing !== false && this.options.dictionary) {
-      // Use corpus-scoped dictionary if factory is available, otherwise fall back to shared
-      const scopedDictionary = this.options.dictionaryFactory
-        ? this.options.dictionaryFactory(corpusId)
-        : this.options.dictionary;
-      const lexiconBuilder = new LexiconBuilder(
-        scopedDictionary,
-        this.options.db,
-        corpusId,
-      );
-      const lexResult = await lexiconBuilder.buildIncremental(
-        document.documentId,
-        allFacts,
-        passages,
-      );
+      const tMemSave = Date.now();
+      // Stage IV persistence is write-only; graph derivation and embeddings
+      // were completed before the mutation boundary above.
+      await persistGraphProjection(this.options.graphStore, graphPlan);
+      await persistVectorRecords(this.options.vectorIndex, vectorRecords);
+
+      // Stage V: Lexicon construction (dictionary + thesaurus from extracted facts)
+      if (this.options.enableDictionaryIndexing !== false && this.options.dictionary) {
+        // Use corpus-scoped dictionary if factory is available, otherwise fall back to shared
+        const scopedDictionary = this.options.dictionaryFactory
+          ? this.options.dictionaryFactory(corpusId)
+          : this.options.dictionary;
+        const lexiconBuilder = new LexiconBuilder(
+          scopedDictionary,
+          this.options.db,
+          corpusId,
+        );
+        const lexResult = await lexiconBuilder.buildIncremental(
+          document.documentId,
+          delta.facts,
+          delta.passages,
+        );
+        console.log(
+          `  [${document.title}] Stage V: dict=${lexResult.dictionaryEntries} thesaurus=${lexResult.thesaurusRelations} ambiguous=${lexResult.ambiguousExcluded}`,
+        );
+        console.log(
+          `  [${document.title}] timings_ms: stageI(extract+embed)=${tStageI - tStart} memSave=${tMemSave - tStageI} graphProject+rest=${Date.now() - tMemSave}`,
+        );
+      }
+
       console.log(
-        `  [${document.title}] Stage V: dict=${lexResult.dictionaryEntries} thesaurus=${lexResult.thesaurusRelations} ambiguous=${lexResult.ambiguousExcluded}`,
+        `  [${document.title}] chunks=${records.length} schemas=${schemas.length} facts=${allFacts.length} nodes=${graphPlan.nodes.length} edges=${graphPlan.edges.length} conflicts=${conflictCount}`,
       );
-      console.log(
-        `  [${document.title}] timings_ms: stageI(extract+embed)=${tStageI - tStart} memSave=${tMemSave - tStageI} graphProject+rest=${Date.now() - tMemSave}`,
-      );
+
+      return {
+        processedDocumentId: document.documentId,
+        addedNodes: graphPlan.nodes.length,
+        addedEdges: graphPlan.edges.length,
+        conflicts: conflictCount,
+      };
+    } catch (error) {
+      throw new DocumentMutationError(error);
     }
-
-    console.log(
-      `  [${document.title}] chunks=${records.length} schemas=${schemas.length} facts=${allFacts.length} nodes=${nodes.length} edges=${edges.length} conflicts=${conflictCount}`,
-    );
-
-    return {
-      processedDocumentId: document.documentId,
-      addedNodes: nodes.length,
-      addedEdges: edges.length,
-      conflicts: conflictCount,
-    };
   }
 }

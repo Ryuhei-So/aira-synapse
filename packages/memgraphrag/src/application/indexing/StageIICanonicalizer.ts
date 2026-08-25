@@ -1,8 +1,7 @@
 import type { CompositeExtractionRecord, ISchemaCanonicalizer } from '../../domain/agent/index.js';
-import type { Fact } from '../../domain/memory/fact.js';
 import { computeCanonicalKey, type Schema } from '../../domain/memory/schema.js';
 import type { MemorySnapshot } from '../../domain/memory/globalMemory.js';
-import type { IMemoryStore } from '../../domain/storage/index.js';
+import type { IIndexingMemory } from '../../domain/storage/index.js';
 
 function uniqueStrings(values: readonly string[]): readonly string[] {
   return [...new Set(values)];
@@ -29,7 +28,7 @@ function nowIso(): string {
 export class StageIICanonicalizer {
   public constructor(
     private readonly corpusId: string,
-    private readonly store: IMemoryStore,
+    private readonly indexingMemory: IIndexingMemory,
   ) {}
 
   public async canonicalizeSchemas(
@@ -71,14 +70,24 @@ export class StageIICanonicalizer {
     return schemas;
   }
 
-  public async incrementSchemaFrequency(schemas: readonly Schema[]): Promise<void> {
-    const snapshot = await this.store.load(this.corpusId);
-    const existing = new Map(snapshot.schemas.map((schema) => [schema.schemaId, schema]));
+  public async prepareSchemas(
+    schemas: readonly Schema[],
+    threshold = 2,
+  ): Promise<{
+    readonly finalSchemas: readonly Schema[];
+    readonly newlyStableSchemaIds: readonly string[];
+  }> {
+    const schemaIds = uniqueStrings(schemas.map((schema) => schema.schemaId));
+    const stored = await this.indexingMemory.getSchemasByIds({
+      corpusId: this.corpusId,
+      schemaIds,
+    });
+    const merged = new Map(stored.map((schema) => [schema.schemaId, schema]));
 
     for (const schema of schemas) {
-      const current = existing.get(schema.schemaId);
+      const current = merged.get(schema.schemaId);
       if (current) {
-        existing.set(schema.schemaId, {
+        merged.set(schema.schemaId, {
           ...current,
           frequency: current.frequency + schema.frequency,
           aliases: uniqueAliases(
@@ -92,23 +101,18 @@ export class StageIICanonicalizer {
           updatedAt: nowIso(),
         });
       } else {
-        existing.set(schema.schemaId, schema);
+        merged.set(schema.schemaId, schema);
       }
     }
 
-    await this.store.save({
-      ...snapshot,
-      schemas: [...existing.values()],
-    });
-  }
-
-  public async promoteStableSchemas(threshold = 2): Promise<readonly string[]> {
-    const snapshot = await this.store.load(this.corpusId);
-    const stableSchemaIds: string[] = [];
-
-    const schemas = snapshot.schemas.map((schema) => {
+    const newlyStableSchemaIds: string[] = [];
+    const finalSchemas = schemaIds.map((schemaId) => {
+      const schema = merged.get(schemaId);
+      if (!schema) {
+        throw new Error(`prepared schema ${schemaId} is missing`);
+      }
       if (schema.frequency >= threshold && schema.state !== 'stable') {
-        stableSchemaIds.push(schema.schemaId);
+        newlyStableSchemaIds.push(schema.schemaId);
         return {
           ...schema,
           state: 'stable' as const,
@@ -118,33 +122,7 @@ export class StageIICanonicalizer {
       }
       return schema;
     });
-
-    await this.store.save({ ...snapshot, schemas });
-    return stableSchemaIds;
-  }
-
-  public async cascadeActivateFacts(stableSchemaIds: readonly string[]): Promise<number> {
-    if (stableSchemaIds.length === 0) {
-      return 0;
-    }
-
-    const stableSet = new Set(stableSchemaIds);
-    const snapshot = await this.store.load(this.corpusId);
-    let activated = 0;
-    const facts: Fact[] = snapshot.facts.map((fact) => {
-      if (fact.state === 'inactive' && stableSet.has(fact.schemaId)) {
-        activated += 1;
-        return {
-          ...fact,
-          state: 'active',
-          updatedAt: nowIso(),
-        };
-      }
-      return fact;
-    });
-
-    await this.store.save({ ...snapshot, facts });
-    return activated;
+    return { finalSchemas, newlyStableSchemaIds };
   }
 }
 

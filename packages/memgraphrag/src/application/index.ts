@@ -88,8 +88,10 @@ export {
 } from './indexing/LexiconBuilder.js';
 export {
   AsyncJobRunner,
+  DocumentMutationError,
   type ProcessDocumentResult,
   type DocumentIndexingPipeline,
+  type StorageWriteBatch,
 } from './indexing/AsyncJobRunner.js';
 export { LLMExtractionAgent } from './indexing/LLMExtractionAgent.js';
 export { FullDocumentIndexingPipeline, type FullPipelineOptions } from './indexing/FullDocumentIndexingPipeline.js';

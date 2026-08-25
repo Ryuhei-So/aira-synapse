@@ -4,7 +4,9 @@
  */
 
 import type { IGraphStore, IVectorIndex, IMemoryStore } from '../../../domain/storage/graphStore.js';
+import type { IIndexingMemory } from '../../../domain/storage/indexingMemory.js';
 import type { IGraphProjection, ILexicalRetriever } from '../../../domain/retrieval/ppr.js';
+import type { AiraGraphDbTrafficObserver } from '../aira-graphdb/NativeClient.js';
 
 export type StorageBackend = 'sqlite' | 'ladybug' | 'neo4j' | 'aira-graphdb';
 
@@ -12,6 +14,7 @@ export interface StorageAdapters {
   readonly graphStore: IGraphStore;
   readonly vectorIndex: IVectorIndex;
   readonly memoryStore: IMemoryStore;
+  readonly indexingMemory: IIndexingMemory;
   readonly graphProjection: IGraphProjection;
   readonly lexicalRetriever: ILexicalRetriever;
   readonly close: () => Promise<void>;
@@ -19,6 +22,7 @@ export interface StorageAdapters {
   readonly batch?: {
     readonly begin: () => Promise<void>;
     readonly commit: () => Promise<void>;
+    readonly abandon?: () => Promise<void>;
   };
 }
 
@@ -42,6 +46,7 @@ export interface Neo4jStorageOptions {
 
 export interface AiraGraphDbStorageOptions {
   readonly dbPath: string;
+  readonly onTraffic?: AiraGraphDbTrafficObserver;
 }
 
 export interface StorageOptions {
@@ -64,6 +69,7 @@ export async function createLadybugAdapters(
   const { LadybugMemoryStore } = await import('./LadybugMemoryStore.js');
   const { LadybugGraphProjection } = await import('./LadybugGraphProjection.js');
   const { LadybugLexicalRetriever } = await import('./LadybugLexicalRetriever.js');
+  const { SnapshotBackedIndexingMemory } = await import('../SnapshotBackedIndexingMemory.js');
 
   const pool = new LadybugConnectionPool(opts.dbPath, opts.vectorDimensions);
   await pool.init();
@@ -71,6 +77,7 @@ export async function createLadybugAdapters(
   const graphStore = new LadybugGraphStore(pool);
   const vectorIndex = new LadybugVectorIndex(pool);
   const memoryStore = new LadybugMemoryStore(pool);
+  const indexingMemory = new SnapshotBackedIndexingMemory(memoryStore);
   const graphProjection = new LadybugGraphProjection(graphStore);
   const lexicalRetriever = new LadybugLexicalRetriever(pool);
 
@@ -78,6 +85,7 @@ export async function createLadybugAdapters(
     graphStore,
     vectorIndex,
     memoryStore,
+    indexingMemory,
     graphProjection,
     lexicalRetriever,
     close: () => pool.close(),
@@ -96,6 +104,7 @@ export async function createNeo4jAdapters(
   const { Neo4jMemoryStore } = await import('../neo4j/Neo4jMemoryStore.js');
   const { Neo4jGraphProjection } = await import('../neo4j/Neo4jGraphProjection.js');
   const { Neo4jLexicalRetriever } = await import('../neo4j/Neo4jLexicalRetriever.js');
+  const { SnapshotBackedIndexingMemory } = await import('../SnapshotBackedIndexingMemory.js');
 
   const pool = new Neo4jConnectionPool(opts);
   await pool.init();
@@ -103,6 +112,7 @@ export async function createNeo4jAdapters(
   const graphStore = new Neo4jGraphStore(pool);
   const vectorIndex = new Neo4jVectorIndex(pool);
   const memoryStore = new Neo4jMemoryStore(pool);
+  const indexingMemory = new SnapshotBackedIndexingMemory(memoryStore);
   const graphProjection = new Neo4jGraphProjection(graphStore);
   const lexicalRetriever = new Neo4jLexicalRetriever(pool);
 
@@ -110,6 +120,7 @@ export async function createNeo4jAdapters(
     graphStore,
     vectorIndex,
     memoryStore,
+    indexingMemory,
     graphProjection,
     lexicalRetriever,
     close: () => pool.close(),
@@ -172,6 +183,7 @@ async function createSQLiteAdapters(
   const { Bm25LexicalRetriever } = await import(
     '../../retrieval/Bm25LexicalRetriever.js'
   );
+  const { SnapshotBackedIndexingMemory } = await import('../SnapshotBackedIndexingMemory.js');
   const { openDatabase, runMigrations } = await import('../migrate.js');
 
   const db = openDatabase(sqlite.sqlitePath);
@@ -180,6 +192,7 @@ async function createSQLiteAdapters(
   const graphStore = new SQLiteGraphStore(db);
   const vectorIndex = new FileVectorIndex(sqlite.vectorIndexDir);
   const memoryStore = new SQLiteMemoryStore(db);
+  const indexingMemory = new SnapshotBackedIndexingMemory(memoryStore);
   const graphProjection = new SQLiteGraphProjection(graphStore);
   const lexicalRetriever = new Bm25LexicalRetriever();
 
@@ -187,6 +200,7 @@ async function createSQLiteAdapters(
     graphStore,
     vectorIndex,
     memoryStore,
+    indexingMemory,
     graphProjection,
     lexicalRetriever,
     close: async () => { db.close(); },
@@ -197,6 +211,7 @@ export async function createAiraGraphDbAdapters(
   opts: AiraGraphDbStorageOptions,
 ): Promise<StorageAdapters> {
   const { AiraGraphDbNativeClient } = await import('../aira-graphdb/NativeClient.js');
+  const { AiraGraphDbIndexingMemory } = await import('../aira-graphdb/AiraGraphDbIndexingMemory.js');
   const {
     AiraGraphDbGraphStore,
     AiraGraphDbVectorIndex,
@@ -205,10 +220,19 @@ export async function createAiraGraphDbAdapters(
     AiraGraphDbLexicalRetriever,
   } = await import('../aira-graphdb/AiraGraphDbAdapters.js');
 
-  const client = new AiraGraphDbNativeClient(opts.dbPath);
+  const client = new AiraGraphDbNativeClient(opts.dbPath, opts.onTraffic);
+  let indexingMemory: IIndexingMemory;
+  try {
+    indexingMemory = await AiraGraphDbIndexingMemory.create(client);
+  } catch (error) {
+    await client.close();
+    throw error;
+  }
   const batch = {
     begin: async () => { await client.request('batch_begin', {}); },
     commit: async () => { await client.request('batch_commit', {}); },
+    // Disconnect only. Literature Hub remains the sole recovery/commit owner.
+    abandon: async () => { await client.close(); },
   };
   const graphStore = new AiraGraphDbGraphStore(client);
   const vectorIndex = new AiraGraphDbVectorIndex(client);
@@ -221,6 +245,7 @@ export async function createAiraGraphDbAdapters(
     graphStore,
     vectorIndex,
     memoryStore,
+    indexingMemory,
     graphProjection,
     lexicalRetriever,
     close: async () => {
