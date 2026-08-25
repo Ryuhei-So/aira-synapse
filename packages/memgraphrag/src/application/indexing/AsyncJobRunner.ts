@@ -21,7 +21,7 @@ export interface StorageWriteBatch {
   readonly begin: () => Promise<void>;
   readonly commit: () => Promise<void>;
   /** Invalidate the transport; only the external owner may recover the batch. */
-  readonly abandon?: () => Promise<void>;
+  readonly abandon: () => Promise<void>;
 }
 
 export class DocumentMutationError extends Error {
@@ -97,7 +97,7 @@ export class AsyncJobRunner {
     const abandonUnresolvedBatch = async (): Promise<void> => {
       if (!this.storageBatch || batchState === 'none') return;
       batchState = 'none';
-      await this.storageBatch.abandon?.();
+      await this.storageBatch.abandon();
     };
     try {
       const checkpoint = await this.memoryStore.loadCheckpoint(jobId);

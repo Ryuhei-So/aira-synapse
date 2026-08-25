@@ -51,14 +51,19 @@ describe('TASK-MG-048: symbolic fallbacks', () => {
   it('detects mutually exclusive conflicts by exact symbolic match', async () => {
     const detector = new SymbolicConflictDetector({
       loadFacts: async () => [
-        createFact({ factId: 'fact-2', tailEntity: 'Paper B' }),
+        createFact({
+          factId: 'fact-2',
+          headEntity: '  Alice   Smith  ',
+          relation: 'authors   papers',
+          tailEntity: 'Paper B',
+        }),
         createFact({ factId: 'fact-3', relation: 'cites', tailEntity: 'Paper C' }),
       ],
     });
 
     const result = await detector.detect({
       corpusId: 'corpus-1',
-      newFact: createFact(),
+      newFact: createFact({ headEntity: 'Alice Smith', relation: 'authors papers' }),
       activeFactLimit: 10,
       similarityThreshold: 0.8,
     });

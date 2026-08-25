@@ -18,6 +18,9 @@ function fakeNative(mode:
   | 'success-extra'
   | 'success-error'
   | 'error-result'
+  | 'error-basic'
+  | 'error-failure-class'
+  | 'error-invalid-failure-class'
   | 'error-extra'
 ): string {
   const directory = mkdtempSync(join(tmpdir(), 'aira-native-frame-'));
@@ -43,6 +46,9 @@ process.stdin.on('data', (chunk) => {
     if (mode === 'success-extra') process.stdout.write(JSON.stringify({ id: request.id, ok: true, result: null, extra: true }) + '\\n');
     if (mode === 'success-error') process.stdout.write(JSON.stringify({ id: request.id, ok: true, result: null, error: { code: 'X', message: 'contradiction' } }) + '\\n');
     if (mode === 'error-result') process.stdout.write(JSON.stringify({ id: request.id, ok: false, error: { code: 'X', message: 'failed' }, result: null }) + '\\n');
+    if (mode === 'error-basic') process.stdout.write(JSON.stringify({ id: request.id, ok: false, error: { code: 'X', message: 'failed' } }) + '\\n');
+    if (mode === 'error-failure-class') process.stdout.write(JSON.stringify({ id: request.id, ok: false, error: { code: 'X', message: 'failed', failureClass: 'CLIENT_INPUT' } }) + '\\n');
+    if (mode === 'error-invalid-failure-class') process.stdout.write(JSON.stringify({ id: request.id, ok: false, error: { code: 'X', message: 'failed', failureClass: 1 } }) + '\\n');
     if (mode === 'error-extra') process.stdout.write(JSON.stringify({ id: request.id, ok: false, error: { code: 'X', message: 'failed', extra: true } }) + '\\n');
   }
 });
@@ -141,6 +147,7 @@ describe.sequential('AiraGraphDbNativeClient physical frame bounds', () => {
     ['success-extra', 'envelope variant is invalid', 1024],
     ['success-error', 'envelope variant is invalid', 1024],
     ['error-result', 'envelope variant is invalid', 1024],
+    ['error-invalid-failure-class', 'error response is malformed', 1024],
     ['error-extra', 'error response is malformed', 1024],
   ] as const)('poisons the transport for a %s response', async (mode, message, maxResponseBytes) => {
     const events: unknown[] = [];
@@ -150,6 +157,28 @@ describe.sequential('AiraGraphDbNativeClient physical frame bounds', () => {
     await expect(client.request('ping', {}, { maxRequestBytes: 1024, maxResponseBytes }))
       .rejects.toThrow();
     expect(events).toEqual([expect.objectContaining({ method: 'ping', outcome: 'transport-error' })]);
+    await client.close();
+  });
+
+  it.each([
+    ['error-basic', { code: 'X' }],
+    ['error-failure-class', { code: 'X', failureClass: 'CLIENT_INPUT' }],
+  ] as const)('accepts exact %s errors without poisoning the client', async (mode, expected) => {
+    const events: unknown[] = [];
+    const client = new AiraGraphDbNativeClient(
+      fakeNative(mode),
+      (event) => events.push(event),
+    );
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await expect(client.request('ping', {}, {
+        maxRequestBytes: 1024,
+        maxResponseBytes: 1024,
+      })).rejects.toMatchObject(expected);
+    }
+    expect(events).toEqual([
+      expect.objectContaining({ outcome: 'native-error' }),
+      expect.objectContaining({ outcome: 'native-error' }),
+    ]);
     await client.close();
   });
 

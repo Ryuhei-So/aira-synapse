@@ -8,19 +8,43 @@ import { BatchEmbeddingProvider } from '../../../../src/infrastructure/embedding
 import { openDatabase, runMigrations } from '../../../../src/infrastructure/storage/migrate.js';
 import { chunkMarkdownDocument, chunkMarkdownDocumentWithGinza, fallbackParagraphSplit, toExtractionChunk } from '../../../../src/application/indexing/MarkdownChunker.js';
 import type { ILLMProvider } from '../../../../src/domain/provider/llmProvider.js';
+import { computeCanonicalKey, normalizeSchemaTerm } from '../../../../src/domain/memory/schema.js';
 
-function provider(text: string): ILLMProvider {
-  return { generate: vi.fn().mockResolvedValue({ text, model: 'test', usage: { inputTokens: 1, outputTokens: 1 } }), healthCheck: vi.fn() };
+function extractionResponse(relation = 'authors'): string {
+  return JSON.stringify({
+    entities: [{ name: 'Alice', type: 'Person' }, { name: 'Paper A', type: 'Paper' }],
+    relations: [{
+      head: 'Alice', headType: 'Person', relation, tail: 'Paper A',
+      tailType: 'Paper', confidence: 0.9,
+    }],
+  });
 }
 
-function mutationBoundaryHarness() {
+function provider(text: string | readonly string[]): ILLMProvider {
+  const responses = typeof text === 'string' ? [text] : [...text];
+  let index = 0;
+  return {
+    generate: vi.fn().mockImplementation(async () => {
+      const response = responses[Math.min(index, responses.length - 1)] ?? '';
+      index += 1;
+      return { text: response, model: 'test', usage: { inputTokens: 1, outputTokens: 1 } };
+    }),
+    healthCheck: vi.fn(),
+  };
+}
+
+function mutationBoundaryHarness(
+  llmProvider = provider(extractionResponse()),
+  storedRelation = 'authors',
+) {
   const db = openDatabase(':memory:');
   runMigrations(db);
   db.prepare('INSERT INTO corpora (corpus_id, name, description) VALUES (?, ?, ?)')
     .run('c1', 'Corpus 1', 'mutation boundary');
+  const storedCanonicalKey = computeCanonicalKey('person', storedRelation, 'paper');
   const storedSchema = {
-    schemaId: 'schema:person::authors::paper', corpusId: 'c1', headType: 'person',
-    relation: 'authors', tailType: 'paper', canonicalKey: 'person::authors::paper',
+    schemaId: `schema:${storedCanonicalKey}`, corpusId: 'c1', headType: 'person',
+    relation: normalizeSchemaTerm(storedRelation), tailType: 'paper', canonicalKey: storedCanonicalKey,
     aliases: [], frequency: 1, state: 'pending' as const, stabilizationThreshold: 2,
     factIds: [], sourceDocumentIds: ['old-doc'], version: 1,
     createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
@@ -48,13 +72,7 @@ function mutationBoundaryHarness() {
     graphStore: graphStore as never,
     vectorIndex: vectorIndex as never,
     indexingMemory: indexingMemory as never,
-    llmProvider: provider(JSON.stringify({
-      entities: [{ name: 'Alice', type: 'Person' }, { name: 'Paper A', type: 'Paper' }],
-      relations: [{
-        head: 'Alice', headType: 'Person', relation: 'authors', tail: 'Paper A',
-        tailType: 'Paper', confidence: 0.9,
-      }],
-    })),
+    llmProvider,
     embeddingProvider: embeddingProvider as never,
     nlpExtractor: {
       extract: vi.fn().mockResolvedValue({ language: 'en', entities: [], nounPhrases: [] }),
@@ -341,7 +359,10 @@ describe('indexing and provider behavioral boundaries', () => {
   });
 
   it('wires one folded fact and its links while retaining schema candidate pressure', async () => {
-    const harness = mutationBoundaryHarness();
+    const harness = mutationBoundaryHarness(provider([
+      extractionResponse('authors papers'),
+      extractionResponse('authors  papers'),
+    ]), 'authors papers');
 
     await expect(harness.run([
       '# First',
@@ -353,6 +374,7 @@ describe('indexing and provider behavioral boundaries', () => {
 
     const delta = harness.indexingMemory.upsertDelta.mock.calls[0]![0];
     expect(delta.facts).toHaveLength(1);
+    expect(delta.facts[0].relation).toBe('authors papers');
     expect(delta.facts[0].passageIds).toHaveLength(2);
     expect(delta.schemas).toEqual([
       expect.objectContaining({

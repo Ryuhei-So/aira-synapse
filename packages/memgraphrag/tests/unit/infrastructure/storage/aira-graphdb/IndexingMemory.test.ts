@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { Fact } from '../../../../../src/domain/memory/fact.js';
+import type { Passage } from '../../../../../src/domain/memory/passage.js';
 import type { Schema } from '../../../../../src/domain/memory/schema.js';
 import { INDEXING_MEMORY_CONTRACT } from '../../../../../src/domain/storage/indexingMemory.js';
 import { SnapshotBackedIndexingMemory } from '../../../../../src/infrastructure/storage/SnapshotBackedIndexingMemory.js';
@@ -62,6 +63,31 @@ function fact(factId: string, corpusId = 'c1'): Fact {
     passageIds: ['p1'],
     sourceDocumentIds: ['d1'],
     confidence: 0.9,
+    createdAt: NOW,
+    updatedAt: NOW,
+  };
+}
+
+function passage(passageId: string, corpusId = 'c1'): Passage {
+  return {
+    passageId,
+    corpusId,
+    text: 'x',
+    normalizedText: 'x',
+    metadata: {
+      documentId: 'd1',
+      title: 'Document',
+      sourceUrl: 'https://example.com/d1',
+      language: 'en',
+      sectionPath: [],
+      chunkId: passageId,
+      chunkIndex: 0,
+      offsetStart: 0,
+      offsetEnd: 1,
+    },
+    factIds: [],
+    entityMentions: [],
+    qualityFlags: [],
     createdAt: NOW,
     updatedAt: NOW,
   };
@@ -171,6 +197,11 @@ describe('AiraGraphDbIndexingMemory strict bounded contract', () => {
       schemaIds: ['s1'],
       updatedAt: 'x'.repeat(INDEXING_MEMORY_CONTRACT.maxUpdatedAtBytes),
     })).resolves.toBe(0);
+    await expect(memory.activateFactsBySchemaIds({
+      corpusId: 'c1',
+      schemaIds,
+      updatedAt: NOW,
+    })).resolves.toBe(0);
 
     await expect(memory.getSchemasByIds({ corpusId: 'c1', schemaIds: [`${exactDomainId}x`] }))
       .rejects.toThrow('UTF-8 bytes');
@@ -185,7 +216,12 @@ describe('AiraGraphDbIndexingMemory strict bounded contract', () => {
       schemaIds: ['s1'],
       updatedAt: 'x'.repeat(INDEXING_MEMORY_CONTRACT.maxUpdatedAtBytes + 1),
     })).rejects.toThrow('UTF-8 bytes');
-    expect(request).toHaveBeenCalledTimes(6);
+    await expect(memory.activateFactsBySchemaIds({
+      corpusId: 'c1',
+      schemaIds: [...schemaIds, 'overflow'],
+      updatedAt: NOW,
+    })).rejects.toThrow('must not exceed');
+    expect(request).toHaveBeenCalledTimes(7);
   });
 
   it('preflights the complete mutation plan and wire cap without issuing an RPC', async () => {
@@ -225,20 +261,32 @@ describe('AiraGraphDbIndexingMemory strict bounded contract', () => {
     expect(() => memory.preflightMutation({ delta: exactSizedDelta })).not.toThrow();
     expect(() => memory.preflightMutation({ delta: oversizedDelta })).toThrow('request exceeds');
 
-    const maxSchemas = Array.from(
-      { length: INDEXING_MEMORY_CONTRACT.maxDeltaItemsPerSection },
-      (_, index) => schema(`s${index}`),
-    );
-    expect(() => memory.preflightMutation({ delta: { ...validDelta, schemas: maxSchemas } }))
-      .not.toThrow();
-    expect(() => memory.preflightMutation({
-      delta: { ...validDelta, schemas: [...maxSchemas, schema('overflow')] },
-    })).toThrow('must not exceed');
-
     const save = vi.fn().mockResolvedValue(undefined);
     const compatibilityMemory = new SnapshotBackedIndexingMemory({ save } as never);
     await expect(compatibilityMemory.upsertDelta(oversizedDelta)).rejects.toThrow('request exceeds');
     expect(save).not.toHaveBeenCalled();
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['schemas', (index: number) => schema(`s${index}`)],
+    ['facts', (index: number) => fact(`f${index}`)],
+    ['passages', (index: number) => passage(`p${index}`)],
+  ] as const)('enforces exact and max-plus-one delta counts for %s', async (section, item) => {
+    const { client, request } = clientWith(() => null);
+    const memory = await AiraGraphDbIndexingMemory.create(client);
+    const validDelta = { corpusId: 'c1', passages: [], facts: [], schemas: [], exportedAt: NOW };
+    const exact = Array.from(
+      { length: INDEXING_MEMORY_CONTRACT.maxDeltaItemsPerSection },
+      (_, index) => item(index),
+    );
+
+    expect(() => memory.preflightMutation({
+      delta: { ...validDelta, [section]: exact } as never,
+    })).not.toThrow();
+    expect(() => memory.preflightMutation({
+      delta: { ...validDelta, [section]: [...exact, item(exact.length)] } as never,
+    })).toThrow('must not exceed');
     expect(request).toHaveBeenCalledTimes(1);
   });
 

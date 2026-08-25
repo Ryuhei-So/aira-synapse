@@ -22,7 +22,7 @@ export interface StorageAdapters {
   readonly batch?: {
     readonly begin: () => Promise<void>;
     readonly commit: () => Promise<void>;
-    readonly abandon?: () => Promise<void>;
+    readonly abandon: () => Promise<void>;
   };
 }
 

@@ -72,5 +72,10 @@ export function computeCanonicalKey(
   relation: string,
   tailType: string,
 ): string {
-  return `${headType.toLowerCase().trim()}::${relation.toLowerCase().trim()}::${tailType.toLowerCase().trim()}`;
+  return `${normalizeSchemaTerm(headType)}::${normalizeSchemaTerm(relation)}::${normalizeSchemaTerm(tailType)}`;
+}
+
+/** Shared normalization authority for fields that form a canonical schema tuple. */
+export function normalizeSchemaTerm(value: string): string {
+  return value.toLowerCase().replace(/\s+/g, ' ').trim();
 }

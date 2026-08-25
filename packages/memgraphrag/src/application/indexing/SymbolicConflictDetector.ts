@@ -1,18 +1,15 @@
 import type { ConflictSet, IConflictDetector, ConflictType } from '../../domain/agent/conflictDetection.js';
 import type { Fact } from '../../domain/memory/fact.js';
+import { normalizeSchemaTerm } from '../../domain/memory/schema.js';
 
 export interface SymbolicConflictDetectorOptions {
   readonly loadFacts: (corpusId: string) => Promise<readonly Fact[]>;
 }
 
-function normalize(value: string): string {
-  return value.toLowerCase().replace(/\s+/g, ' ').trim();
-}
-
 function classifyConflict(left: Fact, right: Fact): ConflictType | null {
-  const sameHead = normalize(left.headEntity) === normalize(right.headEntity);
-  const sameRelation = normalize(left.relation) === normalize(right.relation);
-  const sameTail = normalize(left.tailEntity) === normalize(right.tailEntity);
+  const sameHead = normalizeSchemaTerm(left.headEntity) === normalizeSchemaTerm(right.headEntity);
+  const sameRelation = normalizeSchemaTerm(left.relation) === normalizeSchemaTerm(right.relation);
+  const sameTail = normalizeSchemaTerm(left.tailEntity) === normalizeSchemaTerm(right.tailEntity);
 
   if (sameHead && sameRelation && !sameTail) {
     return 'mutually_exclusive';

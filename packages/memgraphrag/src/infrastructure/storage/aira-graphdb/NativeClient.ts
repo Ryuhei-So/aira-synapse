@@ -14,6 +14,7 @@ interface RpcRequest {
 interface RpcError {
   code: string;
   message: string;
+  failureClass?: string;
 }
 
 /** Result from the cypher_query RPC. Discriminated by variant key. */
@@ -320,18 +321,27 @@ export class AiraGraphDbNativeClient {
     }
     this.active = undefined;
     if (!response.ok) {
+      const hasFailureClass = isObject(response.error)
+        && Object.prototype.hasOwnProperty.call(response.error, 'failureClass');
+      const errorKeys = hasFailureClass
+        ? ['code', 'message', 'failureClass'] as const
+        : ['code', 'message'] as const;
       if (!isObject(response.error)
-        || !hasExactKeys(response.error, ['code', 'message'])
+        || !hasExactKeys(response.error, errorKeys)
         || typeof response.error.code !== 'string'
-        || typeof response.error.message !== 'string') {
+        || typeof response.error.message !== 'string'
+        || (hasFailureClass && typeof response.error.failureClass !== 'string')) {
         this.active = active;
         this.poison(new Error('aira-graphdb error response is malformed'));
         return;
       }
       const code = response.error.code;
       const message = response.error.message;
-      const error = new Error(message) as Error & { code?: string };
+      const error = new Error(message) as Error & { code?: string; failureClass?: string };
       error.code = code;
+      if (response.error.failureClass !== undefined) {
+        error.failureClass = response.error.failureClass;
+      }
       this.emitTraffic(active, 'native-error', responseBytes);
       active.reject(error);
       this.pump();

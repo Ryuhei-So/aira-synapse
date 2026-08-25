@@ -1,7 +1,11 @@
 import type { CompositeExtractionRecord } from '../../domain/agent/index.js';
 import type { Fact } from '../../domain/memory/fact.js';
 import type { Passage } from '../../domain/memory/passage.js';
-import type { Schema } from '../../domain/memory/schema.js';
+import {
+  computeCanonicalKey,
+  normalizeSchemaTerm,
+  type Schema,
+} from '../../domain/memory/schema.js';
 import type { IndexingMemoryDelta } from '../../domain/storage/indexingMemory.js';
 
 function uniqueStrings(values: readonly string[]): readonly string[] {
@@ -50,35 +54,41 @@ export function buildDocumentFacts(
   schemas: readonly Schema[],
   timestamp: string,
 ): readonly Fact[] {
-  const schemaByMeaning = new Map(
-    schemas.map((schema) => [
-      JSON.stringify([schema.headType, schema.relation, schema.tailType]),
-      schema,
-    ]),
-  );
+  const schemaByMeaning = new Map<string, Schema>();
+  for (const schema of schemas) {
+    const meaning = computeCanonicalKey(schema.headType, schema.relation, schema.tailType);
+    const existing = schemaByMeaning.get(meaning);
+    if (existing && existing.schemaId !== schema.schemaId) {
+      throw new Error(`canonical schema key ${meaning} maps to multiple schema IDs`);
+    }
+    schemaByMeaning.set(meaning, schema);
+  }
   const facts = new Map<string, Fact>();
 
   for (const record of records) {
     for (const candidate of record.candidateFacts) {
       if (!candidate.headType || !candidate.relation || !candidate.tailType) continue;
-      const matchedSchema = schemaByMeaning.get(JSON.stringify([
-        candidate.headType.toLowerCase().trim(),
-        candidate.relation.toLowerCase().trim(),
-        candidate.tailType.toLowerCase().trim(),
-      ]));
+      const matchedSchema = schemaByMeaning.get(computeCanonicalKey(
+        candidate.headType,
+        candidate.relation,
+        candidate.tailType,
+      ));
       if (!matchedSchema) continue;
 
-      const factId = `fact:${documentId}:${candidate.headEntity}:${candidate.relation}:${candidate.tailEntity}`
+      const canonicalHeadType = normalizeSchemaTerm(matchedSchema.headType);
+      const canonicalRelation = normalizeSchemaTerm(matchedSchema.relation);
+      const canonicalTailType = normalizeSchemaTerm(matchedSchema.tailType);
+      const factId = `fact:${documentId}:${candidate.headEntity}:${canonicalRelation}:${candidate.tailEntity}`
         .replace(/\s+/g, '_');
       const incoming: Fact = {
         factId,
         corpusId,
         schemaId: matchedSchema.schemaId,
         headEntity: candidate.headEntity,
-        headType: candidate.headType,
-        relation: candidate.relation,
+        headType: canonicalHeadType,
+        relation: canonicalRelation,
         tailEntity: candidate.tailEntity,
-        tailType: candidate.tailType,
+        tailType: canonicalTailType,
         state: matchedSchema.state === 'stable' ? 'active' : 'inactive',
         passageIds: [record.sourcePassage.passageId],
         sourceDocumentIds: [documentId],

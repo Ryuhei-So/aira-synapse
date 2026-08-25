@@ -62,9 +62,9 @@ function schema(): Schema {
   return {
     schemaId: 'schema:person::authors::paper',
     corpusId: CORPUS_ID,
-    headType: 'person',
+    headType: 'Person',
     relation: 'authors',
-    tailType: 'paper',
+    tailType: 'Paper',
     canonicalKey: 'person::authors::paper',
     aliases: [],
     frequency: 2,
@@ -78,7 +78,11 @@ function schema(): Schema {
   };
 }
 
-const candidate = (confidence: number, headEntity = 'Alice'): FactCandidate => ({
+const candidate = (
+  confidence: number,
+  headEntity = 'Alice',
+  overrides: Partial<FactCandidate> = {},
+): FactCandidate => ({
   headEntity,
   headType: 'Person',
   relation: 'authors',
@@ -86,6 +90,7 @@ const candidate = (confidence: number, headEntity = 'Alice'): FactCandidate => (
   tailType: 'Paper',
   supportingSpanIds: [],
   confidence,
+  ...overrides,
 });
 
 describe('document memory mutation plan', () => {
@@ -95,7 +100,13 @@ describe('document memory mutation plan', () => {
     const facts = buildDocumentFacts(
       CORPUS_ID,
       DOCUMENT_ID,
-      [record(passages[0]!, candidate(0.7)), record(passages[1]!, candidate(0.9))],
+      [
+        record(passages[0]!, candidate(0.7)),
+        record(passages[1]!, candidate(0.9, 'Alice', {
+          headType: 'person',
+          tailType: 'paper',
+        })),
+      ],
       schemas,
       TS,
     );
@@ -105,6 +116,9 @@ describe('document memory mutation plan', () => {
       passageIds: ['p0', 'p1'],
       sourceDocumentIds: [DOCUMENT_ID],
       confidence: 0.9,
+      headType: 'person',
+      relation: 'authors',
+      tailType: 'paper',
     });
 
     const delta = buildDocumentMemoryDelta(CORPUS_ID, schemas, facts, passages, TS);
@@ -114,6 +128,24 @@ describe('document memory mutation plan', () => {
       factIds: ['old-fact', factId],
     });
     expect(delta.passages.map((item) => item.factIds)).toEqual([[factId], [factId]]);
+  });
+
+  it('uses the canonical schema relation for ID and folds relation case variation', () => {
+    const passages = [passage('p0'), passage('p1')];
+    const facts = buildDocumentFacts(
+      CORPUS_ID,
+      DOCUMENT_ID,
+      [
+        record(passages[0]!, candidate(0.7)),
+        record(passages[1]!, candidate(0.8, 'Alice', { relation: 'Authors' })),
+      ],
+      [schema()],
+      TS,
+    );
+
+    expect(facts).toHaveLength(1);
+    expect(facts[0]).toMatchObject({ relation: 'authors', passageIds: ['p0', 'p1'] });
+    expect(facts[0]?.factId).toContain(':authors:');
   });
 
   it('fails closed when a sanitized ID collision carries different meaning', () => {
@@ -128,6 +160,17 @@ describe('document memory mutation plan', () => {
       [schema()],
       TS,
     )).toThrow('identifies inconsistent headEntity');
+  });
+
+  it('fails closed when one canonical meaning maps to different schema IDs', () => {
+    const sourcePassage = passage('p0');
+    expect(() => buildDocumentFacts(
+      CORPUS_ID,
+      DOCUMENT_ID,
+      [record(sourcePassage, candidate(0.9))],
+      [schema(), { ...schema(), schemaId: 'schema:ambiguous' }],
+      TS,
+    )).toThrow('maps to multiple schema IDs');
   });
 
   it('rejects broken schema, passage, and corpus links before mutation', () => {
