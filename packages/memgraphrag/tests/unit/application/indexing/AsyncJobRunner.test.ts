@@ -6,6 +6,7 @@ import { createNotImplementedStub } from '../../../setup/testDoubles.js';
 import {
   AsyncJobRunner,
   DocumentMutationError,
+  type StorageWriteBatch,
 } from '../../../../src/application/indexing/AsyncJobRunner.js';
 import { DefaultIndexingService } from '../../../../src/application/indexing/IndexingService.js';
 import type { IndexDocumentsCommand } from '../../../../src/application/indexing/IndexingService.js';
@@ -64,13 +65,15 @@ describe('TASK-MG-035: AsyncJobRunner and DefaultIndexingService', () => {
         const row = db.prepare('SELECT status FROM jobs WHERE job_id = ?').get('job-1') as { status: string };
         statusesAtCommit.push(row.status);
       }),
-    };
+      abandon: vi.fn<() => Promise<void>>().mockResolvedValue(),
+    } satisfies StorageWriteBatch;
     const runner = new AsyncJobRunner(db, memoryStore, pipeline, storageBatch);
     runner.registerJob('job-1', command());
     await runner.enqueue('job-1');
     await runner.execute('job-1');
 
     expect(storageBatch.commit).toHaveBeenCalledTimes(1);
+    expect(storageBatch.abandon).not.toHaveBeenCalled();
     expect(statusesAtCommit).toEqual(['running']);
     expect((db.prepare('SELECT status FROM jobs WHERE job_id = ?').get('job-1') as { status: string }).status).toBe('completed');
   });
