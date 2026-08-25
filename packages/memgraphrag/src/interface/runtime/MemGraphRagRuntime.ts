@@ -34,6 +34,7 @@ import type {
   IEmbeddingProvider,
   IGraphProjection,
   IGraphStore,
+  IIndexingMemory,
   ILLMProvider,
   IMemoryStore,
   INLPExtractor,
@@ -52,6 +53,7 @@ import {
   SQLiteGraphStore,
   SQLiteLexiconStore,
   SQLiteMemoryStore,
+  SnapshotBackedIndexingMemory,
   SemanticScholarCache,
   SemanticScholarClient,
   openDatabase,
@@ -321,6 +323,7 @@ class RuntimeImpl implements MemGraphRagRuntime {
     let graphStore: IGraphStore;
     let vectorIndex: IVectorIndex;
     let memoryStore: IMemoryStore;
+    let indexingMemory: IIndexingMemory;
     let graphProjection: IGraphProjection;
     let storageBatch: StorageAdapters['batch'];
 
@@ -331,6 +334,7 @@ class RuntimeImpl implements MemGraphRagRuntime {
       graphStore = storageAdapters.graphStore;
       vectorIndex = storageAdapters.vectorIndex;
       memoryStore = storageAdapters.memoryStore;
+      indexingMemory = storageAdapters.indexingMemory;
       graphProjection = storageAdapters.graphProjection;
       storageBatch = storageAdapters.batch;
       this.storageClose = storageAdapters.close;
@@ -339,6 +343,7 @@ class RuntimeImpl implements MemGraphRagRuntime {
       graphStore = sqliteGraphStore;
       vectorIndex = new FileVectorIndex(vectorIndexDir);
       memoryStore = new SQLiteMemoryStore(this.db);
+      indexingMemory = new SnapshotBackedIndexingMemory(memoryStore);
       graphProjection = new SQLiteGraphProjection(sqliteGraphStore);
       this.storageClose = undefined;
     }
@@ -377,7 +382,7 @@ class RuntimeImpl implements MemGraphRagRuntime {
         db: this.db,
         graphStore,
         vectorIndex,
-        memoryStore,
+        indexingMemory,
         llmProvider,
         embeddingProvider,
         nlpExtractor,

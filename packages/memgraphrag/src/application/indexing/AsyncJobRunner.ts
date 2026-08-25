@@ -20,6 +20,17 @@ export interface DocumentIndexingPipeline {
 export interface StorageWriteBatch {
   readonly begin: () => Promise<void>;
   readonly commit: () => Promise<void>;
+  /** Invalidate the transport; only the external owner may recover the batch. */
+  readonly abandon: () => Promise<void>;
+}
+
+export class DocumentMutationError extends Error {
+  public readonly code = 'DOCUMENT_MUTATION_FAILED';
+
+  public constructor(cause: unknown) {
+    super('document mutation failed after persistence began', { cause });
+    this.name = 'DocumentMutationError';
+  }
 }
 
 const BATCH_COMMIT_EVERY_DOCS = 15;
@@ -68,13 +79,25 @@ export class AsyncJobRunner {
       throw new Error(`Unknown job ${jobId}`);
     }
 
-    let batchStarted = false;
+    let batchState: 'none' | 'uncertain' | 'open' = 'none';
+    const beginBatch = async (): Promise<void> => {
+      if (!this.storageBatch) return;
+      // A lost begin response can still have created an owner transaction.
+      batchState = 'uncertain';
+      await this.storageBatch.begin();
+      batchState = 'open';
+    };
     const commitOpenBatch = async (): Promise<void> => {
-      if (!batchStarted) return;
-      // Consume ownership before awaiting so a failed commit is propagated by
-      // the outer catch exactly once; finally must not retry the same commit.
-      batchStarted = false;
-      await this.storageBatch?.commit();
+      if (!this.storageBatch || batchState === 'none') return;
+      // A failed/lost commit response is not safe to retry or classify here.
+      batchState = 'uncertain';
+      await this.storageBatch.commit();
+      batchState = 'none';
+    };
+    const abandonUnresolvedBatch = async (): Promise<void> => {
+      if (!this.storageBatch || batchState === 'none') return;
+      batchState = 'none';
+      await this.storageBatch.abandon();
     };
     try {
       const checkpoint = await this.memoryStore.loadCheckpoint(jobId);
@@ -88,8 +111,7 @@ export class AsyncJobRunner {
       // documents (aira-graphdb rewrites its whole file on every mutating RPC
       // otherwise). Data and checkpoints commit together, so a crash simply
       // replays the last uncommitted documents.
-      await this.storageBatch?.begin();
-      batchStarted = this.storageBatch !== undefined;
+      await beginBatch();
       let sinceCommit = 0;
       let addedNodes = 0;
       let addedEdges = 0;
@@ -105,6 +127,9 @@ export class AsyncJobRunner {
           this.cancelled.add(jobId);
         }
         if (this.cancelled.has(jobId)) {
+          // Cancellation is observed only between documents. Previously
+          // successful documents form a clean batch and may be committed.
+          await commitOpenBatch();
           this.db.prepare(
             `UPDATE jobs SET status = 'cancelled', updated_at = ? WHERE job_id = ?`,
           ).run(new Date().toISOString(), jobId);
@@ -118,6 +143,11 @@ export class AsyncJobRunner {
         try {
           result = await this.pipeline.processDocument(command.corpusId, document);
         } catch (error) {
+          if (error instanceof DocumentMutationError) {
+            // A mutation may already be present in the backend WAL. Only the
+            // owner/recovery authority may resolve it; never publish it here.
+            throw error;
+          }
           // Isolate per-document failures: one malformed document must not
           // abort the whole job. Record and continue.
           const message = error instanceof Error
@@ -150,8 +180,7 @@ export class AsyncJobRunner {
         sinceCommit += 1;
         if (this.storageBatch && sinceCommit >= BATCH_COMMIT_EVERY_DOCS) {
           await commitOpenBatch();
-          await this.storageBatch.begin();
-          batchStarted = true;
+          await beginBatch();
           sinceCommit = 0;
         }
       }
@@ -169,11 +198,21 @@ export class AsyncJobRunner {
         jobId,
       );
     } catch (error) {
+      let failure = error;
+      try {
+        await abandonUnresolvedBatch();
+      } catch (abandonError) {
+        const originalMessage = error instanceof Error ? error.message : String(error);
+        failure = new AggregateError(
+          [error, abandonError],
+          `job failed and storage batch abandon failed: ${originalMessage}`,
+        );
+      }
       // Record the stack, not just the message — message-only errors made
       // pipeline failures undiagnosable.
-      const message = error instanceof Error
-        ? `${error.message}\n${(error.stack ?? '').split('\n').slice(1, 6).join('\n')}`
-        : String(error);
+      const message = failure instanceof Error
+        ? `${failure.message}\n${(failure.stack ?? '').split('\n').slice(1, 6).join('\n')}`
+        : String(failure);
       const jobError: JobError = {
         code: JOB_EXECUTION_FAILED,
         message,
@@ -181,14 +220,7 @@ export class AsyncJobRunner {
       this.db.prepare(
         `UPDATE jobs SET status = 'failed', errors_json = ?, updated_at = ? WHERE job_id = ?`,
       ).run(JSON.stringify([jobError]), new Date().toISOString(), jobId);
-    } finally {
-      if (batchStarted) {
-        try {
-          await commitOpenBatch();
-        } catch (err) {
-          console.log(`  [job ${jobId}] final storage commit failed: ${err instanceof Error ? err.message : String(err)}`);
-        }
-      }
+      throw failure;
     }
   }
 

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import Database from 'better-sqlite3';
 import { runMigrations } from '../../../../src/infrastructure/storage/migrate.js';
 import { SQLiteMemoryStore } from '../../../../src/infrastructure/storage/SQLiteMemoryStore.js';
+import { SnapshotBackedIndexingMemory } from '../../../../src/infrastructure/storage/SnapshotBackedIndexingMemory.js';
 import type { CompositeExtractionRecord, ISchemaCanonicalizer } from '../../../../src/domain/agent/index.js';
 import { createNotImplementedStub } from '../../../setup/testDoubles.js';
 import { StageIICanonicalizer } from '../../../../src/application/indexing/StageIICanonicalizer.js';
@@ -87,7 +88,7 @@ describe('TASK-MG-031: StageIICanonicalizer', () => {
       }),
     } satisfies ISchemaCanonicalizer;
 
-    const stage = new StageIICanonicalizer('corpus-1', store);
+    const stage = new StageIICanonicalizer('corpus-1', new SnapshotBackedIndexingMemory(store));
     const schemas = await stage.canonicalizeSchemas([createRecord()], canonicalizer);
 
     expect(schemas).toHaveLength(1);
@@ -95,8 +96,8 @@ describe('TASK-MG-031: StageIICanonicalizer', () => {
     expect(schemas[0]?.sourceDocumentIds).toEqual(['doc-1']);
   });
 
-  it('increments schema frequency for existing and new schemas', async () => {
-    const stage = new StageIICanonicalizer('corpus-1', store);
+  it('prepares the affected delta without mutating and promotes after the merged frequency', async () => {
+    const stage = new StageIICanonicalizer('corpus-1', new SnapshotBackedIndexingMemory(store));
     await store.save({ corpusId: 'corpus-1', exportedAt: '2026-01-01T00:00:00.000Z', schemaVersion: 1, passages: [], facts: [], schemas: [{
       schemaId: 'schema:person::authors::paper',
       corpusId: 'corpus-1',
@@ -115,42 +116,50 @@ describe('TASK-MG-031: StageIICanonicalizer', () => {
       updatedAt: '2026-01-01T00:00:00.000Z',
     }] });
 
-    await stage.incrementSchemaFrequency([{ 
-      schemaId: 'schema:person::authors::paper', corpusId: 'corpus-1', headType: 'Person', relation: 'authors', tailType: 'Paper', canonicalKey: 'person::authors::paper', aliases: [], frequency: 1, state: 'pending', stabilizationThreshold: 2, factIds: [], sourceDocumentIds: ['doc-1'], version: 1, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' 
+    const prepared = await stage.prepareSchemas([{
+      schemaId: 'schema:person::authors::paper', corpusId: 'corpus-1', headType: 'Person', relation: 'authors', tailType: 'Paper', canonicalKey: 'person::authors::paper', aliases: [], frequency: 1, state: 'pending', stabilizationThreshold: 2, factIds: [], sourceDocumentIds: ['doc-1'], version: 1, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z'
     }]);
 
     const snapshot = await store.load('corpus-1');
-    expect(snapshot.schemas[0]?.frequency).toBe(2);
-    expect(snapshot.schemas[0]?.sourceDocumentIds).toEqual(expect.arrayContaining(['doc-old', 'doc-1']));
-    expect(snapshot.schemas[0]?.sourceDocumentIds).toHaveLength(2);
+    expect(snapshot.schemas[0]?.frequency).toBe(1);
+    expect(prepared.newlyStableSchemaIds).toEqual(['schema:person::authors::paper']);
+    expect(prepared.finalSchemas[0]).toMatchObject({
+      frequency: 2,
+      state: 'stable',
+      sourceDocumentIds: ['doc-old', 'doc-1'],
+    });
   });
 
-  it('promotes stable schemas when frequency crosses threshold', async () => {
-    const stage = new StageIICanonicalizer('corpus-1', store);
-    await store.save({ corpusId: 'corpus-1', exportedAt: '2026-01-01T00:00:00.000Z', schemaVersion: 1, passages: [], facts: [], schemas: [{
-      schemaId: 'schema:person::authors::paper',
-      corpusId: 'corpus-1', headType: 'Person', relation: 'authors', tailType: 'Paper', canonicalKey: 'person::authors::paper', aliases: [], frequency: 2, state: 'pending', stabilizationThreshold: 2, factIds: ['fact-1'], sourceDocumentIds: ['doc-1'], version: 1, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
-    }] });
+  it('folds duplicate candidates in document order and counts each occurrence once', async () => {
+    const stage = new StageIICanonicalizer('corpus-1', new SnapshotBackedIndexingMemory(store));
+    const candidate = {
+      schemaId: 'schema:person::authors::paper', corpusId: 'corpus-1', headType: 'Person', relation: 'authors', tailType: 'Paper', canonicalKey: 'person::authors::paper', aliases: [], frequency: 1, state: 'pending' as const, stabilizationThreshold: 2, factIds: [], sourceDocumentIds: ['doc-1'], version: 1, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
+    };
 
-    const stableIds = await stage.promoteStableSchemas();
-    const snapshot = await store.load('corpus-1');
-
-    expect(stableIds).toEqual(['schema:person::authors::paper']);
-    expect(snapshot.schemas[0]?.state).toBe('stable');
+    const prepared = await stage.prepareSchemas([candidate, candidate]);
+    expect(prepared.finalSchemas).toHaveLength(1);
+    expect(prepared.finalSchemas[0]).toMatchObject({ frequency: 2, state: 'stable' });
+    expect(prepared.finalSchemas[0]?.sourceDocumentIds).toEqual(['doc-1']);
+    expect(prepared.newlyStableSchemaIds).toEqual([candidate.schemaId]);
   });
 
   it('activates inactive facts for newly stable schemas', async () => {
-    const stage = new StageIICanonicalizer('corpus-1', store);
+    const indexingMemory = new SnapshotBackedIndexingMemory(store);
     await store.save({ corpusId: 'corpus-1', exportedAt: '2026-01-01T00:00:00.000Z', schemaVersion: 1, passages: [], schemas: [{
       schemaId: 'schema:person::authors::paper', corpusId: 'corpus-1', headType: 'Person', relation: 'authors', tailType: 'Paper', canonicalKey: 'person::authors::paper', aliases: [], frequency: 2, state: 'stable', stabilizationThreshold: 2, factIds: ['fact-1'], sourceDocumentIds: ['doc-1'], version: 1, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
     }], facts: [{
       factId: 'fact-1', corpusId: 'corpus-1', schemaId: 'schema:person::authors::paper', headEntity: 'Alice', headType: 'Person', relation: 'authors', tailEntity: 'Paper A', tailType: 'Paper', state: 'inactive', passageIds: [], sourceDocumentIds: ['doc-1'], confidence: 0.9, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
     }] });
 
-    const activated = await stage.cascadeActivateFacts(['schema:person::authors::paper']);
+    const activated = await indexingMemory.activateFactsBySchemaIds({
+      corpusId: 'corpus-1',
+      schemaIds: ['schema:person::authors::paper'],
+      updatedAt: '2026-02-01T00:00:00.000Z',
+    });
     const snapshot = await store.load('corpus-1');
 
     expect(activated).toBe(1);
     expect(snapshot.facts[0]?.state).toBe('active');
+    expect(snapshot.facts[0]?.updatedAt).toBe('2026-02-01T00:00:00.000Z');
   });
 });

@@ -71,7 +71,7 @@ describe('TASK-AGDB-040/041: backend compatibility workflow contract', () => {
       const job = jobs[jobName]!;
       expect(job.env, `missing GraphDB env in ${jobName}`).toEqual(expect.objectContaining({
         AIRA_GRAPHDB_REPO_PATH: '${{ github.workspace }}/aira-graphdb',
-        AIRA_GRAPHDB_EXPECTED_SHA: '164092aa47f39330c0c771495d9d42e4e935e41b',
+        AIRA_GRAPHDB_EXPECTED_SHA: 'a5e25c008a704363a323782fa6571f07a47f9975',
       }));
       const graphDbCheckout = job.steps.find(
         (step) => step.uses === 'actions/checkout@v4'
@@ -79,10 +79,23 @@ describe('TASK-AGDB-040/041: backend compatibility workflow contract', () => {
       );
       expect(graphDbCheckout, `missing exact GraphDB checkout in ${jobName}`).toBeDefined();
       expect(graphDbCheckout?.with).toEqual(expect.objectContaining({
-        ref: '164092aa47f39330c0c771495d9d42e4e935e41b',
+        ref: 'a5e25c008a704363a323782fa6571f07a47f9975',
         path: 'aira-graphdb',
       }));
     }
+  });
+
+  it('uses a test-only transaction owner whenever CI mutates the exact native', () => {
+    for (const jobName of ['storage-port-compat', 'backend-compat', 'backend-compat-strict']) {
+      const job = jobs[jobName]!;
+      expect(job.env?.AIRA_GRAPHDB_NATIVE_CMD).toBe(
+        'node ${{ github.workspace }}/packages/memgraphrag/scripts/native-transaction-owner.test-fixture.mjs ${{ github.workspace }}/aira-graphdb/target/release/aira-graphdb-native',
+      );
+      expect(job.steps.some((step) => step.run?.includes(
+        'cargo build --locked --release --bin aira-graphdb-native',
+      ))).toBe(true);
+    }
+    expect(raw).not.toContain('batch_prepare_commit');
   });
 
   it('discovers the .spec.ts contract and preserves raw command exits', () => {

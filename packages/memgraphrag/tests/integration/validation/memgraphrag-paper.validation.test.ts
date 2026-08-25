@@ -4,6 +4,7 @@ import { computeCanonicalKey } from '../../../src/domain/memory/schema.js';
 import { StageIICanonicalizer } from '../../../src/application/indexing/StageIICanonicalizer.js';
 import { buildSimilarityBridges, buildTypeBasedBridges } from '../../../src/application/indexing/StageIVGraphProjector.js';
 import { SQLiteMemoryStore } from '../../../src/infrastructure/storage/SQLiteMemoryStore.js';
+import { SnapshotBackedIndexingMemory } from '../../../src/infrastructure/storage/SnapshotBackedIndexingMemory.js';
 import { SQLiteGraphStore } from '../../../src/infrastructure/storage/SQLiteGraphStore.js';
 import { runMigrations } from '../../../src/infrastructure/storage/migrate.js';
 
@@ -51,7 +52,7 @@ describe('TASK-MG-057: MemGraphRAG paper validation', () => {
   });
 
   it('stabilizes schemas once frequency reaches tau=2', async () => {
-    const stage = new StageIICanonicalizer('corpus-1', store);
+    const stage = new StageIICanonicalizer('corpus-1', new SnapshotBackedIndexingMemory(store));
     const schemas = Array.from({ length: 3 }, (_, index) => ({
       chunk: { corpusId: 'corpus-1', documentId: `doc-${index}`, chunkId: `doc-${index}:0`, text: 'Alice authors Paper', normalizedText: 'alice authors paper', language: 'en' as const, metadata: { documentId: `doc-${index}`, title: `Doc ${index}`, sourceUrl: 'https://example.com', language: 'en' as const, sectionPath: ['Intro'], chunkId: `doc-${index}:0`, chunkIndex: 0, offsetStart: 0, offsetEnd: 10 } },
       candidateSchemas: [{ headType: 'Researcher', relation: 'authors', tailType: 'Paper', canonicalKey: computeCanonicalKey('Researcher', 'authors', 'Paper'), aliases: [], confidence: 0.9 }],
@@ -61,10 +62,13 @@ describe('TASK-MG-057: MemGraphRAG paper validation', () => {
     }));
     const canonicalizer = { canonicalize: async () => ({ canonicalHeadType: 'Researcher', canonicalRelation: 'authors', canonicalTailType: 'Paper', aliases: [], confidence: 0.9 }) };
 
-    await stage.incrementSchemaFrequency(await stage.canonicalizeSchemas(schemas, canonicalizer));
-    const stable = await stage.promoteStableSchemas(2);
+    const prepared = await stage.prepareSchemas(
+      await stage.canonicalizeSchemas(schemas, canonicalizer),
+      2,
+    );
 
-    expect(stable).toEqual(['schema:researcher::authors::paper']);
+    expect(prepared.newlyStableSchemaIds).toEqual(['schema:researcher::authors::paper']);
+    expect(prepared.finalSchemas[0]).toMatchObject({ frequency: 3, state: 'stable' });
   });
 
   it('generates type-based bridges between compatible schemas', async () => {

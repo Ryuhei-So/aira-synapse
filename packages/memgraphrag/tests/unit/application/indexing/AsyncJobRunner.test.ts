@@ -3,7 +3,11 @@ import Database from 'better-sqlite3';
 import type { IMemoryStore } from '../../../../src/domain/storage/index.js';
 import { runMigrations } from '../../../../src/infrastructure/storage/migrate.js';
 import { createNotImplementedStub } from '../../../setup/testDoubles.js';
-import { AsyncJobRunner } from '../../../../src/application/indexing/AsyncJobRunner.js';
+import {
+  AsyncJobRunner,
+  DocumentMutationError,
+  type StorageWriteBatch,
+} from '../../../../src/application/indexing/AsyncJobRunner.js';
 import { DefaultIndexingService } from '../../../../src/application/indexing/IndexingService.js';
 import type { IndexDocumentsCommand } from '../../../../src/application/indexing/IndexingService.js';
 import type { DeleteDocumentResult } from '../../../../src/application/indexing/DeleteDocumentService.js';
@@ -61,13 +65,15 @@ describe('TASK-MG-035: AsyncJobRunner and DefaultIndexingService', () => {
         const row = db.prepare('SELECT status FROM jobs WHERE job_id = ?').get('job-1') as { status: string };
         statusesAtCommit.push(row.status);
       }),
-    };
+      abandon: vi.fn<() => Promise<void>>().mockResolvedValue(),
+    } satisfies StorageWriteBatch;
     const runner = new AsyncJobRunner(db, memoryStore, pipeline, storageBatch);
     runner.registerJob('job-1', command());
     await runner.enqueue('job-1');
     await runner.execute('job-1');
 
     expect(storageBatch.commit).toHaveBeenCalledTimes(1);
+    expect(storageBatch.abandon).not.toHaveBeenCalled();
     expect(statusesAtCommit).toEqual(['running']);
     expect((db.prepare('SELECT status FROM jobs WHERE job_id = ?').get('job-1') as { status: string }).status).toBe('completed');
   });
@@ -120,7 +126,12 @@ describe('TASK-MG-035: AsyncJobRunner and DefaultIndexingService', () => {
 
   it('records inner document failures as completed structured job errors', async () => {
     const pipeline = { processDocument: vi.fn().mockRejectedValue(new Error('boom')) };
-    const runner = new AsyncJobRunner(db, memoryStore, pipeline);
+    const storageBatch = {
+      begin: vi.fn<() => Promise<void>>().mockResolvedValue(),
+      commit: vi.fn<() => Promise<void>>().mockResolvedValue(),
+      abandon: vi.fn<() => Promise<void>>().mockResolvedValue(),
+    };
+    const runner = new AsyncJobRunner(db, memoryStore, pipeline, storageBatch);
     runner.registerJob('job-1', command());
     await runner.enqueue('job-1');
     await runner.execute('job-1');
@@ -138,6 +149,68 @@ describe('TASK-MG-035: AsyncJobRunner and DefaultIndexingService', () => {
       skippedCount: 1,
       documentErrorCount: 1,
     }));
+    expect(storageBatch.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it('commits an earlier clean document when the next document fails before mutation', async () => {
+    const twoDocuments: IndexDocumentsCommand = {
+      ...command(),
+      documents: [
+        command().documents[0]!,
+        { ...command().documents[0]!, documentId: 'doc-2', title: 'Doc 2' },
+      ],
+    };
+    const pipeline = {
+      processDocument: vi.fn().mockImplementation(async (_corpusId, document) => {
+        if (document.documentId === 'doc-2') throw new Error('preflight rejected');
+        return { processedDocumentId: 'doc-1', addedNodes: 1, addedEdges: 1, conflicts: 0 };
+      }),
+    };
+    const storageBatch = {
+      begin: vi.fn<() => Promise<void>>().mockResolvedValue(),
+      commit: vi.fn<() => Promise<void>>().mockResolvedValue(),
+      abandon: vi.fn<() => Promise<void>>().mockResolvedValue(),
+    };
+    const runner = new AsyncJobRunner(db, memoryStore, pipeline, storageBatch);
+    runner.registerJob('job-1', twoDocuments);
+    await runner.enqueue('job-1');
+
+    await runner.execute('job-1');
+
+    const row = db.prepare(
+      'SELECT status, processed, errors_json FROM jobs WHERE job_id = ?',
+    ).get('job-1') as { status: string; processed: number; errors_json: string };
+    expect(row.status).toBe('completed');
+    expect(row.processed).toBe(1);
+    expect(JSON.parse(row.errors_json)).toEqual([
+      expect.objectContaining({ documentId: 'doc-2', message: expect.stringContaining('preflight rejected') }),
+    ]);
+    expect(storageBatch.commit).toHaveBeenCalledOnce();
+    expect(storageBatch.abandon).not.toHaveBeenCalled();
+  });
+
+  it('makes post-mutation document errors job-fatal and never commits the dirty batch', async () => {
+    const pipeline = {
+      processDocument: vi.fn().mockRejectedValue(new DocumentMutationError(new Error('native write failed'))),
+    };
+    const storageBatch = {
+      begin: vi.fn<() => Promise<void>>().mockResolvedValue(),
+      commit: vi.fn<() => Promise<void>>().mockResolvedValue(),
+      abandon: vi.fn<() => Promise<void>>().mockResolvedValue(),
+    };
+    const runner = new AsyncJobRunner(db, memoryStore, pipeline, storageBatch);
+    runner.registerJob('job-1', command());
+    await runner.enqueue('job-1');
+    await expect(runner.execute('job-1')).rejects.toBeInstanceOf(DocumentMutationError);
+
+    const row = db.prepare('SELECT status, errors_json FROM jobs WHERE job_id = ?').get('job-1') as { status: string; errors_json: string };
+    expect(row.status).toBe('failed');
+    expect(JSON.parse(row.errors_json)).toEqual([{
+      code: 'JOB_EXECUTION_FAILED',
+      message: expect.stringContaining('document mutation failed after persistence began'),
+    }]);
+    expect(storageBatch.commit).not.toHaveBeenCalled();
+    expect(storageBatch.abandon).toHaveBeenCalledOnce();
   });
 
   it('records outer storage failures as failed structured job errors', async () => {
@@ -145,11 +218,12 @@ describe('TASK-MG-035: AsyncJobRunner and DefaultIndexingService', () => {
     const storageBatch = {
       begin: vi.fn<() => Promise<void>>().mockRejectedValue(new Error('batch boom')),
       commit: vi.fn<() => Promise<void>>().mockResolvedValue(),
+      abandon: vi.fn<() => Promise<void>>().mockResolvedValue(),
     };
     const runner = new AsyncJobRunner(db, memoryStore, pipeline, storageBatch);
     runner.registerJob('job-1', command());
     await runner.enqueue('job-1');
-    await runner.execute('job-1');
+    await expect(runner.execute('job-1')).rejects.toThrow('batch boom');
 
     const row = db.prepare('SELECT status, errors_json FROM jobs WHERE job_id = ?').get('job-1') as { status: string; errors_json: string };
     expect(row.status).toBe('failed');
@@ -159,6 +233,7 @@ describe('TASK-MG-035: AsyncJobRunner and DefaultIndexingService', () => {
     }]);
     expect(pipeline.processDocument).not.toHaveBeenCalled();
     expect(storageBatch.commit).not.toHaveBeenCalled();
+    expect(storageBatch.abandon).toHaveBeenCalledOnce();
   });
 
   it('records checkpoint failures as failed structured job errors', async () => {
@@ -167,10 +242,15 @@ describe('TASK-MG-035: AsyncJobRunner and DefaultIndexingService', () => {
       saveCheckpoint: vi.fn<IMemoryStore['saveCheckpoint']>().mockRejectedValue(new Error('checkpoint boom')),
     } satisfies IMemoryStore;
     const pipeline = { processDocument: vi.fn().mockResolvedValue({ processedDocumentId: 'doc-1', addedNodes: 1, addedEdges: 1, conflicts: 0 }) };
-    const runner = new AsyncJobRunner(db, memoryStore, pipeline);
+    const storageBatch = {
+      begin: vi.fn<() => Promise<void>>().mockResolvedValue(),
+      commit: vi.fn<() => Promise<void>>().mockResolvedValue(),
+      abandon: vi.fn<() => Promise<void>>().mockResolvedValue(),
+    };
+    const runner = new AsyncJobRunner(db, memoryStore, pipeline, storageBatch);
     runner.registerJob('job-1', command());
     await runner.enqueue('job-1');
-    await runner.execute('job-1');
+    await expect(runner.execute('job-1')).rejects.toThrow('checkpoint boom');
 
     const row = db.prepare('SELECT status, processed, errors_json FROM jobs WHERE job_id = ?').get('job-1') as { status: string; processed: number; errors_json: string };
     expect(row.status).toBe('failed');
@@ -179,6 +259,8 @@ describe('TASK-MG-035: AsyncJobRunner and DefaultIndexingService', () => {
       code: 'JOB_EXECUTION_FAILED',
       message: expect.stringContaining('checkpoint boom'),
     }]);
+    expect(storageBatch.commit).not.toHaveBeenCalled();
+    expect(storageBatch.abandon).toHaveBeenCalledOnce();
   });
 
   it('records final storage commit failures as failed without retrying commit', async () => {
@@ -186,11 +268,12 @@ describe('TASK-MG-035: AsyncJobRunner and DefaultIndexingService', () => {
     const storageBatch = {
       begin: vi.fn<() => Promise<void>>().mockResolvedValue(),
       commit: vi.fn<() => Promise<void>>().mockRejectedValue(new Error('final commit boom')),
+      abandon: vi.fn<() => Promise<void>>().mockResolvedValue(),
     };
     const runner = new AsyncJobRunner(db, memoryStore, pipeline, storageBatch);
     runner.registerJob('job-1', command());
     await runner.enqueue('job-1');
-    await runner.execute('job-1');
+    await expect(runner.execute('job-1')).rejects.toThrow('final commit boom');
 
     const row = db.prepare('SELECT status, processed, errors_json FROM jobs WHERE job_id = ?').get('job-1') as { status: string; processed: number; errors_json: string };
     expect(row.status).toBe('failed');
@@ -200,5 +283,6 @@ describe('TASK-MG-035: AsyncJobRunner and DefaultIndexingService', () => {
       message: expect.stringContaining('final commit boom'),
     }]);
     expect(storageBatch.commit).toHaveBeenCalledTimes(1);
+    expect(storageBatch.abandon).toHaveBeenCalledOnce();
   });
 });

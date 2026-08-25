@@ -5,6 +5,7 @@
 
 export { SQLiteGraphStore } from './storage/SQLiteGraphStore.js';
 export { SQLiteMemoryStore } from './storage/SQLiteMemoryStore.js';
+export { SnapshotBackedIndexingMemory } from './storage/SnapshotBackedIndexingMemory.js';
 export { SQLiteLexiconStore } from './storage/SQLiteLexiconStore.js';
 export { FileVectorIndex } from './storage/FileVectorIndex.js';
 export { CachedMemoryStore } from './storage/cached/CachedMemoryStore.js';
@@ -36,7 +37,14 @@ export { Neo4jVectorIndex } from './storage/neo4j/Neo4jVectorIndex.js';
 export { Neo4jMemoryStore } from './storage/neo4j/Neo4jMemoryStore.js';
 export { Neo4jGraphProjection } from './storage/neo4j/Neo4jGraphProjection.js';
 export { Neo4jLexicalRetriever } from './storage/neo4j/Neo4jLexicalRetriever.js';
-export { AiraGraphDbNativeClient } from './storage/aira-graphdb/NativeClient.js';
+export {
+  AiraGraphDbNativeClient,
+  type AiraGraphDbRpcClient,
+  type AiraGraphDbTrafficEvent,
+  type AiraGraphDbTrafficObserver,
+  type NativeRequestLimits,
+} from './storage/aira-graphdb/NativeClient.js';
+export { AiraGraphDbIndexingMemory } from './storage/aira-graphdb/AiraGraphDbIndexingMemory.js';
 export {
   AiraGraphDbGraphStore,
   AiraGraphDbVectorIndex,

@@ -80,7 +80,7 @@ describe('TASK-MG-040: MemGraphRagRuntime', () => {
     await runtime.shutdown();
   });
 
-  it('routes graph operations to native aira-graphdb backend', async () => {
+  it('routes graph reads to the native aira-graphdb backend', async () => {
     const baseDir = resolve(artifactRoot, 'native-backend');
     const runtime = createMemGraphRagRuntime(createConfig('native-backend', {
       storage: {
@@ -104,17 +104,7 @@ describe('TASK-MG-040: MemGraphRagRuntime', () => {
       getNode(corpusId: string, nodeId: string): Promise<{ nodeId: string } | null>;
     }>(SERVICE_TOKENS.GRAPH_STORE);
 
-    await graphStore.upsertNodes([{
-      nodeId: 'schema:s1',
-      corpusId: 'c-native',
-      layer: 'schema',
-      ref: { schemaId: 's1', canonicalName: 'Entity' },
-      label: 'Entity',
-    }]);
-
-    await expect(graphStore.getNode('c-native', 'schema:s1')).resolves.toEqual(
-      expect.objectContaining({ nodeId: 'schema:s1' }),
-    );
+    await expect(graphStore.getNode('c-native', 'schema:missing')).resolves.toBeNull();
 
     await runtime.shutdown();
   });

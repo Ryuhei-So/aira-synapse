@@ -58,6 +58,7 @@ describe('TASK-AGDB-038 vector/lexical compatibility', () => {
         { id: 'd3', corpusId: CORPUS_ID, namespace: 'fact' as const, values: [0, 1, 0], metadata: { documentId: 'doc-3' } },
       ];
       await baseline.vectorIndex.upsert(vectors);
+      await candidate.batch.begin();
       await candidate.vectorIndex.upsert(vectors);
 
       const baselineHits = await baseline.vectorIndex.search({
@@ -81,6 +82,7 @@ describe('TASK-AGDB-038 vector/lexical compatibility', () => {
         { threshold: 0.1, scoreRoundingDecimals: 6, thresholdEpsilon: 0.000001 },
       );
       expect(comparison.matchRate).toBe(1);
+      await candidate.batch.commit();
     } finally {
       await baseline.close();
       await candidate.close();
@@ -103,6 +105,7 @@ describe('TASK-AGDB-038 vector/lexical compatibility', () => {
     const byPassageId = new Map(passages.map((p) => [p.passageId, p]));
 
     try {
+      await candidate.batch.begin();
       await candidate.lexicalRetriever.indexPassages(CORPUS_ID, passages);
       const hits = await candidate.lexicalRetriever.search(CORPUS_ID, 'graph retrieval', 2);
       const lexicalRows = hits.map((hit) => {
@@ -117,6 +120,7 @@ describe('TASK-AGDB-038 vector/lexical compatibility', () => {
 
       evaluator.assertLexicalSchemaAndSort(lexicalRows);
       expect(lexicalRows.length).toBeGreaterThan(0);
+      await candidate.batch.commit();
     } finally {
       await candidate.close();
       rmSync(dir, { recursive: true, force: true });

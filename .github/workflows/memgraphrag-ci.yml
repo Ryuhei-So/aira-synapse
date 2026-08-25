@@ -66,8 +66,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       AIRA_GRAPHDB_REPO_PATH: ${{ github.workspace }}/aira-graphdb
-      AIRA_GRAPHDB_EXPECTED_SHA: 164092aa47f39330c0c771495d9d42e4e935e41b
-      AIRA_GRAPHDB_NATIVE_CMD: ${{ github.workspace }}/aira-graphdb/target/release/aira-graphdb-native
+      AIRA_GRAPHDB_EXPECTED_SHA: a5e25c008a704363a323782fa6571f07a47f9975
+      AIRA_GRAPHDB_NATIVE_CMD: node ${{ github.workspace }}/packages/memgraphrag/scripts/native-transaction-owner.test-fixture.mjs ${{ github.workspace }}/aira-graphdb/target/release/aira-graphdb-native
     steps:
       # The anchor verifier checks the reviewed 8414946 Git object. Keep full history;
       # a shallow checkout must fail closed when that exact object is unavailable.
@@ -77,7 +77,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Ryuhei-So/aira-graphdb
-          ref: 164092aa47f39330c0c771495d9d42e4e935e41b
+          ref: a5e25c008a704363a323782fa6571f07a47f9975
           path: aira-graphdb
       - uses: actions/setup-node@v4
         with:
@@ -96,8 +96,8 @@ jobs:
     needs: test
     env:
       AIRA_GRAPHDB_REPO_PATH: ${{ github.workspace }}/aira-graphdb
-      AIRA_GRAPHDB_EXPECTED_SHA: 164092aa47f39330c0c771495d9d42e4e935e41b
-      AIRA_GRAPHDB_NATIVE_CMD: ${{ github.workspace }}/aira-graphdb/target/release/aira-graphdb-native
+      AIRA_GRAPHDB_EXPECTED_SHA: a5e25c008a704363a323782fa6571f07a47f9975
+      AIRA_GRAPHDB_NATIVE_CMD: node ${{ github.workspace }}/packages/memgraphrag/scripts/native-transaction-owner.test-fixture.mjs ${{ github.workspace }}/aira-graphdb/target/release/aira-graphdb-native
     steps:
       # Coverage runs the same full test set, including the immutable anchor verifier.
       - uses: actions/checkout@v4
@@ -106,7 +106,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Ryuhei-So/aira-graphdb
-          ref: 164092aa47f39330c0c771495d9d42e4e935e41b
+          ref: a5e25c008a704363a323782fa6571f07a47f9975
           path: aira-graphdb
       - uses: actions/setup-node@v4
         with:

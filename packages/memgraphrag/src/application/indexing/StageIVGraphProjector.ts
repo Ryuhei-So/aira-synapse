@@ -57,12 +57,17 @@ function namespaceForNode(layer: GraphNode['layer']): VectorRecord<Readonly<Reco
   }
 }
 
-export async function projectGraph(
-  graphStore: IGraphStore,
+export interface GraphProjectionPlan {
+  readonly nodes: readonly GraphNode[];
+  readonly edges: readonly GraphEdge[];
+}
+
+/** Pure derivation so all fallible preparation can finish before persistence. */
+export function planGraphProjection(
   facts: readonly Fact[],
   schemas: readonly Schema[],
   passages: readonly Passage[],
-): Promise<{ readonly nodes: readonly GraphNode[]; readonly edges: readonly GraphEdge[] }> {
+): GraphProjectionPlan {
   const nodes: GraphNode[] = [
     ...schemas.map((schema) => ({
       nodeId: schemaNodeId(schema.schemaId),
@@ -168,9 +173,27 @@ export async function projectGraph(
     }
   }
 
-  await graphStore.upsertNodes(nodes);
-  await graphStore.upsertEdges(edges);
   return { nodes, edges };
+}
+
+export async function persistGraphProjection(
+  graphStore: IGraphStore,
+  plan: GraphProjectionPlan,
+): Promise<void> {
+  await graphStore.upsertNodes(plan.nodes);
+  await graphStore.upsertEdges(plan.edges);
+}
+
+/** Compatibility wrapper for callers that do not own a larger transaction. */
+export async function projectGraph(
+  graphStore: IGraphStore,
+  facts: readonly Fact[],
+  schemas: readonly Schema[],
+  passages: readonly Passage[],
+): Promise<GraphProjectionPlan> {
+  const plan = planGraphProjection(facts, schemas, passages);
+  await persistGraphProjection(graphStore, plan);
+  return plan;
 }
 
 export async function buildTypeBasedBridges(
@@ -250,8 +273,7 @@ export async function buildSimilarityBridges(
   return edges;
 }
 
-export async function upsertVectors(
-  vectorIndex: IVectorIndex,
+export async function buildVectorRecords(
   embeddingProvider: IEmbeddingProvider,
   items: readonly GraphNode[],
 ): Promise<readonly VectorRecord<Readonly<Record<string, unknown>>>[]> {
@@ -260,11 +282,25 @@ export async function upsertVectors(
   }
 
   const embeddings = await embeddingProvider.embed({ texts: items.map((item) => item.label) });
+  if (!Array.isArray(embeddings.vectors) || embeddings.vectors.length !== items.length) {
+    throw new Error('embedding provider returned the wrong vector count');
+  }
+  let dimensions: number | undefined;
+  for (const [index, vector] of embeddings.vectors.entries()) {
+    if (!Array.isArray(vector) || vector.length === 0
+      || vector.some((component) => !Number.isFinite(component))) {
+      throw new Error(`embedding vector[${index}] must be a non-empty finite number array`);
+    }
+    dimensions ??= vector.length;
+    if (vector.length !== dimensions) {
+      throw new Error('embedding provider returned inconsistent vector dimensions');
+    }
+  }
   const records = items.map((item, index) => ({
     id: item.nodeId,
     corpusId: item.corpusId,
     namespace: namespaceForNode(item.layer),
-    values: embeddings.vectors[index] ?? [],
+    values: embeddings.vectors[index]!,
     metadata: {
       nodeId: item.nodeId,
       documentId: 'metadata' in item.ref && typeof item.ref.metadata === 'object' && item.ref.metadata !== null
@@ -276,6 +312,24 @@ export async function upsertVectors(
     },
   }));
 
+  return records;
+}
+
+export async function persistVectorRecords(
+  vectorIndex: IVectorIndex,
+  records: readonly VectorRecord<Readonly<Record<string, unknown>>>[],
+): Promise<void> {
+  if (records.length === 0) return;
   await vectorIndex.upsert(records);
+}
+
+/** Compatibility wrapper for callers that do not own a larger transaction. */
+export async function upsertVectors(
+  vectorIndex: IVectorIndex,
+  embeddingProvider: IEmbeddingProvider,
+  items: readonly GraphNode[],
+): Promise<readonly VectorRecord<Readonly<Record<string, unknown>>>[]> {
+  const records = await buildVectorRecords(embeddingProvider, items);
+  await persistVectorRecords(vectorIndex, records);
   return records;
 }
