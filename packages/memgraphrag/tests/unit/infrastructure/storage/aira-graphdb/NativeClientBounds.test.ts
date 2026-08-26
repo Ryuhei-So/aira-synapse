@@ -3,7 +3,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { AiraGraphDbNativeClient } from '../../../../../src/infrastructure/storage/aira-graphdb/NativeClient.js';
+import {
+  AiraGraphDbNativeClient,
+  readAiraGraphDbNativeTerminationReceipt,
+} from '../../../../../src/infrastructure/storage/aira-graphdb/NativeClient.js';
 
 const temporaryDirectories: string[] = [];
 const originalCommand = process.env.AIRA_GRAPHDB_NATIVE_CMD;
@@ -99,7 +102,12 @@ describe.sequential('AiraGraphDbNativeClient physical frame bounds', () => {
       responseBytes: expect.any(Number),
     })]);
     expect(JSON.stringify(events)).not.toContain('pong');
+    const termination = readAiraGraphDbNativeTerminationReceipt(client);
     await client.close();
+    const result = await termination;
+    expect(result).toEqual({ kind: 'graceful_reaped' });
+    expect(Reflect.ownKeys(result)).toEqual(['kind']);
+    expect(Object.isFrozen(result)).toBe(true);
   });
 
   it('rejects an oversized request before writing it', async () => {

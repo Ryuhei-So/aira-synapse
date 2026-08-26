@@ -6,7 +6,10 @@
 import type { IGraphStore, IVectorIndex, IMemoryStore } from '../../../domain/storage/graphStore.js';
 import type { IIndexingMemory } from '../../../domain/storage/indexingMemory.js';
 import type { IGraphProjection, ILexicalRetriever } from '../../../domain/retrieval/ppr.js';
-import type { AiraGraphDbTrafficObserver } from '../aira-graphdb/NativeClient.js';
+import type {
+  AiraGraphDbTerminationResult,
+  AiraGraphDbTrafficObserver,
+} from '../aira-graphdb/NativeClient.js';
 
 export type StorageBackend = 'sqlite' | 'ladybug' | 'neo4j' | 'aira-graphdb';
 
@@ -55,6 +58,41 @@ export interface StorageOptions {
   readonly sqlite?: SQLiteStorageOptions;
   readonly neo4j?: Neo4jStorageOptions;
   readonly airaGraphDb?: AiraGraphDbStorageOptions;
+}
+
+type AiraGraphDbAcquisitionCleanupError = Error & {
+  readonly code: 'AIRA_GRAPHDB_ACQUISITION_CLEANUP_FAILED';
+  readonly termination: AiraGraphDbTerminationResult;
+};
+
+const AIRA_GRAPHDB_ADAPTER_TERMINATIONS = new WeakMap<
+  object,
+  Promise<AiraGraphDbTerminationResult>
+>();
+
+function acquisitionCleanupError(
+  termination: AiraGraphDbTerminationResult,
+): AiraGraphDbAcquisitionCleanupError {
+  const name = 'AiraGraphDbAcquisitionCleanupError';
+  const message = 'aira-graphdb adapter acquisition cleanup failed';
+  const error = new Error(message) as AiraGraphDbAcquisitionCleanupError;
+  Object.defineProperties(error, {
+    name: { value: name, configurable: true },
+    code: { value: 'AIRA_GRAPHDB_ACQUISITION_CLEANUP_FAILED', enumerable: true },
+    stack: { value: `${name}: ${message}`, configurable: true },
+    termination: { value: termination, enumerable: true },
+  });
+  return Object.freeze(error);
+}
+
+/** Package-internal passive receipt for the exact returned GraphDB adapter object. */
+export function readAiraGraphDbAdapterTerminationReceipt(
+  adapters: unknown,
+): Promise<AiraGraphDbTerminationResult> | undefined {
+  if ((typeof adapters !== 'object' || adapters === null) && typeof adapters !== 'function') {
+    return undefined;
+  }
+  return AIRA_GRAPHDB_ADAPTER_TERMINATIONS.get(adapters);
 }
 
 /**
@@ -210,7 +248,10 @@ async function createSQLiteAdapters(
 export async function createAiraGraphDbAdapters(
   opts: AiraGraphDbStorageOptions,
 ): Promise<StorageAdapters> {
-  const { AiraGraphDbNativeClient } = await import('../aira-graphdb/NativeClient.js');
+  const {
+    AiraGraphDbNativeClient,
+    readAiraGraphDbNativeTerminationReceipt,
+  } = await import('../aira-graphdb/NativeClient.js');
   const { AiraGraphDbIndexingMemory } = await import('../aira-graphdb/AiraGraphDbIndexingMemory.js');
   const {
     AiraGraphDbGraphStore,
@@ -221,18 +262,30 @@ export async function createAiraGraphDbAdapters(
   } = await import('../aira-graphdb/AiraGraphDbAdapters.js');
 
   const client = new AiraGraphDbNativeClient(opts.dbPath, opts.onTraffic);
+  const termination = readAiraGraphDbNativeTerminationReceipt(client);
+  const close = client.close.bind(client);
   let indexingMemory: IIndexingMemory;
   try {
     indexingMemory = await AiraGraphDbIndexingMemory.create(client);
   } catch (error) {
-    await client.close();
+    const closeSettlement = Promise.resolve().then(close);
+    const [terminationResult] = await Promise.all([
+      termination,
+      closeSettlement.then(
+        () => undefined,
+        () => undefined,
+      ),
+    ]);
+    if (terminationResult.kind !== 'graceful_reaped') {
+      throw acquisitionCleanupError(terminationResult);
+    }
     throw error;
   }
   const batch = {
     begin: async () => { await client.request('batch_begin', {}); },
     commit: async () => { await client.request('batch_commit', {}); },
     // Disconnect only. Literature Hub remains the sole recovery/commit owner.
-    abandon: async () => { await client.close(); },
+    abandon: close,
   };
   const graphStore = new AiraGraphDbGraphStore(client);
   const vectorIndex = new AiraGraphDbVectorIndex(client);
@@ -240,7 +293,7 @@ export async function createAiraGraphDbAdapters(
   const graphProjection = new AiraGraphDbGraphProjection(client);
   const lexicalRetriever = new AiraGraphDbLexicalRetriever(client);
 
-  return {
+  const adapters: StorageAdapters = {
     batch,
     graphStore,
     vectorIndex,
@@ -248,10 +301,10 @@ export async function createAiraGraphDbAdapters(
     indexingMemory,
     graphProjection,
     lexicalRetriever,
-    close: async () => {
-      await client.close();
-    },
+    close,
   };
+  AIRA_GRAPHDB_ADAPTER_TERMINATIONS.set(adapters, termination);
+  return adapters;
 }
 
 /**

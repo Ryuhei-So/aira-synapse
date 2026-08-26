@@ -189,7 +189,7 @@ async function main() {
   }
   console.log(`  Total synced: ${totalSynced}`);
 
-  client.close();
+  await client.close();
 }
 
 main().catch(e => { console.error(e); process.exit(1); });
