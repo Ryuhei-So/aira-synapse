@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MemGraphRagConfig } from '../../../../src/infrastructure/config/index.js';
 
+// Temporary CI synchronization marker; removed before the qualifying run.
 const state = vi.hoisted(() => ({
   adapterClose: vi.fn().mockResolvedValue(undefined),
   createAiraGraphDbAdapters: vi.fn(),
