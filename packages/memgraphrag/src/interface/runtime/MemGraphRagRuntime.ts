@@ -310,6 +310,7 @@ class RuntimeImpl implements MemGraphRagRuntime {
     const sqlitePath = resolve(process.cwd(), this.config.storage.sqlitePath);
     const vectorIndexDir = resolve(process.cwd(), this.config.storage.vectorIndexDir);
     const backend = resolveBackend(this.config.storage.backend);
+    const graphDbRuntime = backend === 'aira-graphdb';
     mkdirSync(dirname(sqlitePath), { recursive: true });
     if (backend === 'sqlite') {
       mkdirSync(vectorIndexDir, { recursive: true });
@@ -327,7 +328,7 @@ class RuntimeImpl implements MemGraphRagRuntime {
     let graphProjection: IGraphProjection;
     let storageBatch: StorageAdapters['batch'];
 
-    if (backend === 'aira-graphdb') {
+    if (graphDbRuntime) {
       const storageAdapters: StorageAdapters = await createAiraGraphDbAdapters({
         dbPath: `${sqlitePath}.aira-graphdb.json`,
       });
@@ -386,9 +387,13 @@ class RuntimeImpl implements MemGraphRagRuntime {
         llmProvider,
         embeddingProvider,
         nlpExtractor,
-        enableDictionaryIndexing: true,
-        dictionary: sharedLexiconStore as ITermDictionary,
-        dictionaryFactory: (cid: string) => new SQLiteLexiconStore(this.db!, cid) as ITermDictionary,
+        ...(graphDbRuntime
+          ? { enableDictionaryIndexing: false }
+          : {
+            enableDictionaryIndexing: true,
+            dictionary: sharedLexiconStore as ITermDictionary,
+            dictionaryFactory: (cid: string) => new SQLiteLexiconStore(this.db!, cid) as ITermDictionary,
+          }),
       });
     const jobRunner = this.jobRunner = new AsyncJobRunner(
       this.db,

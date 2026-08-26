@@ -37,7 +37,19 @@ function provider(text: string | readonly string[]): ILLMProvider {
 function mutationBoundaryHarness(
   llmProvider = provider(extractionResponse()),
   storedRelation = 'authors',
+  options: {
+    readonly storedFrequency?: number;
+    readonly storedState?: 'pending' | 'stable';
+    readonly trapStageVAccess?: boolean;
+  } = {},
 ) {
+  const mutationTrace: string[] = [];
+  const dictionaryRead = vi.fn(() => {
+    throw new Error('dictionary must not be read when Stage V is disabled');
+  });
+  const dictionaryFactoryRead = vi.fn(() => {
+    throw new Error('dictionaryFactory must not be read when Stage V is disabled');
+  });
   const db = openDatabase(':memory:');
   runMigrations(db);
   db.prepare('INSERT INTO corpora (corpus_id, name, description) VALUES (?, ?, ?)')
@@ -46,29 +58,43 @@ function mutationBoundaryHarness(
   const storedSchema = {
     schemaId: `schema:${storedCanonicalKey}`, corpusId: 'c1', headType: 'person',
     relation: normalizeSchemaTerm(storedRelation), tailType: 'paper', canonicalKey: storedCanonicalKey,
-    aliases: [], frequency: 1, state: 'pending' as const, stabilizationThreshold: 2,
+    aliases: [], frequency: options.storedFrequency ?? 1,
+    state: options.storedState ?? 'pending', stabilizationThreshold: 2,
     factIds: [], sourceDocumentIds: ['old-doc'], version: 1,
     createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
   };
   const indexingMemory = {
     getSchemasByIds: vi.fn().mockResolvedValue([storedSchema]),
     getActiveFacts: vi.fn().mockResolvedValue([]),
-    preflightMutation: vi.fn(),
-    activateFactsBySchemaIds: vi.fn().mockResolvedValue(1),
-    upsertDelta: vi.fn().mockResolvedValue(undefined),
+    preflightMutation: vi.fn(() => { mutationTrace.push('preflight'); }),
+    activateFactsBySchemaIds: vi.fn().mockImplementation(async () => {
+      mutationTrace.push('activation');
+      return 1;
+    }),
+    upsertDelta: vi.fn().mockImplementation(async () => {
+      mutationTrace.push('memory');
+    }),
   };
   const graphStore = {
-    upsertNodes: vi.fn().mockResolvedValue(undefined),
-    upsertEdges: vi.fn().mockResolvedValue(undefined),
+    upsertNodes: vi.fn().mockImplementation(async () => {
+      mutationTrace.push('graph_nodes');
+    }),
+    upsertEdges: vi.fn().mockImplementation(async () => {
+      mutationTrace.push('graph_edges');
+    }),
   };
-  const vectorIndex = { upsert: vi.fn().mockResolvedValue(undefined) };
+  const vectorIndex = {
+    upsert: vi.fn().mockImplementation(async () => {
+      mutationTrace.push('vector');
+    }),
+  };
   const embeddingProvider = {
     embed: vi.fn().mockImplementation(async ({ texts }: { texts: readonly string[] }) => ({
       vectors: texts.map(() => [1]), model: 'test', cached: false,
     })),
     healthCheck: vi.fn(),
   };
-  const pipeline = new FullDocumentIndexingPipeline({
+  const pipelineOptions = {
     db,
     graphStore: graphStore as never,
     vectorIndex: vectorIndex as never,
@@ -80,12 +106,30 @@ function mutationBoundaryHarness(
       healthCheck: vi.fn(),
     } as never,
     enableDictionaryIndexing: false,
-  });
+  };
+  if (options.trapStageVAccess) {
+    Object.setPrototypeOf(pipelineOptions, Object.create(Object.prototype, {
+      dictionary: { configurable: true, get: dictionaryRead },
+      dictionaryFactory: { configurable: true, get: dictionaryFactoryRead },
+    }));
+  }
+  const pipeline = new FullDocumentIndexingPipeline(pipelineOptions);
   const run = (markdown = 'Alice authors Paper A.') => pipeline.processDocument('c1', {
     documentId: 'doc-boundary', markdown, title: 'Paper',
     sourceUrl: 'https://example.com/paper', language: 'en',
   });
-  return { db, run, indexingMemory, graphStore, vectorIndex, embeddingProvider };
+  return {
+    db,
+    run,
+    indexingMemory,
+    graphStore,
+    vectorIndex,
+    embeddingProvider,
+    mutationTrace,
+    pipelineOptions,
+    dictionaryRead,
+    dictionaryFactoryRead,
+  };
 }
 
 describe('indexing and provider behavioral boundaries', () => {
@@ -386,6 +430,59 @@ describe('indexing and provider behavioral boundaries', () => {
     db.close();
   });
 
+  it.each([
+    {
+      name: 'newly stable schema',
+      harnessOptions: { storedFrequency: 1, storedState: 'pending' as const },
+      expectedTrace: ['preflight', 'memory', 'activation', 'graph_nodes', 'graph_edges', 'vector'],
+    },
+    {
+      name: 'already stable schema',
+      harnessOptions: { storedFrequency: 2, storedState: 'stable' as const },
+      expectedTrace: ['preflight', 'memory', 'graph_nodes', 'graph_edges', 'vector'],
+    },
+  ])('does not observe Stage V inputs and preserves the core mutation order for $name', async ({
+    harnessOptions,
+    expectedTrace,
+  }) => {
+    const harness = mutationBoundaryHarness(
+      provider(extractionResponse()),
+      'authors',
+      { ...harnessOptions, trapStageVAccess: true },
+    );
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    try {
+      await expect(harness.run()).resolves.toMatchObject({
+        processedDocumentId: 'doc-boundary',
+        addedNodes: expect.any(Number),
+        addedEdges: expect.any(Number),
+        conflicts: 0,
+      });
+
+      expect(Object.getOwnPropertyDescriptor(harness.pipelineOptions, 'dictionary')).toBeUndefined();
+      expect(Object.getOwnPropertyDescriptor(harness.pipelineOptions, 'dictionaryFactory')).toBeUndefined();
+      expect(harness.dictionaryRead).not.toHaveBeenCalled();
+      expect(harness.dictionaryFactoryRead).not.toHaveBeenCalled();
+      expect(harness.mutationTrace).toEqual(expectedTrace);
+      expect(harness.graphStore.upsertNodes).toHaveBeenCalledOnce();
+      expect(harness.graphStore.upsertEdges).toHaveBeenCalledOnce();
+      expect(harness.vectorIndex.upsert).toHaveBeenCalledOnce();
+      expect(log.mock.calls.flat().some((value) => String(value).includes('Stage V:'))).toBe(false);
+
+      for (const table of [
+        'term_dictionary',
+        'thesaurus_relations',
+        'dictionary_candidates',
+        'lexicon_evidence',
+      ]) {
+        expect(harness.db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get()).toEqual({ count: 0 });
+      }
+    } finally {
+      log.mockRestore();
+      harness.db.close();
+    }
+  });
+
   it('keeps deterministic mutation preflight failures outside the fatal boundary', async () => {
     const harness = mutationBoundaryHarness();
     harness.indexingMemory.preflightMutation.mockImplementation(() => {
@@ -456,6 +553,9 @@ describe('indexing and provider behavioral boundaries', () => {
     ['graph projection', (harness: ReturnType<typeof mutationBoundaryHarness>) => {
       harness.graphStore.upsertNodes.mockRejectedValue(new Error('graph WAL failed'));
     }, 'upsertNodes'],
+    ['graph edge projection', (harness: ReturnType<typeof mutationBoundaryHarness>) => {
+      harness.graphStore.upsertEdges.mockRejectedValue(new Error('graph edge WAL failed'));
+    }, 'upsertEdges'],
     ['vector persistence', (harness: ReturnType<typeof mutationBoundaryHarness>) => {
       harness.vectorIndex.upsert.mockRejectedValue(new Error('vector WAL failed'));
     }, 'vectorUpsert'],
