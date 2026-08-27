@@ -148,6 +148,62 @@ describe('document memory mutation plan', () => {
     expect(facts[0]?.factId).toContain(':authors:');
   });
 
+  it('keeps facts with the same entities and relation distinct across canonical schemas', () => {
+    const sourcePassage = passage('p0');
+    const organizationSchema: Schema = {
+      ...schema(),
+      schemaId: 'schema:organization::authors::report',
+      headType: 'Organization',
+      tailType: 'Report',
+      canonicalKey: 'organization::authors::report',
+    };
+    const records = [
+      record(sourcePassage, candidate(0.9)),
+      record(sourcePassage, candidate(0.8, 'Alice', {
+        headType: 'Organization',
+        tailType: 'Report',
+      })),
+    ];
+
+    const facts = buildDocumentFacts(
+      CORPUS_ID,
+      DOCUMENT_ID,
+      records,
+      [schema(), organizationSchema],
+      TS,
+    );
+    const repeated = buildDocumentFacts(
+      CORPUS_ID,
+      DOCUMENT_ID,
+      records,
+      [schema(), organizationSchema],
+      TS,
+    );
+
+    expect(facts).toHaveLength(2);
+    expect(new Set(facts.map((fact) => fact.factId)).size).toBe(2);
+    expect(facts.map((fact) => [fact.schemaId, fact.factId])).toEqual([
+      [schema().schemaId, expect.stringContaining(`:${schema().schemaId}:`)],
+      [organizationSchema.schemaId, expect.stringContaining(`:${organizationSchema.schemaId}:`)],
+    ]);
+    expect(repeated.map((fact) => fact.factId)).toEqual(facts.map((fact) => fact.factId));
+
+    const delta = buildDocumentMemoryDelta(
+      CORPUS_ID,
+      [schema(), organizationSchema],
+      facts,
+      [sourcePassage],
+      TS,
+    );
+    for (const fact of facts) {
+      const associatedSchema = delta.schemas.find((item) => item.schemaId === fact.schemaId);
+      expect(associatedSchema?.factIds).toContain(fact.factId);
+      expect(delta.schemas
+        .filter((item) => item.schemaId !== fact.schemaId)
+        .flatMap((item) => item.factIds)).not.toContain(fact.factId);
+    }
+  });
+
   it('fails closed when a sanitized ID collision carries different meaning', () => {
     const sourcePassage = passage('p0');
     expect(() => buildDocumentFacts(
