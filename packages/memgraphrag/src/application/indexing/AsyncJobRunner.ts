@@ -2,6 +2,7 @@ import type Database from 'better-sqlite3';
 import type { IMemoryStore } from '../../domain/storage/index.js';
 import type { JobError } from '../corpus/corpusDtos.js';
 import type { IndexDocumentsCommand } from './IndexingService.js';
+import { JOB_ERROR_CONTRACT } from './jobErrorContract.js';
 
 export interface ProcessDocumentResult {
   readonly processedDocumentId: string;
@@ -35,8 +36,6 @@ export class DocumentMutationError extends Error {
 }
 
 const BATCH_COMMIT_EVERY_DOCS = 15;
-const DOCUMENT_PROCESSING_FAILED = 'DOCUMENT_PROCESSING_FAILED';
-const JOB_EXECUTION_FAILED = 'JOB_EXECUTION_FAILED';
 
 export class AsyncJobRunner {
   private readonly jobs = new Map<string, IndexDocumentsCommand>();
@@ -156,7 +155,7 @@ export class AsyncJobRunner {
             ? `${error.message}\n${(error.stack ?? '').split('\n').slice(1, 4).join('\n')}`
             : String(error);
           documentErrors.push({
-            code: DOCUMENT_PROCESSING_FAILED,
+            code: JOB_ERROR_CONTRACT.documentError.code,
             message,
             documentId: document.documentId,
           });
@@ -219,7 +218,7 @@ export class AsyncJobRunner {
         ? `${failure.message}\n${(failure.stack ?? '').split('\n').slice(1, 6).join('\n')}`
         : String(failure);
       const jobError: JobError = {
-        code: JOB_EXECUTION_FAILED,
+        code: JOB_ERROR_CONTRACT.ownerError.code,
         message,
       };
       this.db.prepare(
