@@ -11,6 +11,7 @@ import {
 import { DefaultIndexingService } from '../../../../src/application/indexing/IndexingService.js';
 import type { IndexDocumentsCommand } from '../../../../src/application/indexing/IndexingService.js';
 import type { DeleteDocumentResult } from '../../../../src/application/indexing/DeleteDocumentService.js';
+import { JOB_ERROR_CONTRACT } from '../../../../src/application/indexing/jobErrorContract.js';
 
 function command(): IndexDocumentsCommand {
   return {
@@ -142,7 +143,7 @@ describe('TASK-MG-035: AsyncJobRunner and DefaultIndexingService', () => {
     expect(row.processed).toBe(0);
     expect(row.total).toBe(1);
     expect(JSON.parse(row.errors_json)).toEqual([{
-      code: 'DOCUMENT_PROCESSING_FAILED',
+      code: JOB_ERROR_CONTRACT.documentError.code,
       message: expect.stringContaining('boom'),
       documentId: 'doc-1',
     }]);
@@ -208,7 +209,7 @@ describe('TASK-MG-035: AsyncJobRunner and DefaultIndexingService', () => {
     const row = db.prepare('SELECT status, errors_json FROM jobs WHERE job_id = ?').get('job-1') as { status: string; errors_json: string };
     expect(row.status).toBe('failed');
     expect(JSON.parse(row.errors_json)).toEqual([{
-      code: 'JOB_EXECUTION_FAILED',
+      code: JOB_ERROR_CONTRACT.ownerError.code,
       message: expect.stringContaining('document mutation failed after persistence began'),
     }]);
     expect(storageBatch.commit).not.toHaveBeenCalled();
@@ -230,7 +231,7 @@ describe('TASK-MG-035: AsyncJobRunner and DefaultIndexingService', () => {
     const row = db.prepare('SELECT status, errors_json FROM jobs WHERE job_id = ?').get('job-1') as { status: string; errors_json: string };
     expect(row.status).toBe('failed');
     expect(JSON.parse(row.errors_json)).toEqual([{
-      code: 'JOB_EXECUTION_FAILED',
+      code: JOB_ERROR_CONTRACT.ownerError.code,
       message: expect.stringContaining('batch boom'),
     }]);
     expect(pipeline.processDocument).not.toHaveBeenCalled();
@@ -258,7 +259,7 @@ describe('TASK-MG-035: AsyncJobRunner and DefaultIndexingService', () => {
     expect(row.status).toBe('failed');
     expect(row.processed).toBe(0);
     expect(JSON.parse(row.errors_json)).toEqual([{
-      code: 'JOB_EXECUTION_FAILED',
+      code: JOB_ERROR_CONTRACT.ownerError.code,
       message: expect.stringContaining('checkpoint boom'),
     }]);
     expect(storageBatch.commit).not.toHaveBeenCalled();
@@ -281,7 +282,7 @@ describe('TASK-MG-035: AsyncJobRunner and DefaultIndexingService', () => {
     expect(row.status).toBe('failed');
     expect(row.processed).toBe(1);
     expect(JSON.parse(row.errors_json)).toEqual([{
-      code: 'JOB_EXECUTION_FAILED',
+      code: JOB_ERROR_CONTRACT.ownerError.code,
       message: expect.stringContaining('final commit boom'),
     }]);
     expect(storageBatch.commit).toHaveBeenCalledTimes(1);

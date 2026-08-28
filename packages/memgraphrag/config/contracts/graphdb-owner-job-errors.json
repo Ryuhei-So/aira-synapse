@@ -1,0 +1,13 @@
+{
+  "contract": "graphdb-owner-job-errors",
+  "version": 1,
+  "ownerError": {
+    "code": "JOB_EXECUTION_FAILED",
+    "message": "job failed after the owner boundary"
+  },
+  "documentError": {
+    "code": "DOCUMENT_PROCESSING_FAILED",
+    "documentId": "doc_0123456789ab",
+    "message": "document processing failed before mutation"
+  }
+}
