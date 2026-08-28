@@ -8,6 +8,7 @@ export interface ProcessDocumentResult {
   readonly addedNodes: number;
   readonly addedEdges: number;
   readonly conflicts: number;
+  readonly memoryDeltaMutationCount?: number;
 }
 
 export interface DocumentIndexingPipeline {
@@ -116,6 +117,7 @@ export class AsyncJobRunner {
       let addedNodes = 0;
       let addedEdges = 0;
       let conflicts = 0;
+      let chunkedMemoryDeltaDocuments = 0;
       const documentErrors: JobError[] = [];
 
       for (const document of command.documents) {
@@ -165,6 +167,9 @@ export class AsyncJobRunner {
         addedNodes += result.addedNodes;
         addedEdges += result.addedEdges;
         conflicts += result.conflicts;
+        if ((result.memoryDeltaMutationCount ?? 0) > 1) {
+          chunkedMemoryDeltaDocuments += 1;
+        }
 
         await this.memoryStore.saveCheckpoint({
           jobId,
@@ -192,7 +197,7 @@ export class AsyncJobRunner {
         `UPDATE jobs SET status = 'completed', processed = ?, summary = ?, errors_json = ?, updated_at = ? WHERE job_id = ?`,
       ).run(
         processed.size,
-        JSON.stringify({ addedNodes, addedEdges, conflictCount: conflicts, skippedCount: command.documents.length - processed.size, documentErrorCount: documentErrors.length }),
+        JSON.stringify({ addedNodes, addedEdges, conflictCount: conflicts, skippedCount: command.documents.length - processed.size, documentErrorCount: documentErrors.length, chunkedMemoryDeltaDocuments }),
         JSON.stringify(documentErrors),
         new Date().toISOString(),
         jobId,

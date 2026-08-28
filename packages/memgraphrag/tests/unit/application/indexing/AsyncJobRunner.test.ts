@@ -44,16 +44,17 @@ describe('TASK-MG-035: AsyncJobRunner and DefaultIndexingService', () => {
   });
 
   it('registers, enqueues, and executes a job document pipeline', async () => {
-    const pipeline = { processDocument: vi.fn().mockResolvedValue({ processedDocumentId: 'doc-1', addedNodes: 3, addedEdges: 2, conflicts: 0 }) };
+    const pipeline = { processDocument: vi.fn().mockResolvedValue({ processedDocumentId: 'doc-1', addedNodes: 3, addedEdges: 2, conflicts: 0, memoryDeltaMutationCount: 2 }) };
     const runner = new AsyncJobRunner(db, memoryStore, pipeline);
     runner.registerJob('job-1', command());
     await runner.enqueue('job-1');
     await runner.execute('job-1');
 
-    const row = db.prepare('SELECT status, processed, total FROM jobs WHERE job_id = ?').get('job-1') as { status: string; processed: number; total: number };
+    const row = db.prepare('SELECT status, processed, total, summary FROM jobs WHERE job_id = ?').get('job-1') as { status: string; processed: number; total: number; summary: string };
     expect(pipeline.processDocument).toHaveBeenCalledTimes(1);
     expect(memoryStore.saveCheckpoint).toHaveBeenCalledWith(expect.objectContaining({ jobId: 'job-1', processedDocumentIds: ['doc-1'] }));
-    expect(row).toEqual({ status: 'completed', processed: 1, total: 1 });
+    expect(row).toEqual(expect.objectContaining({ status: 'completed', processed: 1, total: 1 }));
+    expect(JSON.parse(row.summary).chunkedMemoryDeltaDocuments).toBe(1);
   });
 
   it('commits the backend before the durable completed status', async () => {
@@ -148,6 +149,7 @@ describe('TASK-MG-035: AsyncJobRunner and DefaultIndexingService', () => {
     expect(JSON.parse(row.summary)).toEqual(expect.objectContaining({
       skippedCount: 1,
       documentErrorCount: 1,
+      chunkedMemoryDeltaDocuments: 0,
     }));
     expect(storageBatch.commit).toHaveBeenCalledTimes(1);
   });

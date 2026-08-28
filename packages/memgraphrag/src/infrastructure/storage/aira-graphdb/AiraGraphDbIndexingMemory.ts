@@ -8,11 +8,11 @@ import {
   type IndexingSchemaRequest,
 } from '../../../domain/storage/indexingMemory.js';
 import {
+  planMutationChunks,
   validateActivatedResult,
   validateActivationRequest,
   validateActiveFactRequest,
   validateActiveFactResponse,
-  validateMutationPlan,
   validateSchemaRequest,
   validateSchemaResponse,
 } from '../indexingMemoryContract.js';
@@ -20,6 +20,10 @@ import type {
   AiraGraphDbRpcClient,
   NativeRequestLimits,
 } from './NativeClient.js';
+
+interface IndexingMemoryCapabilities {
+  readonly maxDeltaItemsPerSection: number;
+}
 
 type JsonObject = Record<string, unknown>;
 
@@ -48,7 +52,7 @@ function requireObject(value: unknown, name: string): JsonObject {
   return value;
 }
 
-function validateProtocolInfo(value: unknown): void {
+function validateProtocolInfo(value: unknown): IndexingMemoryCapabilities {
   const protocol = requireObject(value, 'protocol_info result');
   if (protocol.protocolVersion !== PROTOCOL_VERSION) {
     throw new Error(`unsupported aira-graphdb protocolVersion: ${String(protocol.protocolVersion)}`);
@@ -92,15 +96,21 @@ function validateProtocolInfo(value: unknown): void {
       throw new Error(`aira-graphdb method contract mismatch for ${name}`);
     }
   }
+  return {
+    maxDeltaItemsPerSection: indexing.maxDeltaItemsPerSection as number,
+  };
 }
 
 export class AiraGraphDbIndexingMemory implements IIndexingMemory {
-  private constructor(private readonly client: AiraGraphDbRpcClient) {}
+  private constructor(
+    private readonly client: AiraGraphDbRpcClient,
+    private readonly capabilities: IndexingMemoryCapabilities,
+  ) {}
 
   public static async create(client: AiraGraphDbRpcClient): Promise<AiraGraphDbIndexingMemory> {
     const protocol = await client.request<unknown>('protocol_info', {}, PROTOCOL_LIMITS);
-    validateProtocolInfo(protocol);
-    return new AiraGraphDbIndexingMemory(client);
+    const capabilities = validateProtocolInfo(protocol);
+    return new AiraGraphDbIndexingMemory(client, capabilities);
   }
 
   public async getSchemasByIds(request: IndexingSchemaRequest) {
@@ -124,7 +134,7 @@ export class AiraGraphDbIndexingMemory implements IIndexingMemory {
   }
 
   public preflightMutation(plan: IndexingMemoryMutationPlan): void {
-    validateMutationPlan(plan);
+    planMutationChunks(plan, this.capabilities.maxDeltaItemsPerSection);
   }
 
   public async activateFactsBySchemaIds(request: ActivateFactsRequest): Promise<number> {
@@ -137,11 +147,21 @@ export class AiraGraphDbIndexingMemory implements IIndexingMemory {
     return validateActivatedResult(response);
   }
 
-  public async upsertDelta(delta: IndexingMemoryDelta): Promise<void> {
-    validateMutationPlan({ delta });
-    const response = await this.client.request<unknown>('memory_upsert', delta, INDEXING_LIMITS);
-    if (response !== null) {
-      throw new Error('memory_upsert response must be null');
+  public async upsertDelta(delta: IndexingMemoryDelta): Promise<{ readonly mutationCount: number }> {
+    const plans = planMutationChunks(
+      { delta },
+      this.capabilities.maxDeltaItemsPerSection,
+    );
+    for (const plan of plans) {
+      const response = await this.client.request<unknown>(
+        'memory_upsert',
+        plan.delta,
+        INDEXING_LIMITS,
+      );
+      if (response !== null) {
+        throw new Error('memory_upsert response must be null');
+      }
     }
+    return { mutationCount: plans.length };
   }
 }

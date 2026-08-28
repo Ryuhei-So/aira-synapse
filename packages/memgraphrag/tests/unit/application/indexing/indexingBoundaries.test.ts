@@ -73,6 +73,7 @@ function mutationBoundaryHarness(
     }),
     upsertDelta: vi.fn().mockImplementation(async () => {
       mutationTrace.push('memory');
+      return { mutationCount: 1 };
     }),
   };
   const graphStore = {
@@ -358,7 +359,7 @@ describe('indexing and provider behavioral boundaries', () => {
       getActiveFacts: vi.fn().mockResolvedValue([]),
       preflightMutation: vi.fn(),
       activateFactsBySchemaIds: vi.fn().mockResolvedValue(1),
-      upsertDelta: vi.fn().mockResolvedValue(undefined),
+      upsertDelta: vi.fn().mockResolvedValue({ mutationCount: 2 }),
     };
     const graphStore = {
       upsertNodes: vi.fn().mockResolvedValue(undefined),
@@ -404,7 +405,7 @@ describe('indexing and provider behavioral boundaries', () => {
       title: 'Paper',
       sourceUrl: 'https://example.com/paper',
       language: 'en',
-    })).resolves.toMatchObject({ processedDocumentId: 'doc-1', conflicts: 0 });
+    })).resolves.toMatchObject({ processedDocumentId: 'doc-1', conflicts: 0, memoryDeltaMutationCount: 2 });
 
     expect(indexingMemory.getSchemasByIds).toHaveBeenCalledOnce();
     expect(indexingMemory.getSchemasByIds).toHaveBeenCalledWith({

@@ -43,6 +43,11 @@ export interface IndexingMemoryMutationPlan {
   readonly activation?: ActivateFactsRequest;
 }
 
+export interface IndexingMemoryUpsertResult {
+  /** Number of bounded backend mutations used for this document delta. */
+  readonly mutationCount: number;
+}
+
 /**
  * Corpus-scoped, bounded memory operations used only by document indexing.
  * Full snapshots remain an IMemoryStore compatibility/query concern.
@@ -53,5 +58,5 @@ export interface IIndexingMemory {
   /** Pure validation of every input that may enter the mutation phase. */
   preflightMutation(plan: IndexingMemoryMutationPlan): void;
   activateFactsBySchemaIds(request: ActivateFactsRequest): Promise<number>;
-  upsertDelta(delta: IndexingMemoryDelta): Promise<void>;
+  upsertDelta(delta: IndexingMemoryDelta): Promise<IndexingMemoryUpsertResult | void>;
 }

@@ -52,6 +52,7 @@ export interface IndexingSummary {
   readonly addedEdges: number;
   readonly conflictCount: number;
   readonly skippedCount: number;
+  readonly chunkedMemoryDeltaDocuments?: number;
 }
 
 export interface JobSummary {

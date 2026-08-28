@@ -68,8 +68,9 @@ export class SnapshotBackedIndexingMemory implements IIndexingMemory {
     return activated;
   }
 
-  public async upsertDelta(delta: IndexingMemoryDelta): Promise<void> {
+  public async upsertDelta(delta: IndexingMemoryDelta): Promise<{ readonly mutationCount: number }> {
     validateMutationPlan({ delta });
     await this.store.save({ ...delta, schemaVersion: 1 });
+    return { mutationCount: 1 };
   }
 }
