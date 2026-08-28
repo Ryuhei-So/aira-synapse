@@ -13,6 +13,7 @@ import type {
 import type { MemorySnapshot } from '../../../domain/memory/globalMemory.js';
 import type { IGraphStore } from '../../../domain/storage/graphStore.js';
 import type { AiraGraphDbNativeClient } from './NativeClient.js';
+import { validateMutationPlan } from '../indexingMemoryContract.js';
 
 export class AiraGraphDbGraphStore implements IGraphStore {
   public constructor(private readonly client: AiraGraphDbNativeClient) {}
@@ -102,6 +103,15 @@ export class AiraGraphDbMemoryStore implements IMemoryStore {
   }
 
   public async save(snapshot: MemorySnapshot): Promise<void> {
+    const delta = {
+      corpusId: snapshot.corpusId,
+      passages: snapshot.passages ?? [],
+      facts: snapshot.facts ?? [],
+      schemas: snapshot.schemas ?? [],
+      exportedAt: snapshot.exportedAt,
+    };
+    validateMutationPlan({ delta });
+
     // The native memory_save replaces the whole snapshot, but callers
     // (FullDocumentIndexingPipeline) save per-document increments and the
     // SQLite implementation upserts them. Merge with the stored snapshot so
@@ -135,13 +145,7 @@ export class AiraGraphDbMemoryStore implements IMemoryStore {
     try {
       // Send only this call's delta; the native side merges (O(delta) RPC
       // payload and WAL growth instead of O(corpus) per document).
-      await this.client.request('memory_upsert', {
-        corpusId: snapshot.corpusId,
-        passages: snapshot.passages ?? [],
-        facts: snapshot.facts ?? [],
-        schemas: snapshot.schemas ?? [],
-        exportedAt: snapshot.exportedAt,
-      });
+      await this.client.request('memory_upsert', delta);
     } catch {
       // Older native binaries without memory_upsert: full-snapshot fallback.
       await this.client.request('memory_save', { snapshot: merged });
