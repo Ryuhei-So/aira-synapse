@@ -147,7 +147,7 @@ export class AiraGraphDbIndexingMemory implements IIndexingMemory {
     return validateActivatedResult(response);
   }
 
-  public async upsertDelta(delta: IndexingMemoryDelta): Promise<void> {
+  public async upsertDelta(delta: IndexingMemoryDelta): Promise<{ readonly mutationCount: number }> {
     const plans = planMutationChunks(
       { delta },
       this.capabilities.maxDeltaItemsPerSection,
@@ -162,5 +162,6 @@ export class AiraGraphDbIndexingMemory implements IIndexingMemory {
         throw new Error('memory_upsert response must be null');
       }
     }
+    return { mutationCount: plans.length };
   }
 }

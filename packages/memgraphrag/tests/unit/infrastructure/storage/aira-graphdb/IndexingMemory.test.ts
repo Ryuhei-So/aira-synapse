@@ -122,7 +122,7 @@ describe('AiraGraphDbIndexingMemory strict bounded contract', () => {
     await expect(memory.activateFactsBySchemaIds({ corpusId: 'c1', schemaIds: ['s1'], updatedAt: NOW }))
       .resolves.toBe(1);
     await expect(memory.upsertDelta({ corpusId: 'c1', passages: [], facts: [], schemas: [], exportedAt: NOW }))
-      .resolves.toBeUndefined();
+      .resolves.toEqual({ mutationCount: 1 });
 
     expect(request.mock.calls.map(([method]) => method)).toEqual([
       'protocol_info',
@@ -307,7 +307,7 @@ describe('AiraGraphDbIndexingMemory strict bounded contract', () => {
     };
 
     expect(() => memory.preflightMutation({ delta })).not.toThrow();
-    await expect(memory.upsertDelta(delta)).resolves.toBeUndefined();
+    await expect(memory.upsertDelta(delta)).resolves.toEqual({ mutationCount: 2 });
 
     const mutations = request.mock.calls.filter(([method]) => method === 'memory_upsert');
     expect(mutations).toHaveLength(2);

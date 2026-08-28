@@ -154,7 +154,7 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
     );
 
     try {
-      await this.options.indexingMemory.upsertDelta(delta);
+      const upsertResult = await this.options.indexingMemory.upsertDelta(delta);
       if (activation) {
         await this.options.indexingMemory.activateFactsBySchemaIds(activation);
       }
@@ -198,6 +198,7 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
         addedNodes: graphPlan.nodes.length,
         addedEdges: graphPlan.edges.length,
         conflicts: conflictCount,
+        memoryDeltaMutationCount: upsertResult?.mutationCount ?? 1,
       };
     } catch (error) {
       throw new DocumentMutationError(error);
