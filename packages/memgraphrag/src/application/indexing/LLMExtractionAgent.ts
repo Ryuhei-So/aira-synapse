@@ -24,7 +24,7 @@ Rules:
 1. Entity types should be general categories: "Method", "Dataset", "Metric", "Task", "Model", "Organization", "Person", "Concept", "Technology", "Algorithm"
 2. Relations should be verb phrases: "uses", "outperforms", "is_a", "part_of", "evaluates_on", "proposes", "extends", "compares_to", "achieves", "based_on"
 3. Only extract explicitly stated facts, not inferences
-4. Confidence should be 0.5-1.0 based on how clearly the relation is stated
+4. "confidence" is REQUIRED on every relation and must be a plain number between 0 and 1 (use 0.5-1.0 based on how clearly the relation is stated). A relation without a numeric confidence is discarded.
 5. Return valid JSON only, no markdown fences
 
 Text:
@@ -44,7 +44,7 @@ const EXTRACTION_PROMPT_JA = `あなたは知識グラフ抽出エージェン�
 5. 人名、地名、作品名、組織名は原文のまま抽出（翻訳しない）
 6. 同じエンティティの別表記（略称、英語名等）も別のrelationとして抽出: "の別名である"
 7. 数値情報（年号、人数、金額等）もエンティティとして抽出
-8. confidence は 0.5-1.0（明確さに応じて）
+8. confidence は**全relationに必須**。0〜1の数値のみ（明確さに応じて0.5-1.0）。数値のconfidenceが無いrelationは破棄される
 9. 有効なJSONのみ返す（マークダウンフェンス不要）
 
 テキスト:
@@ -66,7 +66,25 @@ interface LLMExtractionResult {
   }[];
 }
 
-function parseLLMResponse(text: string): LLMExtractionResult {
+/**
+ * A relation is usable only if every field the storage domain contract
+ * requires is present and well-formed. `confidence` is part of that contract
+ * (Fact and SchemaAlias both declare it a finite number) and is deliberately
+ * NOT defaulted here: it is provenance, folded across duplicate evidence with
+ * Math.max, so inventing a value would fabricate an evidence strength the
+ * model never asserted and let it win over real ones, with nothing recording
+ * that it was invented. Dropping costs one relation; defaulting corrupts the
+ * ranking signal for the lifetime of the corpus.
+ */
+function isUsableRelation(r: LLMExtractionResult['relations'][number] | undefined): boolean {
+  return typeof r?.head === 'string' && typeof r?.headType === 'string'
+    && typeof r?.relation === 'string' && typeof r?.tail === 'string'
+    && typeof r?.tailType === 'string'
+    && typeof r?.confidence === 'number' && Number.isFinite(r.confidence)
+    && r.confidence >= 0 && r.confidence <= 1;
+}
+
+function parseLLMResponse(text: string): LLMExtractionResult & { droppedRelations: number } {
   const cleaned = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
   try {
     const parsed = JSON.parse(cleaned) as LLMExtractionResult;
@@ -75,14 +93,11 @@ function parseLLMResponse(text: string): LLMExtractionResult {
     const entities = (Array.isArray(parsed.entities) ? parsed.entities : []).filter(
       (e) => typeof e?.name === 'string' && typeof e?.type === 'string',
     );
-    const relations = (Array.isArray(parsed.relations) ? parsed.relations : []).filter(
-      (r) => typeof r?.head === 'string' && typeof r?.headType === 'string'
-        && typeof r?.relation === 'string' && typeof r?.tail === 'string'
-        && typeof r?.tailType === 'string',
-    );
-    return { entities, relations };
+    const rawRelations = Array.isArray(parsed.relations) ? parsed.relations : [];
+    const relations = rawRelations.filter(isUsableRelation);
+    return { entities, relations, droppedRelations: rawRelations.length - relations.length };
   } catch {
-    return { entities: [], relations: [] };
+    return { entities: [], relations: [], droppedRelations: 0 };
   }
 }
 
@@ -98,6 +113,14 @@ export class LLMExtractionAgent implements IExtractionAgent {
     });
 
     const result = parseLLMResponse(response.text);
+    if (result.droppedRelations > 0) {
+      // Silence here is what made the production incident take a night to
+      // diagnose: the chunk simply produced fewer relations, and the defect
+      // only surfaced later as a storage contract error on a whole document.
+      console.warn(
+        `[extraction] ${chunk.chunkId}: dropped ${result.droppedRelations} relation(s) that did not satisfy the domain contract`,
+      );
+    }
 
     const rawEntities = result.entities.map((e) => e.name);
 
