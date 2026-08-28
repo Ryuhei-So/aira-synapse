@@ -57,6 +57,12 @@ function assertNonnegativeInteger(value: unknown, name: string): asserts value i
   }
 }
 
+function assertPositiveSafeInteger(value: unknown, name: string): asserts value is number {
+  if (!Number.isSafeInteger(value) || (value as number) <= 0) {
+    throw new Error(`${name} must be a positive safe integer`);
+  }
+}
+
 function assertCorpusId(corpusId: unknown, name = 'corpusId'): asserts corpusId is string {
   assertBoundedString(corpusId, name, INDEXING_MEMORY_CONTRACT.maxCorpusIdBytes);
 }
@@ -171,7 +177,7 @@ export function validateActivationRequest(request: ActivateFactsRequest): void {
   );
 }
 
-export function validateDelta(delta: IndexingMemoryDelta): void {
+function validateDeltaWithLimit(delta: IndexingMemoryDelta, maxItemsPerSection: number): void {
   assertObject(delta, 'memory delta');
   assertOnlyKeys(
     delta,
@@ -195,8 +201,8 @@ export function validateDelta(delta: IndexingMemoryDelta): void {
     if (!Array.isArray(items)) {
       throw new Error(`${section} must be an array`);
     }
-    if (items.length > INDEXING_MEMORY_CONTRACT.maxDeltaItemsPerSection) {
-      throw new Error(`${section} must not exceed ${INDEXING_MEMORY_CONTRACT.maxDeltaItemsPerSection} items`);
+    if (items.length > maxItemsPerSection) {
+      throw new Error(`${section} must not exceed ${maxItemsPerSection} items`);
     }
     const seen = new Set<string>();
     for (const [index, item] of items.entries()) {
@@ -218,6 +224,10 @@ export function validateDelta(delta: IndexingMemoryDelta): void {
   }
 }
 
+export function validateDelta(delta: IndexingMemoryDelta): void {
+  validateDeltaWithLimit(delta, INDEXING_MEMORY_CONTRACT.maxDeltaItemsPerSection);
+}
+
 function assertMutationRequestFits(method: string, params: unknown): void {
   // The longest valid request ID makes this conservative for every later
   // NativeClient allocation while preserving the exact GraphDB frame cap.
@@ -233,19 +243,84 @@ function assertMutationRequestFits(method: string, params: unknown): void {
   }
 }
 
-/** Shared pure authority for the complete plan before the first WAL call. */
-export function validateMutationPlan(plan: IndexingMemoryMutationPlan): void {
+function validateMutationPlanParts(
+  plan: IndexingMemoryMutationPlan,
+  maxItemsPerSection: number,
+  checkRequestBytes: boolean,
+): void {
   assertObject(plan, 'memory mutation plan');
   assertOnlyKeys(plan, ['delta', 'activation'], 'memory mutation plan');
-  validateDelta(plan.delta);
-  assertMutationRequestFits('memory_upsert', plan.delta);
+  validateDeltaWithLimit(plan.delta, maxItemsPerSection);
+  if (checkRequestBytes) {
+    assertMutationRequestFits('memory_upsert', plan.delta);
+  }
   if (plan.activation !== undefined) {
     validateActivationRequest(plan.activation);
     if (plan.activation.corpusId !== plan.delta.corpusId) {
       throw new Error('activation corpusId must match the delta corpusId');
     }
-    assertMutationRequestFits('memory_activate_facts_by_schema_ids', plan.activation);
+    if (checkRequestBytes) {
+      assertMutationRequestFits('memory_activate_facts_by_schema_ids', plan.activation);
+    }
   }
+}
+
+/** Shared pure authority for the complete plan before the first WAL call. */
+export function validateMutationPlan(plan: IndexingMemoryMutationPlan): void {
+  validateMutationPlanParts(
+    plan,
+    INDEXING_MEMORY_CONTRACT.maxDeltaItemsPerSection,
+    true,
+  );
+}
+
+/**
+ * Validate and partition one document mutation into aligned native requests.
+ * The original delta is validated without the per-request item bound first,
+ * so duplicate IDs crossing a chunk boundary cannot slip through. Every
+ * returned request is then validated by the ordinary bounded mutation-plan
+ * authority, including the request-byte cap.
+ */
+export function planMutationChunks(
+  plan: IndexingMemoryMutationPlan,
+  maxItemsPerSection: number = INDEXING_MEMORY_CONTRACT.maxDeltaItemsPerSection,
+): readonly IndexingMemoryMutationPlan[] {
+  assertPositiveSafeInteger(maxItemsPerSection, 'maxItemsPerSection');
+  if (maxItemsPerSection > INDEXING_MEMORY_CONTRACT.maxDeltaItemsPerSection) {
+    throw new Error(
+      `maxItemsPerSection must not exceed ${INDEXING_MEMORY_CONTRACT.maxDeltaItemsPerSection}`,
+    );
+  }
+
+  // Validate all domain data and cross-chunk membership before exposing any
+  // request to the mutation loop. Request-byte validation belongs to each
+  // bounded chunk because chunking is what makes oversized documents fit.
+  validateMutationPlanParts(plan, Number.MAX_SAFE_INTEGER, false);
+
+  const { delta } = plan;
+  const chunkCount = Math.max(
+    Math.ceil(delta.passages.length / maxItemsPerSection),
+    Math.ceil(delta.facts.length / maxItemsPerSection),
+    Math.ceil(delta.schemas.length / maxItemsPerSection),
+    1,
+  );
+  const chunks: IndexingMemoryMutationPlan[] = [];
+  for (let index = 0; index < chunkCount; index += 1) {
+    const chunkDelta: IndexingMemoryDelta = {
+      corpusId: delta.corpusId,
+      passages: delta.passages.slice(index * maxItemsPerSection, (index + 1) * maxItemsPerSection),
+      facts: delta.facts.slice(index * maxItemsPerSection, (index + 1) * maxItemsPerSection),
+      schemas: delta.schemas.slice(index * maxItemsPerSection, (index + 1) * maxItemsPerSection),
+      exportedAt: delta.exportedAt,
+    };
+    const chunkPlan: IndexingMemoryMutationPlan = index === chunkCount - 1
+      && plan.activation !== undefined
+      ? { delta: chunkDelta, activation: plan.activation }
+      : { delta: chunkDelta };
+    validateMutationPlan(chunkPlan);
+    chunks.push(chunkPlan);
+  }
+  return chunks;
 }
 
 export function validateSchemaResponse(

@@ -7,6 +7,7 @@ import { INDEXING_MEMORY_CONTRACT } from '../../../../../src/domain/storage/inde
 import { SnapshotBackedIndexingMemory } from '../../../../../src/infrastructure/storage/SnapshotBackedIndexingMemory.js';
 import { AiraGraphDbIndexingMemory } from '../../../../../src/infrastructure/storage/aira-graphdb/AiraGraphDbIndexingMemory.js';
 import type { AiraGraphDbRpcClient } from '../../../../../src/infrastructure/storage/aira-graphdb/NativeClient.js';
+import { planMutationChunks } from '../../../../../src/infrastructure/storage/indexingMemoryContract.js';
 
 const NOW = '2026-08-25T00:00:00.000Z';
 
@@ -272,7 +273,7 @@ describe('AiraGraphDbIndexingMemory strict bounded contract', () => {
     ['schemas', (index: number) => schema(`s${index}`)],
     ['facts', (index: number) => fact(`f${index}`)],
     ['passages', (index: number) => passage(`p${index}`)],
-  ] as const)('enforces exact and max-plus-one delta counts for %s', async (section, item) => {
+  ] as const)('accepts exact and max-plus-one document delta counts for %s', async (section, item) => {
     const { client, request } = clientWith(() => null);
     const memory = await AiraGraphDbIndexingMemory.create(client);
     const validDelta = { corpusId: 'c1', passages: [], facts: [], schemas: [], exportedAt: NOW };
@@ -286,8 +287,125 @@ describe('AiraGraphDbIndexingMemory strict bounded contract', () => {
     })).not.toThrow();
     expect(() => memory.preflightMutation({
       delta: { ...validDelta, [section]: [...exact, item(exact.length)] } as never,
-    })).toThrow('must not exceed');
+    })).not.toThrow();
     expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it('preflights and sends an oversized document as bounded ordered deltas', async () => {
+    const { client, request } = clientWith((method) => {
+      if (method === 'memory_upsert') return null;
+      throw new Error(`unexpected ${method}`);
+    });
+    const memory = await AiraGraphDbIndexingMemory.create(client);
+    const facts = Array.from(
+      { length: INDEXING_MEMORY_CONTRACT.maxDeltaItemsPerSection + 1 },
+      (_, index) => fact(`f${index}`),
+    );
+    const delta = {
+      corpusId: 'c1', passages: [passage('p1')], facts,
+      schemas: [schema('s1')], exportedAt: NOW,
+    };
+
+    expect(() => memory.preflightMutation({ delta })).not.toThrow();
+    await expect(memory.upsertDelta(delta)).resolves.toBeUndefined();
+
+    const mutations = request.mock.calls.filter(([method]) => method === 'memory_upsert');
+    expect(mutations).toHaveLength(2);
+    expect(mutations.map(([, params]) => (params as typeof delta).facts.length))
+      .toEqual([INDEXING_MEMORY_CONTRACT.maxDeltaItemsPerSection, 1]);
+    expect(mutations.flatMap(([, params]) => (params as typeof delta).facts.map(({ factId }) => factId)))
+      .toEqual(facts.map(({ factId }) => factId));
+    expect((mutations[0]![1] as typeof delta).passages).toEqual(delta.passages);
+    expect((mutations[0]![1] as typeof delta).schemas).toEqual(delta.schemas);
+    expect((mutations[1]![1] as typeof delta).passages).toEqual([]);
+    expect((mutations[1]![1] as typeof delta).schemas).toEqual([]);
+    expect(mutations.every((call) => call[2]?.maxRequestBytes === INDEXING_MEMORY_CONTRACT.maxRequestBytes
+      && call[2]?.maxResponseBytes === INDEXING_MEMORY_CONTRACT.maxResponseBytes)).toBe(true);
+  });
+
+  it('propagates a later chunk failure without fallback or a further mutation', async () => {
+    let upserts = 0;
+    const { client, request } = clientWith((method) => {
+      if (method !== 'memory_upsert') throw new Error(`unexpected ${method}`);
+      upserts += 1;
+      if (upserts === 2) throw new Error('second delta WAL failed');
+      return null;
+    });
+    const memory = await AiraGraphDbIndexingMemory.create(client);
+    const delta = {
+      corpusId: 'c1', passages: [],
+      facts: Array.from(
+        { length: INDEXING_MEMORY_CONTRACT.maxDeltaItemsPerSection + 1 },
+        (_, index) => fact(`f${index}`),
+      ),
+      schemas: [], exportedAt: NOW,
+    };
+
+    await expect(memory.upsertDelta(delta)).rejects.toThrow('second delta WAL failed');
+    expect(request.mock.calls.map(([method]) => method)).toEqual([
+      'protocol_info', 'memory_upsert', 'memory_upsert',
+    ]);
+  });
+
+  it('rejects duplicate IDs across a chunk boundary before the first mutation', async () => {
+    const { client, request } = clientWith(() => null);
+    const memory = await AiraGraphDbIndexingMemory.create(client);
+    const facts = Array.from(
+      { length: INDEXING_MEMORY_CONTRACT.maxDeltaItemsPerSection + 1 },
+      (_, index) => fact(`f${index}`),
+    );
+    facts[facts.length - 1] = fact('f0');
+    const delta = {
+      corpusId: 'c1', passages: [], facts, schemas: [], exportedAt: NOW,
+    };
+
+    expect(() => memory.preflightMutation({ delta })).toThrow('duplicate factId');
+    await expect(memory.upsertDelta(delta)).rejects.toThrow('duplicate factId');
+    expect(request.mock.calls.map(([method]) => method)).toEqual(['protocol_info']);
+  });
+
+  it('plans uneven and empty deltas completely before mutation and activates last', () => {
+    const delta = {
+      corpusId: 'c1',
+      passages: [passage('p0'), passage('p1'), passage('p2')],
+      facts: [fact('f0'), fact('f1'), fact('f2'), fact('f3'), fact('f4')],
+      schemas: [schema('s1')],
+      exportedAt: NOW,
+    };
+    const activation = { corpusId: 'c1', schemaIds: ['s1'], updatedAt: NOW };
+    const plans = planMutationChunks({ delta, activation }, 2);
+
+    expect(plans).toHaveLength(3);
+    expect(plans.flatMap(({ delta: chunk }) => chunk.passages.map(({ passageId }) => passageId)))
+      .toEqual(delta.passages.map(({ passageId }) => passageId));
+    expect(plans.flatMap(({ delta: chunk }) => chunk.facts.map(({ factId }) => factId)))
+      .toEqual(delta.facts.map(({ factId }) => factId));
+    expect(plans.flatMap(({ delta: chunk }) => chunk.schemas.map(({ schemaId }) => schemaId)))
+      .toEqual(delta.schemas.map(({ schemaId }) => schemaId));
+    expect(plans.map((plan) => plan.activation)).toEqual([undefined, undefined, activation]);
+
+    const empty = planMutationChunks({
+      delta: { corpusId: 'c1', passages: [], facts: [], schemas: [], exportedAt: NOW },
+    }, 2);
+    expect(empty).toHaveLength(1);
+    expect(empty[0]!.delta).toEqual({
+      corpusId: 'c1', passages: [], facts: [], schemas: [], exportedAt: NOW,
+    });
+  });
+
+  it('rejects a byte-oversized later chunk before exposing any mutation plan', () => {
+    const oversized = schema('s1');
+    const delta = {
+      corpusId: 'c1', passages: [], facts: [],
+      schemas: [schema('s0'), {
+        ...oversized,
+        schemaId: 's1',
+        headType: 'x'.repeat(INDEXING_MEMORY_CONTRACT.maxRequestBytes),
+      }],
+      exportedAt: NOW,
+    };
+
+    expect(() => planMutationChunks({ delta }, 1)).toThrow('request exceeds');
   });
 
   it.each([
