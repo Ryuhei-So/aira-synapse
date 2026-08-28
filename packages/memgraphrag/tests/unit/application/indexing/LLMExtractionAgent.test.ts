@@ -1,7 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type { ExtractionChunk } from '../../../../src/domain/agent/index.js';
 import type { ILLMProvider } from '../../../../src/domain/provider/index.js';
 import { LLMExtractionAgent } from '../../../../src/application/indexing/LLMExtractionAgent.js';
+import { validateDomainObject } from '../../../../src/domain/memory/domainContract.js';
 
 function chunk(): ExtractionChunk {
   return {
@@ -11,14 +12,35 @@ function chunk(): ExtractionChunk {
     text: 'Aspirin reduces fever.',
     normalizedText: 'Aspirin reduces fever.',
     language: 'en',
-    metadata: {},
-  } as ExtractionChunk;
+    metadata: {
+      documentId: 'doc-1',
+      title: 'Document Title',
+      sourceUrl: 'https://example.com/doc',
+      sourceType: 'md',
+      language: 'en',
+      chunkIndex: 0,
+      startOffset: 0,
+      endOffset: 22,
+      tokenCount: 5,
+    },
+  } as unknown as ExtractionChunk;
+}
+
+/** Returns the response body verbatim, so a test can emit JSON that
+ *  JSON.stringify could never produce (NaN, Infinity, malformed text). */
+function llmReturningRaw(text: string): ILLMProvider {
+  return {
+    generate: vi.fn(async () => ({
+      text,
+      model: 'test-model',
+      usage: { inputTokens: 1, outputTokens: 1 },
+    })),
+    healthCheck: vi.fn(async () => true),
+  } as unknown as ILLMProvider;
 }
 
 function llmReturning(payload: unknown): ILLMProvider {
-  return {
-    generate: async () => ({ text: JSON.stringify(payload), model: 'test', tokensUsed: 0 }),
-  } as unknown as ILLMProvider;
+  return llmReturningRaw(JSON.stringify(payload));
 }
 
 function relation(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -53,14 +75,27 @@ describe('LLMExtractionAgent confidence contract', () => {
   it.each([
     ['missing', { confidence: undefined }],
     ['null', { confidence: null }],
-    ['string', { confidence: '0.9' }],
-    ['NaN', { confidence: Number.NaN }],
-    ['Infinity', { confidence: Number.POSITIVE_INFINITY }],
-    ['negative', { confidence: -0.1 }],
-    ['above one', { confidence: 1.5 }],
+    ['a string', { confidence: '0.9' }],
+    ['a boolean', { confidence: true }],
+    ['an object', { confidence: { value: 0.9 } }],
   ])('drops a relation whose confidence is %s', async (_label, override) => {
-    const payload = { entities: [], relations: [relation(override)] };
-    const agent = new LLMExtractionAgent(llmReturning(payload));
+    const agent = new LLMExtractionAgent(llmReturning({ entities: [], relations: [relation(override)] }));
+
+    const record = await agent.extract(chunk());
+
+    expect(record.candidateFacts).toEqual([]);
+    expect(record.candidateSchemas).toEqual([]);
+  });
+
+  // JSON.stringify turns NaN and Infinity into null, so these have to be built
+  // as raw text or the Number.isFinite guard would never actually be exercised.
+  it.each([
+    ['Infinity via an overflowing literal', '1e999'],
+    ['-Infinity via an overflowing literal', '-1e999'],
+  ])('drops a relation whose confidence is %s', async (_label, literal) => {
+    const agent = new LLMExtractionAgent(llmReturningRaw(
+      `{"entities":[],"relations":[{"head":"A","headType":"T","relation":"r","tail":"B","tailType":"T","confidence":${literal}}]}`,
+    ));
 
     const record = await agent.extract(chunk());
 
@@ -98,24 +133,103 @@ describe('LLMExtractionAgent confidence contract', () => {
     expect(record.candidateSchemas).toEqual([]);
   });
 
-  it('emits only relations that satisfy the storage domain contract', async () => {
+  // The storage contract accepts any finite confidence. Rejecting out-of-range
+  // values here would mean a model that drifts to a 0-100 scale silently loses
+  // every relation in every chunk, and the document is still banked as indexed.
+  it('keeps a finite confidence outside 0-1 and reports the scale drift', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const agent = new LLMExtractionAgent(llmReturning({
+        entities: [],
+        relations: [relation({ confidence: 95 })],
+      }));
+
+      const record = await agent.extract(chunk());
+
+      expect(record.candidateFacts).toHaveLength(1);
+      expect(record.candidateFacts[0]?.confidence).toBe(95);
+      expect(warn.mock.calls.flat().join(' ')).toContain('outside 0-1');
+    } finally { warn.mockRestore(); }
+  });
+
+  it('reports why relations were dropped, and says so when none survive', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const agent = new LLMExtractionAgent(llmReturning({
+        entities: [],
+        relations: [relation({ confidence: undefined }), relation({ headType: 7 })],
+      }));
+
+      const record = await agent.extract(chunk());
+
+      expect(record.candidateFacts).toEqual([]);
+      const logged = warn.mock.calls.flat().join(' ');
+      expect(logged).toContain('confidence:missing=1');
+      expect(logged).toContain('headType:not-a-string=1');
+      expect(logged).toContain('no usable relations');
+    } finally { warn.mockRestore(); }
+  });
+
+  it('reports an unparseable response instead of silently extracting nothing', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const agent = new LLMExtractionAgent(llmReturningRaw('Sure! Here are the relations: {"relations": ['));
+
+      const record = await agent.extract(chunk());
+
+      expect(record.candidateFacts).toEqual([]);
+      expect(warn.mock.calls.flat().join(' ')).toContain('not parseable JSON');
+    } finally { warn.mockRestore(); }
+  });
+
+  it('emits schemas and facts that satisfy the real storage domain contract', async () => {
     const agent = new LLMExtractionAgent(llmReturning({
-      entities: [],
+      entities: [{ name: 'Aspirin', type: 'Drug' }],
       relations: [relation(), relation({ head: 'Bad', confidence: undefined })],
     }));
 
     const record = await agent.extract(chunk());
 
-    // Every emitted alias must carry the finite confidence the Schema contract
-    // requires — that check is what failed in production, one layer later.
-    for (const candidate of record.candidateSchemas) {
-      for (const alias of candidate.aliases) {
-        expect(Number.isFinite(alias.confidence)).toBe(true);
-      }
-    }
     expect(record.candidateFacts).toHaveLength(1);
-    expect(
-      record.candidateFacts.every((fact) => Number.isFinite(fact.confidence)),
-    ).toBe(true);
+    // Validate against the contract objects that actually rejected the
+    // production payload, not a hand-rolled restatement of one field. The
+    // candidates are promoted into their stored shapes exactly as the later
+    // stages do, so a bad confidence surfaces here instead of in production.
+    const stamps = { createdAt: '2026-08-28T00:00:00.000Z', updatedAt: '2026-08-28T00:00:00.000Z' };
+    for (const candidate of record.candidateSchemas) {
+      expect(validateDomainObject('schema', {
+        corpusId: 'corpus-1',
+        ...stamps,
+        schemaId: 'schema:test',
+        headType: candidate.headType,
+        relation: candidate.relation,
+        tailType: candidate.tailType,
+        canonicalKey: candidate.canonicalKey,
+        aliases: candidate.aliases,
+        frequency: 1,
+        state: 'pending',
+        stabilizationThreshold: 2,
+        factIds: [],
+        sourceDocumentIds: ['doc-1'],
+        version: 1,
+      }).errors).toEqual([]);
+    }
+    for (const candidate of record.candidateFacts) {
+      expect(validateDomainObject('fact', {
+        corpusId: 'corpus-1',
+        ...stamps,
+        factId: 'fact:test',
+        schemaId: 'schema:test',
+        headEntity: candidate.headEntity,
+        headType: candidate.headType,
+        relation: candidate.relation,
+        tailEntity: candidate.tailEntity,
+        tailType: candidate.tailType,
+        state: 'active',
+        passageIds: candidate.supportingSpanIds,
+        sourceDocumentIds: ['doc-1'],
+        confidence: candidate.confidence,
+      }).errors).toEqual([]);
+    }
   });
 });

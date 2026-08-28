@@ -66,25 +66,37 @@ interface LLMExtractionResult {
   }[];
 }
 
-/**
- * A relation is usable only if every field the storage domain contract
- * requires is present and well-formed. `confidence` is part of that contract
- * (Fact and SchemaAlias both declare it a finite number) and is deliberately
- * NOT defaulted here: it is provenance, folded across duplicate evidence with
- * Math.max, so inventing a value would fabricate an evidence strength the
- * model never asserted and let it win over real ones, with nothing recording
- * that it was invented. Dropping costs one relation; defaulting corrupts the
- * ranking signal for the lifetime of the corpus.
- */
-function isUsableRelation(r: LLMExtractionResult['relations'][number] | undefined): boolean {
-  return typeof r?.head === 'string' && typeof r?.headType === 'string'
-    && typeof r?.relation === 'string' && typeof r?.tail === 'string'
-    && typeof r?.tailType === 'string'
-    && typeof r?.confidence === 'number' && Number.isFinite(r.confidence)
-    && r.confidence >= 0 && r.confidence <= 1;
+interface ParsedLLMResponse extends LLMExtractionResult {
+  /** Why each unusable relation was rejected, for a diagnosable warning. */
+  readonly dropReasons: readonly string[];
+  /** Finite confidences outside the documented 0-1 range, kept but reported. */
+  readonly outOfRangeConfidences: readonly number[];
+  readonly parseFailed: boolean;
 }
 
-function parseLLMResponse(text: string): LLMExtractionResult & { droppedRelations: number } {
+/**
+ * A relation is usable exactly when it satisfies the storage domain contract:
+ * the five identity strings, plus a `confidence` that is a finite number (what
+ * Fact and SchemaAlias declare). The bound stops at the contract on purpose —
+ * a stricter range check here would silently discard a whole corpus if a model
+ * ever drifted to a 0-100 scale, and this layer is not the place to invent a
+ * policy the storage boundary does not have.
+ *
+ * `confidence` is never defaulted: it is provenance, folded across duplicate
+ * evidence with Math.max, so inventing a value would fabricate an evidence
+ * strength the model never asserted and let it win over real ones, with
+ * nothing recording that it was invented.
+ */
+function relationDropReason(r: LLMExtractionResult['relations'][number] | undefined): string | null {
+  for (const field of ['head', 'headType', 'relation', 'tail', 'tailType'] as const) {
+    if (typeof r?.[field] !== 'string') return `${field}:not-a-string`;
+  }
+  if (typeof r?.confidence !== 'number') return `confidence:${r?.confidence === undefined ? 'missing' : typeof r?.confidence}`;
+  if (!Number.isFinite(r.confidence)) return 'confidence:not-finite';
+  return null;
+}
+
+function parseLLMResponse(text: string): ParsedLLMResponse {
   const cleaned = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
   try {
     const parsed = JSON.parse(cleaned) as LLMExtractionResult;
@@ -93,11 +105,28 @@ function parseLLMResponse(text: string): LLMExtractionResult & { droppedRelation
     const entities = (Array.isArray(parsed.entities) ? parsed.entities : []).filter(
       (e) => typeof e?.name === 'string' && typeof e?.type === 'string',
     );
-    const rawRelations = Array.isArray(parsed.relations) ? parsed.relations : [];
-    const relations = rawRelations.filter(isUsableRelation);
-    return { entities, relations, droppedRelations: rawRelations.length - relations.length };
+    const relations: LLMExtractionResult['relations'][number][] = [];
+    const dropReasons: string[] = [];
+    const outOfRangeConfidences: number[] = [];
+    for (const relation of Array.isArray(parsed.relations) ? parsed.relations : []) {
+      const reason = relationDropReason(relation);
+      if (reason !== null) {
+        dropReasons.push(reason);
+        continue;
+      }
+      // Kept (the contract accepts any finite number) but surfaced: a value
+      // outside the prompted 0-1 range means the model changed scale, which
+      // would otherwise silently distort every Math.max confidence fold.
+      if (relation.confidence < 0 || relation.confidence > 1) {
+        outOfRangeConfidences.push(relation.confidence);
+      }
+      relations.push(relation);
+    }
+    return { entities, relations, dropReasons, outOfRangeConfidences, parseFailed: false };
   } catch {
-    return { entities: [], relations: [], droppedRelations: 0 };
+    return {
+      entities: [], relations: [], dropReasons: [], outOfRangeConfidences: [], parseFailed: true,
+    };
   }
 }
 
@@ -113,12 +142,29 @@ export class LLMExtractionAgent implements IExtractionAgent {
     });
 
     const result = parseLLMResponse(response.text);
-    if (result.droppedRelations > 0) {
-      // Silence here is what made the production incident take a night to
-      // diagnose: the chunk simply produced fewer relations, and the defect
-      // only surfaced later as a storage contract error on a whole document.
+    // Silence here is what made the production incident take a night to
+    // diagnose: a malformed response simply produced fewer relations, and the
+    // defect only surfaced later as a storage contract error on a whole
+    // document. Report every way a chunk can quietly yield less than it should.
+    if (result.parseFailed) {
+      console.warn(`[extraction] ${chunk.chunkId}: response was not parseable JSON; extracted nothing`);
+    }
+    if (result.dropReasons.length > 0) {
+      const byReason = result.dropReasons.reduce<Record<string, number>>(
+        (counts, reason) => ({ ...counts, [reason]: (counts[reason] ?? 0) + 1 }),
+        {},
+      );
+      const detail = Object.entries(byReason).map(([reason, count]) => `${reason}=${count}`).join(' ');
+      const total = result.dropReasons.length;
+      const message = `[extraction] ${chunk.chunkId}: dropped ${total} relation(s) violating the domain contract (${detail})`;
+      // Losing every relation is a different failure from losing a few: the
+      // document can still be banked as indexed while carrying no knowledge.
+      console.warn(result.relations.length === 0 ? `${message} — chunk yielded no usable relations` : message);
+    }
+    if (result.outOfRangeConfidences.length > 0) {
       console.warn(
-        `[extraction] ${chunk.chunkId}: dropped ${result.droppedRelations} relation(s) that did not satisfy the domain contract`,
+        `[extraction] ${chunk.chunkId}: ${result.outOfRangeConfidences.length} relation(s) carry a confidence outside 0-1 `
+        + `(e.g. ${result.outOfRangeConfidences[0]}); kept, but the model may have changed scale`,
       );
     }
 
