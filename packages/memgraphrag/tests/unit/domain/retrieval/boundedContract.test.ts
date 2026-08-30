@@ -110,6 +110,9 @@ describe('bounded retrieval structural declaration', () => {
       },
     });
     const hits = domainFixture.candidateHits;
+    const boundedHits = (namespace: 'passage' | 'fact' | 'schema') => hits
+      .filter((hit) => hit.namespace === namespace)
+      .map(({ id, score, item }) => ({ id, score, item }));
     const candidateRequest = {
       corpusId: 'fixture-corpus',
       slots: [
@@ -120,9 +123,9 @@ describe('bounded retrieval structural declaration', () => {
     };
     const candidateResult = {
       slots: [
-        { slotId: 'passage', namespace: 'passage', hits: hits.filter((hit) => hit.namespace === 'passage') },
-        { slotId: 'fact', namespace: 'fact', hits: hits.filter((hit) => hit.namespace === 'fact') },
-        { slotId: 'schema', namespace: 'schema', hits: hits.filter((hit) => hit.namespace === 'schema') },
+        { slotId: 'passage', namespace: 'passage', hits: boundedHits('passage') },
+        { slotId: 'fact', namespace: 'fact', hits: boundedHits('fact') },
+        { slotId: 'schema', namespace: 'schema', hits: boundedHits('schema') },
       ],
     };
     const candidate = BOUNDED_RETRIEVAL_OPERATION_NAMES[0];
@@ -175,6 +178,23 @@ describe('bounded retrieval structural declaration', () => {
       context(pprRequest, pprResult),
       roots(ppr),
     )).not.toThrow();
+
+    const validExchangesByOperation = {
+      [candidate]: { request: candidateRequest, result: candidateResult },
+      [fact]: { request: factRequest, result: factResult },
+      [ppr]: { request: pprRequest, result: pprResult },
+    } satisfies Record<
+      BoundedRetrievalOperationName,
+      { readonly request: unknown; readonly result: unknown }
+    >;
+    expect(Object.keys(validExchangesByOperation)).toEqual(BOUNDED_RETRIEVAL_OPERATION_NAMES);
+    for (const operation of BOUNDED_RETRIEVAL_OPERATION_NAMES) {
+      const valid = validExchangesByOperation[operation];
+      expect(
+        validateBoundedSemanticExchange(operation, valid.request, valid.result),
+        `${operation} mutation baseline must be a valid runtime exchange`,
+      ).toEqual({ valid: true, errors: [] });
+    }
 
     type SemanticMutation = {
       readonly rule: string;
