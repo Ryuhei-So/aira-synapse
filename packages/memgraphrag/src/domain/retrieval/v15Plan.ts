@@ -37,16 +37,23 @@ export type V15RetrievalProfile = typeof V15_RETRIEVAL_PROFILE;
 export type V15SearchNamespace = 'passage' | 'fact' | 'schema';
 export type V15SearchSlotId = V15SearchNamespace;
 
-export interface V15SearchSlot {
-  readonly slotId: V15SearchSlotId;
-  readonly namespace: V15SearchNamespace;
+export type V15SearchSlotFor<Kind extends V15SearchNamespace> = {
+  readonly slotId: Kind;
+  readonly namespace: Kind;
   readonly queryVector: readonly number[];
   readonly threshold: number;
   readonly limit: number;
-}
+};
+export type V15SearchSlot = {
+  readonly [Kind in V15SearchNamespace]: V15SearchSlotFor<Kind>;
+}[V15SearchNamespace];
 
 export interface V15CandidateSearchPlan {
-  readonly slots: readonly V15SearchSlot[];
+  readonly slots: readonly [
+    V15SearchSlotFor<'passage'>,
+    V15SearchSlotFor<'fact'>,
+    V15SearchSlotFor<'schema'>,
+  ];
 }
 
 export interface V15EntitySeed {
@@ -334,7 +341,7 @@ export function associateV15RankedSchemas(
 export function buildV15SearchSlots(
   query: QueryRequest,
   queryVector: readonly number[],
-): V15SearchSlot[] {
+): V15CandidateSearchPlan['slots'] {
   const vector = [...queryVector];
   return [
     { slotId: 'passage', namespace: 'passage', queryVector: [...vector], threshold: query.threshold, limit: query.topK },

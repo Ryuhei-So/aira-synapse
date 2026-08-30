@@ -26,6 +26,8 @@
     "verify:production-runtime-anchor": "node scripts/production-runtime-anchor.mjs",
     "generate:bounded-domain-fixture": "npm run build && node scripts/generate-bounded-domain-fixture.mjs",
     "check:bounded-domain-fixture": "npm run build && node scripts/generate-bounded-domain-fixture.mjs --check",
+    "generate:bounded-retrieval-artifact": "npm run build && node scripts/generate-bounded-retrieval-artifact.mjs",
+    "check:bounded-retrieval-artifact": "npm run build && node scripts/generate-bounded-retrieval-artifact.mjs --check",
     "generate:unicode16-lowercase": "node scripts/generate-unicode16-lowercase.mjs",
     "check:unicode16-lowercase": "node scripts/generate-unicode16-lowercase.mjs --check",
     "lint": "eslint src/ tests/",

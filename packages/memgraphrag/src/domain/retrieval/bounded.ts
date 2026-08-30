@@ -9,28 +9,30 @@
 import type { Fact } from '../memory/fact.js';
 import type { Passage } from '../memory/passage.js';
 import type { Schema } from '../memory/schema.js';
-import { validateDomainObject } from '../memory/domainContract.js';
+import {
+  CANDIDATE_SEARCH_BOUNDED_V1,
+  FACT_EXPAND_BOUNDED_V1,
+  PPR_MATERIALIZE_BOUNDED_V1,
+  validateBoundedSemanticExchange,
+  validateBoundedSemanticRequest,
+  type BoundedRetrievalOperationName,
+} from './boundedContract.js';
+export {
+  CANDIDATE_SEARCH_BOUNDED_V1,
+  FACT_EXPAND_BOUNDED_V1,
+  PPR_MATERIALIZE_BOUNDED_V1,
+} from './boundedContract.js';
 import type { FilteredMemoryCandidates, MemoryCandidate } from './memoryFilter.js';
 import {
   assertV15RetrievalRequestPlan,
   buildV15FactExpansionPlan,
   buildV15InitialVector,
   buildV15PprMaterializationPlan,
-  compileV15FactExpansionEvaluator,
-  compareV15ScoreThenId,
-  validateV15FactExpansionPlan,
-  validateV15PprMaterializationPlan,
   V15_RETRIEVAL_PLAN_VERSION,
   type V15FactExpansionPlan,
   type V15PprMaterializationPlan,
   type V15RetrievalRequestPlan,
-  type V15SearchSlot,
-  type V15SearchSlotId,
 } from './v15Plan.js';
-
-export const CANDIDATE_SEARCH_BOUNDED_V1 = 'candidate_search_bounded@1' as const;
-export const FACT_EXPAND_BOUNDED_V1 = 'fact_expand_bounded@1' as const;
-export const PPR_MATERIALIZE_BOUNDED_V1 = 'ppr_materialize_bounded@1' as const;
 
 /** JSON-safe generation at every existing boundary. */
 export type Generation = number;
@@ -94,7 +96,7 @@ export interface GenerationLease {
 export interface CandidateSearchBoundedRequest {
   readonly generation: Generation;
   readonly corpusId: string;
-  readonly slots: readonly V15SearchSlot[];
+  readonly slots: V15RetrievalRequestPlan['candidateSearch']['slots'];
 }
 
 export interface BoundedCandidateHit<TItem> {
@@ -123,7 +125,11 @@ export type CandidateSearchSlotResult =
 export interface CandidateSearchBoundedResponse {
   readonly generation: Generation;
   readonly sessionId: string;
-  readonly slots: readonly CandidateSearchSlotResult[];
+  readonly slots: readonly [
+    Extract<CandidateSearchSlotResult, { readonly slotId: 'passage' }>,
+    Extract<CandidateSearchSlotResult, { readonly slotId: 'fact' }>,
+    Extract<CandidateSearchSlotResult, { readonly slotId: 'schema' }>,
+  ];
 }
 
 export interface CandidateSearchBoundedPort {
@@ -283,183 +289,41 @@ function invalidResponse(message: string): never {
   throw new BoundedGenerationSessionError('INVALID_RESPONSE', message);
 }
 
-function assertBoundedDomainObject(
-  namespace: V15SearchSlotId,
-  value: unknown,
-  path: string,
+function assertValidSemanticRequest(
+  operation: BoundedRetrievalOperationName,
+  request: unknown,
 ): void {
-  const validation = validateDomainObject(namespace, value);
-  if (!validation.valid) {
-    invalidResponse(`${path} violates the ${namespace} domain contract: ${validation.errors.join('; ')}`);
-  }
+  const validation = validateBoundedSemanticRequest(operation, request);
+  if (!validation.valid) invalidResponse(validation.errors.join('; '));
 }
 
-function objectIdentity(
-  namespace: V15SearchSlotId,
-  item: Passage | Fact | Schema,
-): { id: string; corpusId: string } {
-  if (typeof item !== 'object' || item === null) {
-    return invalidResponse(`candidate ${namespace} hit has no domain object`);
-  }
-  if (namespace === 'passage' && 'passageId' in item) return { id: item.passageId, corpusId: item.corpusId };
-  if (namespace === 'fact' && 'factId' in item) return { id: item.factId, corpusId: item.corpusId };
-  if (namespace === 'schema' && 'schemaId' in item) return { id: item.schemaId, corpusId: item.corpusId };
-  return invalidResponse(`candidate ${namespace} hit has the wrong domain object kind`);
+function assertValidSemanticExchange(
+  operation: BoundedRetrievalOperationName,
+  request: unknown,
+  result: unknown,
+): void {
+  const validation = validateBoundedSemanticExchange(operation, request, result);
+  if (!validation.valid) invalidResponse(validation.errors.join('; '));
 }
 
-function validateCandidateSearchResponse(
+function mapCandidateSearchResponse(
   plan: V15RetrievalRequestPlan,
   response: CandidateSearchBoundedResponse,
 ): FilteredMemoryCandidates {
-  if (!Array.isArray(response.slots) || response.slots.length !== plan.candidateSearch.slots.length) {
-    invalidResponse('candidate response slot cardinality does not match the request');
-  }
-  const passages: MemoryCandidate<Passage>[] = [];
-  const facts: MemoryCandidate<Fact>[] = [];
-  const ontology: MemoryCandidate<Schema>[] = [];
-
-  for (let slotIndex = 0; slotIndex < plan.candidateSearch.slots.length; slotIndex += 1) {
-    const requested = plan.candidateSearch.slots[slotIndex]!;
-    const actual = response.slots[slotIndex]!;
-    if (actual.slotId !== requested.slotId || actual.namespace !== requested.namespace) {
-      invalidResponse(`candidate response slot ${slotIndex} does not match ${requested.slotId}`);
-    }
-    if (!Array.isArray(actual.hits) || actual.hits.length > requested.limit) {
-      invalidResponse(`candidate response slot ${requested.slotId} exceeds its result limit`);
-    }
-    const seen = new Set<string>();
-    let previous: BoundedCandidateHit<Passage | Fact | Schema> | undefined;
-    for (const hit of actual.hits as readonly BoundedCandidateHit<Passage | Fact | Schema>[]) {
-      if (typeof hit !== 'object' || hit === null) {
-        invalidResponse(`candidate response slot ${requested.slotId} contains a malformed hit`);
-      }
-      if (typeof hit.id !== 'string' || hit.id.length === 0 || !Number.isFinite(hit.score)) {
-        invalidResponse(`candidate response slot ${requested.slotId} contains an invalid id or score`);
-      }
-      if (hit.score < -1 || hit.score > 1 || hit.score < requested.threshold) {
-        invalidResponse(`candidate response slot ${requested.slotId} contains a score outside its contract`);
-      }
-      if (seen.has(hit.id)) invalidResponse(`candidate response slot ${requested.slotId} contains duplicate id ${hit.id}`);
-      seen.add(hit.id);
-      if (previous && compareV15ScoreThenId(previous, hit) >= 0) {
-        invalidResponse(`candidate response slot ${requested.slotId} is not strictly score/id ordered`);
-      }
-      previous = hit;
-      assertBoundedDomainObject(requested.namespace, hit.item, `candidate ${hit.id}`);
-      const identity = objectIdentity(requested.namespace, hit.item);
-      if (hit.id !== `${requested.namespace}:${identity.id}` || identity.corpusId !== plan.corpusId) {
-        invalidResponse(`candidate response hit ${hit.id} does not match its object or corpus`);
-      }
-      if (actual.namespace === 'passage') {
-        passages.push({ layer: 'passage', item: hit.item as Passage, similarity: hit.score });
-      } else if (actual.namespace === 'fact') {
-        facts.push({ layer: 'fact', item: hit.item as Fact, similarity: hit.score });
-      } else {
-        ontology.push({ layer: 'ontology', item: hit.item as Schema, similarity: hit.score });
-      }
-    }
-  }
   return {
-    passages,
-    facts,
-    ontology,
+    passages: response.slots[0].hits.map((hit): MemoryCandidate<Passage> => ({
+      layer: 'passage', item: hit.item, similarity: hit.score,
+    })),
+    facts: response.slots[1].hits.map((hit): MemoryCandidate<Fact> => ({
+      layer: 'fact', item: hit.item, similarity: hit.score,
+    })),
+    ontology: response.slots[2].hits.map((hit): MemoryCandidate<Schema> => ({
+      layer: 'ontology', item: hit.item, similarity: hit.score,
+    })),
     expandedTerms: [],
     fallbackRequired: false,
     queryVector: [...plan.candidateSearch.slots[0]!.queryVector],
   };
-}
-
-function validateFactExpansionResponse(
-  corpusId: string,
-  plan: V15FactExpansionPlan,
-  response: FactExpandBoundedResponse,
-): void {
-  if (!Array.isArray(response.facts) || response.facts.length > plan.limit) {
-    invalidResponse('fact expansion response exceeds its result limit');
-  }
-  let previous: { id: string; score: number } | undefined;
-  const seen = new Set<string>();
-  const evaluateExpansion = compileV15FactExpansionEvaluator(plan);
-  for (const hit of response.facts) {
-    if (typeof hit !== 'object' || hit === null) {
-      invalidResponse('fact expansion contains a malformed hit');
-    }
-    assertBoundedDomainObject('fact', hit.fact, `fact expansion ${hit.factId}`);
-    if (hit.factId !== hit.fact.factId || hit.fact.corpusId !== corpusId || !Number.isFinite(hit.score)) {
-      invalidResponse(`fact expansion hit ${hit.factId} does not match its object, corpus, or score`);
-    }
-    const evaluated = evaluateExpansion(hit.fact);
-    if (!evaluated || evaluated.factId !== hit.factId || evaluated.score !== hit.score) {
-      invalidResponse(`fact expansion hit ${hit.factId} violates the Synapse expansion policy`);
-    }
-    if (seen.has(hit.factId)) invalidResponse(`fact expansion contains duplicate fact ${hit.factId}`);
-    seen.add(hit.factId);
-    const current = { id: hit.factId, score: hit.score };
-    if (previous && compareV15ScoreThenId(previous, current) >= 0) {
-      invalidResponse('fact expansion response is not strictly score/id ordered');
-    }
-    previous = current;
-  }
-}
-
-function validatePprMaterializationResponse(
-  corpusId: string,
-  plan: V15PprMaterializationPlan,
-  response: PprMaterializeBoundedResponse,
-): void {
-  if (!Array.isArray(response.rankedPassages) || response.rankedPassages.length > plan.passageLimit) {
-    invalidResponse('PPR passage response exceeds its result limit');
-  }
-  if (!Array.isArray(response.rankedFacts) || response.rankedFacts.length > plan.entityLimit) {
-    invalidResponse('PPR fact response exceeds its result limit');
-  }
-
-  const validateRanking = <T extends Passage | Fact>(
-    ranking: readonly { readonly nodeId: string; readonly score: number; readonly rank: number; readonly passage?: Passage; readonly fact?: Fact }[],
-    namespace: 'passage' | 'fact',
-  ): void => {
-    let previous: { id: string; score: number } | undefined;
-    const seen = new Set<string>();
-    ranking.forEach((entry, index) => {
-      const item = (namespace === 'passage' ? entry.passage : entry.fact) as T | undefined;
-      if (!item || !Number.isFinite(entry.score) || entry.rank !== index + 1) {
-        invalidResponse(`PPR ${namespace} response has an invalid score, rank, or object`);
-      }
-      assertBoundedDomainObject(namespace, item, `PPR ${namespace} ${entry.nodeId}`);
-      const identity = objectIdentity(namespace, item);
-      if (entry.nodeId !== `${namespace}:${identity.id}` || identity.corpusId !== corpusId) {
-        invalidResponse(`PPR ${namespace} hit ${entry.nodeId} does not match its object or corpus`);
-      }
-      if (seen.has(entry.nodeId)) invalidResponse(`PPR ${namespace} response contains duplicate ${entry.nodeId}`);
-      seen.add(entry.nodeId);
-      const current = { id: entry.nodeId, score: entry.score };
-      if (previous && compareV15ScoreThenId(previous, current) >= 0) {
-        invalidResponse(`PPR ${namespace} response is not strictly score/id ordered`);
-      }
-      previous = current;
-    });
-  };
-
-  validateRanking(response.rankedPassages, 'passage');
-  validateRanking(response.rankedFacts, 'fact');
-  if (
-    !Number.isSafeInteger(response.iterations)
-    || response.iterations < 0
-    || response.iterations > plan.maxIterations
-    || typeof response.converged !== 'boolean'
-    || !Number.isFinite(response.l1Delta)
-    || response.l1Delta < 0
-    || response.converged !== (response.l1Delta < plan.convergenceEpsilon)
-    || (!response.converged && response.iterations !== plan.maxIterations)
-    || (response.iterations === 0 && (
-      response.rankedPassages.length > 0
-      || response.rankedFacts.length > 0
-      || !response.converged
-      || response.l1Delta !== 0
-    ))
-  ) {
-    invalidResponse('PPR response metrics are outside the request contract');
-  }
 }
 
 /**
@@ -524,27 +388,40 @@ export class BoundedGenerationSession implements GenerationSession {
       this.currentLease = acquired;
       this.startHeartbeat();
 
+      const candidateSemanticRequest = {
+        corpusId: plan.corpusId,
+        slots: plan.candidateSearch.slots,
+      };
+      assertValidSemanticRequest(CANDIDATE_SEARCH_BOUNDED_V1, candidateSemanticRequest);
       lease = await this.renew(lease);
       const candidateSearch = await this.transport.candidateSearchBounded({
         generation: lease.generation,
-        corpusId: plan.corpusId,
-        slots: plan.candidateSearch.slots,
+        ...candidateSemanticRequest,
       });
       validateOperationEnvelope(lease, candidateSearch, CANDIDATE_SEARCH_BOUNDED_V1);
-      const candidates = validateCandidateSearchResponse(plan, candidateSearch);
+      assertValidSemanticExchange(
+        CANDIDATE_SEARCH_BOUNDED_V1,
+        candidateSemanticRequest,
+        { slots: candidateSearch.slots },
+      );
+      const candidates = mapCandidateSearchResponse(plan, candidateSearch);
 
       let factExpansion: FactExpandBoundedResponse | null = null;
       const factExpansionPlan = buildV15FactExpansionPlan(candidates, plan.comparisonMode);
       if (factExpansionPlan !== null) {
-        validateV15FactExpansionPlan(factExpansionPlan);
+        const factSemanticRequest = { corpusId: plan.corpusId, plan: factExpansionPlan };
+        assertValidSemanticRequest(FACT_EXPAND_BOUNDED_V1, factSemanticRequest);
         lease = await this.renew(lease);
         factExpansion = await this.transport.factExpandBounded({
           generation: lease.generation,
-          corpusId: plan.corpusId,
-          plan: factExpansionPlan,
+          ...factSemanticRequest,
         });
         validateOperationEnvelope(lease, factExpansion, FACT_EXPAND_BOUNDED_V1);
-        validateFactExpansionResponse(plan.corpusId, factExpansionPlan, factExpansion);
+        assertValidSemanticExchange(
+          FACT_EXPAND_BOUNDED_V1,
+          factSemanticRequest,
+          { facts: factExpansion.facts },
+        );
       }
 
       const initialVector = buildV15InitialVector(
@@ -552,15 +429,25 @@ export class BoundedGenerationSession implements GenerationSession {
         factExpansion?.facts.map((hit) => ({ factId: hit.factId, score: hit.score })) ?? [],
       );
       const pprPlan = buildV15PprMaterializationPlan(plan.pprPolicy, initialVector);
-      validateV15PprMaterializationPlan(pprPlan);
+      const pprSemanticRequest = { corpusId: plan.corpusId, plan: pprPlan };
+      assertValidSemanticRequest(PPR_MATERIALIZE_BOUNDED_V1, pprSemanticRequest);
       lease = await this.renew(lease);
       const pprMaterialization = await this.transport.pprMaterializeBounded({
         generation: lease.generation,
-        corpusId: plan.corpusId,
-        plan: pprPlan,
+        ...pprSemanticRequest,
       });
       validateOperationEnvelope(lease, pprMaterialization, PPR_MATERIALIZE_BOUNDED_V1);
-      validatePprMaterializationResponse(plan.corpusId, pprPlan, pprMaterialization);
+      assertValidSemanticExchange(
+        PPR_MATERIALIZE_BOUNDED_V1,
+        pprSemanticRequest,
+        {
+          rankedPassages: pprMaterialization.rankedPassages,
+          rankedFacts: pprMaterialization.rankedFacts,
+          iterations: pprMaterialization.iterations,
+          converged: pprMaterialization.converged,
+          l1Delta: pprMaterialization.l1Delta,
+        },
+      );
 
       // Stop scheduling and await any heartbeat first.  Only then perform the
       // one explicit final renewal/validation, so no timer renewal can race
