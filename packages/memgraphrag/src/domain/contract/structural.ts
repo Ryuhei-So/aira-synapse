@@ -31,6 +31,11 @@ export interface ArrayContract<Item extends ContractNode = ContractNode> {
   readonly items: Item;
 }
 
+export interface TupleContract<Items extends readonly ContractNode[] = readonly ContractNode[]> {
+  readonly kind: 'tuple';
+  readonly items: Items;
+}
+
 export interface OptionalContract<Value extends ContractNode = ContractNode> {
   readonly kind: 'optional';
   readonly value: Value;
@@ -73,6 +78,7 @@ export type ContractNode =
   | BooleanContract
   | LiteralContract
   | ArrayContract
+  | TupleContract
   | OptionalContract
   | ObjectContract
   | DiscriminatedUnionContract
@@ -100,6 +106,12 @@ export function arrayContract<const Item extends ContractNode>(
   items: Item,
 ): ArrayContract<Item> {
   return { kind: 'array', items };
+}
+
+export function tupleContract<const Items extends readonly ContractNode[]>(
+  ...items: Items
+): TupleContract<Items> {
+  return { kind: 'tuple', items };
 }
 
 export function optionalContract<const Value extends ContractNode>(
@@ -154,6 +166,7 @@ export type ContractValue<Node extends ContractNode> =
       : Node extends BooleanContract ? boolean
         : Node extends LiteralContract<infer Values> ? Values[number]
           : Node extends ArrayContract<infer Item> ? readonly ContractValue<Item>[]
+            : Node extends TupleContract<infer Items> ? { readonly [Index in keyof Items]: ContractValue<Items[Index]> }
             : Node extends OptionalContract<infer Value> ? ContractValue<Value> | undefined
               : Node extends ObjectContract<infer Fields>
                 ? {
@@ -249,6 +262,24 @@ function validateNode(
         errors,
         externalReferenceResolver,
       ));
+      return;
+    case 'tuple':
+      if (!Array.isArray(value)) {
+        errors.push(`${path} must be an array`);
+        return;
+      }
+      if (Object.getPrototypeOf(value) !== Array.prototype) errors.push(`${path} must use the plain Array prototype`);
+      if (value.length !== node.items.length) errors.push(`${path} must contain exactly ${node.items.length} items`);
+      for (const key of Reflect.ownKeys(value)) {
+        const numericKey = typeof key === 'string' && /^(0|[1-9]\d*)$/u.test(key) ? Number(key) : Number.NaN;
+        if (key !== 'length' && (!Number.isSafeInteger(numericKey) || numericKey < 0 || numericKey >= value.length)) {
+          errors.push(`${path}.${displayKey(key)} is an unknown tuple field`);
+        }
+      }
+      node.items.forEach((item, index) => {
+        if (!hasOwn(value, String(index))) errors.push(`${path}[${index}] must not be sparse`);
+        else validateNode(item, value[index], `${path}[${index}]`, errors, externalReferenceResolver);
+      });
       return;
     case 'optional':
       // Optional is normally handled by an object.  A present optional value
@@ -387,6 +418,29 @@ function validateDeclarationNode(node: unknown, path: string, errors: string[]):
     case 'array':
       exactDeclarationKeys(['kind', 'items']);
       validateDeclarationNode(node.items, `${path}.items`, errors);
+      return;
+    case 'tuple':
+      exactDeclarationKeys(['kind', 'items']);
+      if (!Array.isArray(node.items) || node.items.length === 0) {
+        declarationError(errors, `${path}.items`, 'must be a non-empty array');
+      } else {
+        if (Object.getPrototypeOf(node.items) !== Array.prototype) {
+          declarationError(errors, `${path}.items`, 'must be a plain array');
+        }
+        for (const key of Reflect.ownKeys(node.items)) {
+          const index = typeof key === 'string' && /^(0|[1-9]\d*)$/u.test(key) ? Number(key) : -1;
+          if (key !== 'length' && (!Number.isSafeInteger(index) || index < 0 || index >= node.items.length)) {
+            declarationError(errors, `${path}.items`, `has unknown field ${displayKey(key)}`);
+          }
+        }
+        for (let index = 0; index < node.items.length; index += 1) {
+          if (!hasOwn(node.items, String(index))) {
+            declarationError(errors, `${path}.items[${index}]`, 'must not be sparse');
+          } else {
+            validateDeclarationNode(node.items[index], `${path}.items[${index}]`, errors);
+          }
+        }
+      }
       return;
     case 'optional':
       exactDeclarationKeys(['kind', 'value']);

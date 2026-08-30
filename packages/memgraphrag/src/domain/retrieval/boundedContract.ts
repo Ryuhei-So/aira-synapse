@@ -15,6 +15,7 @@ import {
   numberContract,
   objectContract,
   stringContract,
+  tupleContract,
   validateContractDeclaration,
   type ContractNode,
   type ContractValue,
@@ -74,27 +75,15 @@ const candidateSlotResult = <
 
 const candidateRequest = objectContract({
   corpusId: stringContract(),
-  slots: arrayContract({
-    kind: 'discriminatedUnion',
-    discriminator: 'slotId',
-    branches: {
-      passage: searchSlot('passage'),
-      fact: searchSlot('fact'),
-      schema: searchSlot('schema'),
-    },
-  } as const),
+  slots: tupleContract(searchSlot('passage'), searchSlot('fact'), searchSlot('schema')),
 });
 
 const candidateResult = objectContract({
-  slots: arrayContract({
-    kind: 'discriminatedUnion',
-    discriminator: 'slotId',
-    branches: {
-      passage: candidateSlotResult('passage', passageRef),
-      fact: candidateSlotResult('fact', factRef),
-      schema: candidateSlotResult('schema', schemaRef),
-    },
-  } as const),
+  slots: tupleContract(
+    candidateSlotResult('passage', passageRef),
+    candidateSlotResult('fact', factRef),
+    candidateSlotResult('schema', schemaRef),
+  ),
 });
 
 const entitySeed = objectContract({ key: stringContract(), score: numberContract() });

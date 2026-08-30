@@ -34,7 +34,6 @@ import {
   type V15FactExpansionPlan,
   type V15PprMaterializationPlan,
   type V15RetrievalRequestPlan,
-  type V15SearchSlot,
   type V15SearchSlotId,
 } from './v15Plan.js';
 
@@ -100,7 +99,7 @@ export interface GenerationLease {
 export interface CandidateSearchBoundedRequest {
   readonly generation: Generation;
   readonly corpusId: string;
-  readonly slots: readonly V15SearchSlot[];
+  readonly slots: V15RetrievalRequestPlan['candidateSearch']['slots'];
 }
 
 export interface BoundedCandidateHit<TItem> {
@@ -129,7 +128,11 @@ export type CandidateSearchSlotResult =
 export interface CandidateSearchBoundedResponse {
   readonly generation: Generation;
   readonly sessionId: string;
-  readonly slots: readonly CandidateSearchSlotResult[];
+  readonly slots: readonly [
+    Extract<CandidateSearchSlotResult, { readonly slotId: 'passage' }>,
+    Extract<CandidateSearchSlotResult, { readonly slotId: 'fact' }>,
+    Extract<CandidateSearchSlotResult, { readonly slotId: 'schema' }>,
+  ];
 }
 
 export interface CandidateSearchBoundedPort {

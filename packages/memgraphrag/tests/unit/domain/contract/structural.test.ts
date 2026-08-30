@@ -9,6 +9,7 @@ import {
   numberContract,
   objectContract,
   stringContract,
+  tupleContract,
   validateContractDeclaration,
   validateContractNode,
   type ContractNode,
@@ -128,6 +129,21 @@ describe('neutral structural contract DSL', () => {
     ]) {
       expect(validateContractNode(contract, value).valid).toBe(false);
     }
+  });
+
+  it('validates fixed heterogeneous tuples without widening them to arrays', () => {
+    const tuple = tupleContract(stringContract(), numberContract());
+    expect(validateContractNode(tuple, ['id', 1]).valid).toBe(true);
+    expect(validateContractNode(tuple, ['id']).valid).toBe(false);
+    expect(validateContractNode(tuple, ['id', 1, 2]).valid).toBe(false);
+    expect(validateContractNode(tuple, [1, 'id']).valid).toBe(false);
+    expect(validateContractDeclaration(tuple).valid).toBe(true);
+    const sparseItems = Array<ContractNode>(2);
+    sparseItems[0] = stringContract();
+    expect(validateContractDeclaration({ kind: 'tuple', items: sparseItems }).valid).toBe(false);
+    const decoratedItems = [stringContract()] as ContractNode[] & { future?: boolean };
+    decoratedItems.future = true;
+    expect(validateContractDeclaration({ kind: 'tuple', items: decoratedItems }).valid).toBe(false);
   });
 
   it('validates declarations as a closed language', () => {
