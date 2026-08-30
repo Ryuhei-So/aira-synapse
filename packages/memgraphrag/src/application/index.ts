@@ -108,11 +108,17 @@ export {
 } from './query/ThesaurusExpansionPolicy.js';
 export { TemplateResponseGenerator, type TemplateContextBundle } from './query/TemplateResponseGenerator.js';
 export {
+  DefaultBoundedQueryPlanner,
+  type BoundedQueryPlanner,
+  type BoundedQueryPlannerDependencies,
+} from './query/BoundedQueryPlanner.js';
+export {
   DefaultQueryService,
   ContextBuilderService,
   DEFAULT_HYPER_PARAMS,
   DEFAULT_PPR_CONVERGENCE_EPSILON,
   DEFAULT_PPR_MAX_ITERATIONS,
+  normalizeV15QueryText,
   type CitationDto,
   type EntityHit,
   type QueryMetrics,

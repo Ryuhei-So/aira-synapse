@@ -17,6 +17,7 @@ import {
   BuildDictionaryFromApi,
   CorpusManager as DefaultCorpusManager,
   DefaultDictionaryService,
+  DefaultBoundedQueryPlanner,
   DefaultIndexingService,
   DefaultQueryService,
   DefaultThesaurusService,
@@ -87,6 +88,27 @@ export const SERVICE_TOKENS = {
 } as const;
 
 const RUNTIME_CORPUS_ID = '__runtime__';
+
+function createConfiguredEmbeddingProvider(config: MemGraphRagConfig): IEmbeddingProvider {
+  const apiKey = resolveApiKey(config.providers.apiKeyFile);
+  return config.localOnly
+    ? new FeatureUnavailableEmbeddingProvider()
+    : new OpenAIEmbeddingProvider({
+      apiKey,
+      model: config.providers.embedding.model,
+      baseUrl: process.env['OPENAI_EMBEDDING_BASE_URL'] ?? process.env['OPENAI_BASE_URL'],
+      // Existing persisted vectors use the provider model's default dimensions.
+      // Forwarding the optional config requires a vector-generation migration;
+      // this additive planner must share the existing runtime authority.
+    });
+}
+
+/** Build the producer-owned V15 planner without opening any storage backend. */
+export function createBoundedQueryPlanner(config: MemGraphRagConfig): DefaultBoundedQueryPlanner {
+  return new DefaultBoundedQueryPlanner({
+    embeddingProvider: createConfiguredEmbeddingProvider(config),
+  });
+}
 
 interface DictionaryBuildResult {
   readonly termCount: number;
@@ -360,13 +382,7 @@ class RuntimeImpl implements MemGraphRagRuntime {
         baseUrl: process.env['OPENAI_BASE_URL'],
       });
 
-    const embeddingProvider: IEmbeddingProvider = this.config.localOnly
-      ? new FeatureUnavailableEmbeddingProvider()
-      : new OpenAIEmbeddingProvider({
-        apiKey,
-        model: this.config.providers.embedding.model,
-        baseUrl: process.env['OPENAI_EMBEDDING_BASE_URL'] ?? process.env['OPENAI_BASE_URL'],
-      });
+    const embeddingProvider = createConfiguredEmbeddingProvider(this.config);
 
     const nlpExtractor: INLPExtractor = this.config.providers.nlp.backend === 'python-sidecar'
       ? new PythonSidecarExtractor({

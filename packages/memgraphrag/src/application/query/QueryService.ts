@@ -143,7 +143,8 @@ export interface QueryServiceDependencies {
   readonly multiHopReasoner?: IMultiHopReasoner;
 }
 
-function normalizeQueryText(text: string): string {
+/** The normalization shared by legacy preparation and bounded planning. */
+export function normalizeV15QueryText(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
 }
 
@@ -196,7 +197,7 @@ export class DefaultQueryService implements QueryService {
 
   /** Preprocess: normalize, dictionary match, thesaurus expand, comparison detect, dict enrich. */
   public async prepare(request: QueryRequest): Promise<PreparedQuery> {
-    const normalizedText = normalizeQueryText(request.text);
+    const normalizedText = normalizeV15QueryText(request.text);
     const matches = await this.dependencies.dictionary.match(normalizedText, 'unknown');
 
     let expansion: { expandedTerms: readonly string[]; rewrittenQuery: string; originalQuery: string };
