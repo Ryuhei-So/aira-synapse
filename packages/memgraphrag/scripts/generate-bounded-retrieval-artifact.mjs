@@ -11,10 +11,18 @@ import {
   BOUNDED_RETRIEVAL_STRUCTURAL_ARTIFACT,
   validateBoundedSemanticExchange,
 } from '../dist/domain/retrieval/boundedContract.js';
+import {
+  BOUNDED_RETRIEVAL_FIXTURE_VERSION,
+  assertBoundedRetrievalPublicationBudget,
+  BOUNDED_RETRIEVAL_WITNESS_VERSION,
+  deriveBoundedAssertionCoverage,
+  generateBoundedAssertionWitnesses,
+  validateBoundedRetrievalFixture,
+} from '../dist/domain/retrieval/boundedWitnesses.js';
+import { projectBoundedRetrievalExchanges } from '../dist/domain/retrieval/boundedFixtureProjection.js';
 import { V15_ENTITY_NORMALIZATION_DIGEST } from '../dist/domain/retrieval/v15Plan.js';
 
-const FIXTURE_VERSION = 'aira-synapse-bounded-retrieval-fixture@1';
-const MANIFEST_VERSION = 'aira-synapse-bounded-retrieval-manifest@1';
+const MANIFEST_VERSION = 'aira-synapse-bounded-retrieval-manifest@2';
 const DOMAIN_MANIFEST_VERSION = 'aira-synapse-bounded-domain-manifest@1';
 const DOMAIN_FIXTURE_VERSION = 'aira-synapse-bounded-domain-fixture@1';
 const UNICODE_MANIFEST_VERSION = 'V15UnicodeLowercaseManifest@1';
@@ -77,74 +85,21 @@ async function readPinnedDependency(repoRelativePath) {
 }
 
 function buildFixture(domain) {
-  const hits = domain.candidateHits;
-  const boundedHits = (namespace) => hits
-    .filter((hit) => hit.namespace === namespace)
-    .map(({ id, score, item }) => ({ id, score, item }));
-  const candidateRequest = {
-    corpusId: 'fixture-corpus',
-    slots: [
-      { slotId: 'passage', namespace: 'passage', queryVector: [0], threshold: -1, limit: 10 },
-      { slotId: 'fact', namespace: 'fact', queryVector: [0], threshold: -1, limit: 10 },
-      { slotId: 'schema', namespace: 'schema', queryVector: [0], threshold: -1, limit: 10 },
-    ],
-  };
-  const candidateResult = {
-    slots: [
-      { slotId: 'passage', namespace: 'passage', hits: boundedHits('passage') },
-      { slotId: 'fact', namespace: 'fact', hits: boundedHits('fact') },
-      { slotId: 'schema', namespace: 'schema', hits: boundedHits('schema') },
-    ],
-  };
-  const factRequest = {
-    corpusId: 'fixture-corpus',
-    plan: {
-      seedEntities: [{ key: 'alpha', score: 1 }, { key: 'beta', score: 0.5 }],
-      excludedSeedFactIds: [],
-      attenuation: 0.3,
-      limit: 20,
-      normalizationContractDigest: V15_ENTITY_NORMALIZATION_DIGEST,
-    },
-  };
-  const factResult = {
-    facts: [{
-      factId: 'fixture-fact-inactive',
-      score: 0.3,
-      fact: hits.find((hit) => hit.id === 'fact:fixture-fact-inactive').item,
-    }],
-  };
-  const pprRequest = {
-    corpusId: 'fixture-corpus',
-    plan: {
-      seeds: [{ nodeId: 'fact:fixture-fact-inactive', score: 1 }],
-      teleportProbability: 0.15,
-      convergenceEpsilon: 0.01,
-      maxIterations: 20,
-      hubDegreeThreshold: 100,
-      passageLimit: 10,
-      entityLimit: 10,
-    },
-  };
-  const pprResult = {
-    ...domain.pprMaterialization,
-    iterations: 1,
-    converged: true,
-    l1Delta: 0.001,
-  };
-  const exchanges = {
-    [BOUNDED_RETRIEVAL_OPERATION_NAMES[0]]: { request: candidateRequest, result: candidateResult },
-    [BOUNDED_RETRIEVAL_OPERATION_NAMES[1]]: { request: factRequest, result: factResult },
-    [BOUNDED_RETRIEVAL_OPERATION_NAMES[2]]: { request: pprRequest, result: pprResult },
-  };
-  if (Object.keys(exchanges).join('\0') !== BOUNDED_RETRIEVAL_OPERATION_NAMES.join('\0')) {
-    throw new Error('fixture operation set does not match the canonical declaration');
-  }
+  const exchanges = projectBoundedRetrievalExchanges(domain);
   for (const operation of BOUNDED_RETRIEVAL_OPERATION_NAMES) {
     const exchange = exchanges[operation];
     const validation = validateBoundedSemanticExchange(operation, exchange.request, exchange.result);
     if (!validation.valid) throw new Error(`${operation} fixture is invalid: ${validation.errors.join('; ')}`);
   }
-  return { fixtureVersion: FIXTURE_VERSION, exchanges };
+  const fixture = {
+    fixtureVersion: BOUNDED_RETRIEVAL_FIXTURE_VERSION,
+    witnessVersion: BOUNDED_RETRIEVAL_WITNESS_VERSION,
+    exchanges,
+    witnesses: generateBoundedAssertionWitnesses(exchanges),
+  };
+  const validation = validateBoundedRetrievalFixture(fixture);
+  if (!validation.valid) throw new Error(`bounded retrieval fixture is invalid: ${validation.errors.join('; ')}`);
+  return fixture;
 }
 
 async function expectedArtifacts() {
@@ -181,6 +136,9 @@ async function expectedArtifacts() {
   }
   const contractText = canonicalJson(BOUNDED_RETRIEVAL_STRUCTURAL_ARTIFACT);
   const fixtureText = canonicalJson(buildFixture(JSON.parse(domainFixture.content.toString('utf8'))));
+  // Keep producer publication bounded independently of consumer allocation policy.
+  assertBoundedRetrievalPublicationBudget(fixtureText);
+  const witnessCoverage = deriveBoundedAssertionCoverage().byOperation;
   const operationSemanticDigests = Object.fromEntries(
     BOUNDED_RETRIEVAL_OPERATION_NAMES.map((operation) => {
       const semanticBytes = canonicalJson(BOUNDED_RETRIEVAL_STRUCTURAL_ARTIFACT.operations[operation]);
@@ -193,10 +151,12 @@ async function expectedArtifacts() {
     contractFile: contractName,
     contractBytes: bytes(contractText),
     contractSha256: sha256(contractText),
-    fixtureVersion: FIXTURE_VERSION,
+    fixtureVersion: BOUNDED_RETRIEVAL_FIXTURE_VERSION,
     fixtureFile: fixtureName,
     fixtureBytes: bytes(fixtureText),
     fixtureSha256: sha256(fixtureText),
+    witnessVersion: BOUNDED_RETRIEVAL_WITNESS_VERSION,
+    witnessCoverage,
     operationSemanticDigests,
     dependencies: [
       {

@@ -15,6 +15,22 @@ export interface RefinementEvaluationContext {
   readonly normalize: (dependency: string, value: string) => string;
 }
 
+export type RefinementEvaluationPartition = 'request' | 'exchange' | 'validation';
+export type RefinementEvaluationFailureKind = 'false' | 'error';
+
+export interface RefinementEvaluationFailure {
+  readonly partition: RefinementEvaluationPartition;
+  readonly assertionIndex: number;
+  readonly opcode?: RefinementOpcode;
+  readonly kind: RefinementEvaluationFailureKind;
+  readonly message: string;
+}
+
+export interface RefinementEvaluationResult {
+  readonly valid: boolean;
+  readonly failure?: RefinementEvaluationFailure;
+}
+
 type Scope = Readonly<Record<string, unknown>>;
 type Handler = (node: RefinementNode, context: RefinementEvaluationContext, scope: Scope) => unknown;
 
@@ -269,18 +285,84 @@ export const REFINEMENT_EVALUATOR_DISPATCH = {
   ).every((item, index) => evaluate(expression(node, 'rank'), context, collectionScope(node, item, scope)) === index + 1),
 } as const satisfies Readonly<Record<RefinementOpcode, Handler>>;
 
+/**
+ * Evaluate a complete program while retaining the first failing assertion.
+ * The ordinary throwing evaluator below remains the public fail-closed path;
+ * this result form is used by producer witnesses and tests to prove the
+ * addressed partition/index rather than merely observing an invalid exchange.
+ */
+export function inspectRefinementProgram(
+  program: RefinementProgram,
+  context: RefinementEvaluationContext,
+  structuralRoots: RefinementStructuralRoots,
+): RefinementEvaluationResult {
+  const validation = validateRefinementProgramPointers(program, structuralRoots);
+  if (!validation.valid) {
+    return {
+      valid: false,
+      failure: {
+        partition: 'validation',
+        assertionIndex: -1,
+        kind: 'error',
+        message: validation.errors.join('; '),
+      },
+    };
+  }
+  for (const [partition, assertions] of [
+    ['request', program.requestAssertions],
+    ['exchange', program.exchangeAssertions],
+  ] as const) {
+    for (const [assertionIndex, assertion] of assertions.entries()) {
+      const declaration = REFINEMENT_NODE_DECLARATIONS[assertion.op];
+      if (declaration.role !== 'assertion') {
+        return {
+          valid: false,
+          failure: {
+            partition: 'validation',
+            assertionIndex,
+            opcode: assertion.op,
+            kind: 'error',
+            message: `${assertion.op} is not an assertion`,
+          },
+        };
+      }
+      try {
+        if (evaluate(assertion, context, {}) !== true) {
+          return {
+            valid: false,
+            failure: {
+              partition,
+              assertionIndex,
+              opcode: assertion.op,
+              kind: 'false',
+              message: `${partition} assertion ${assertionIndex} (${assertion.op}) was false`,
+            },
+          };
+        }
+      } catch (error) {
+        return {
+          valid: false,
+          failure: {
+            partition,
+            assertionIndex,
+            opcode: assertion.op,
+            kind: 'error',
+            message: error instanceof Error ? error.message : String(error),
+          },
+        };
+      }
+    }
+  }
+  return { valid: true };
+}
+
 export function evaluateRefinementProgram(
   program: RefinementProgram,
   context: RefinementEvaluationContext,
   structuralRoots: RefinementStructuralRoots,
 ): void {
-  const validation = validateRefinementProgramPointers(program, structuralRoots);
-  if (!validation.valid) fail(validation.errors.join('; '));
-  for (const assertion of [...program.requestAssertions, ...program.exchangeAssertions]) {
-    const declaration = REFINEMENT_NODE_DECLARATIONS[assertion.op];
-    if (declaration.role !== 'assertion') fail(`${assertion.op} is not an assertion`);
-    if (evaluate(assertion, context, {}) !== true) fail(`assertion ${assertion.op} was false`);
-  }
+  const result = inspectRefinementProgram(program, context, structuralRoots);
+  if (!result.valid) fail(result.failure?.message ?? 'unknown evaluation failure');
 }
 
 export function evaluateRefinementRequest(
