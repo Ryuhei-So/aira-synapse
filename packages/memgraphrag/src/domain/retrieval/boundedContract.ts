@@ -366,14 +366,58 @@ const validateSemanticNode = (node: ContractNode, value: unknown): ContractValid
     errors.push(...validation.errors.map((error) => `${path}${error.slice(1)}`));
   });
 
+/** Validate only the structural request shape, before relational assertions. */
+export function validateBoundedSemanticRequestShape(
+  operation: BoundedRetrievalOperationName,
+  request: unknown,
+): ContractValidation {
+  const validation = validateSemanticNode(
+    BOUNDED_RETRIEVAL_STRUCTURAL_DECLARATIONS[operation].request,
+    request,
+  );
+  return {
+    valid: validation.valid,
+    errors: validation.errors.map((error) => `request${error.slice(1)}`),
+  };
+}
+
+/** Validate only the structural result shape, before relational assertions. */
+export function validateBoundedSemanticResultShape(
+  operation: BoundedRetrievalOperationName,
+  result: unknown,
+): ContractValidation {
+  const validation = validateSemanticNode(
+    BOUNDED_RETRIEVAL_STRUCTURAL_DECLARATIONS[operation].result,
+    result,
+  );
+  return {
+    valid: validation.valid,
+    errors: validation.errors.map((error) => `result${error.slice(1)}`),
+  };
+}
+
+/** Validate both JSON shapes without evaluating any cross-field rule. */
+export function validateBoundedSemanticExchangeShape(
+  operation: BoundedRetrievalOperationName,
+  request: unknown,
+  result: unknown,
+): ContractValidation {
+  const requestValidation = validateBoundedSemanticRequestShape(operation, request);
+  const resultValidation = validateBoundedSemanticResultShape(operation, result);
+  return {
+    valid: requestValidation.valid && resultValidation.valid,
+    errors: [...requestValidation.errors, ...resultValidation.errors],
+  };
+}
+
 /** Validate every request-only invariant before native work begins. */
 export function validateBoundedSemanticRequest(
   operation: BoundedRetrievalOperationName,
   request: unknown,
 ): ContractValidation {
   const declaration = BOUNDED_RETRIEVAL_STRUCTURAL_DECLARATIONS[operation];
-  const validation = validateSemanticNode(declaration.request, request);
-  const errors = validation.errors.map((error) => `request${error.slice(1)}`);
+  const validation = validateBoundedSemanticRequestShape(operation, request);
+  const errors = [...validation.errors];
   if (errors.length === 0) {
     try {
       evaluateRefinementRequest(
@@ -395,9 +439,9 @@ export function validateBoundedSemanticExchange(
 ): ContractValidation {
   const declaration = BOUNDED_RETRIEVAL_STRUCTURAL_DECLARATIONS[operation];
   const requestValidation = validateBoundedSemanticRequest(operation, request);
-  const resultValidation = validateSemanticNode(declaration.result, result);
+  const resultValidation = validateBoundedSemanticResultShape(operation, result);
   const errors = [...requestValidation.errors];
-  errors.push(...resultValidation.errors.map((error) => `result${error.slice(1)}`));
+  errors.push(...resultValidation.errors);
   if (errors.length === 0) {
     try {
       evaluateRefinementProgram(

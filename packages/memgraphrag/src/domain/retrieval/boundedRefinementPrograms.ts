@@ -33,14 +33,13 @@ const forEach = (collection: RefinementNode, scope: string, predicate: Refinemen
 
 const MAX_SAFE = literal(Number.MAX_SAFE_INTEGER);
 
+// The request/result tuple contracts already enforce the fixed slot tags and
+// cardinality.  Keeping those duplicate refinements would only create
+// schema-only mutations, not independently executable semantic witnesses.
 const candidateRequestAssertions: RefinementNode[] = [
   assertTrue(unary('not', binary('eq', pointer('request', '/corpusId'), literal('')))),
-  node('tuple_tags', { actual: pointer('request', '/slots'), field: 'slotId', expected: ['passage', 'fact', 'schema'] }),
 ];
-const candidateResultAssertions: RefinementNode[] = [
-  node('tuple_tags', { actual: pointer('result', '/slots'), field: 'slotId', expected: ['passage', 'fact', 'schema'] }),
-  node('length_eq', { actual: pointer('result', '/slots'), expected: unary('array_length', pointer('request', '/slots')) }),
-];
+const candidateResultAssertions: RefinementNode[] = [];
 
 (['passage', 'fact', 'schema'] as const).forEach((kind, index) => {
   const requestSlot = `/slots/${index}`;
@@ -57,15 +56,23 @@ const candidateResultAssertions: RefinementNode[] = [
     node('length_lte_ref', { actual: hits, limit: pointer('request', `${requestSlot}/limit`) }),
     unique(hits, scope, iteration(scope, '/id')),
     ordered(hits, scope, iteration(scope, '/score'), iteration(scope, '/id')),
-    forEach(hits, scope, list('all', [
-      binary('eq', iteration(scope, '/id'), node('concat', {
-        values: [literal(`${kind}:`), iteration(scope, `/item/${objectId}`)],
-      })),
-      binary('eq', iteration(scope, '/item/corpusId'), pointer('request', '/corpusId')),
-      binary('lte', pointer('request', `${requestSlot}/threshold`), iteration(scope, '/score')),
-      binary('lte', literal(-1), iteration(scope, '/score')),
-      binary('lte', iteration(scope, '/score'), literal(1)),
-    ])),
+    forEach(hits, scope, binary('eq', iteration(scope, '/id'), node('concat', {
+      values: [literal(`${kind}:`), iteration(scope, `/item/${objectId}`)],
+    }))),
+    forEach(hits, scope, binary(
+      'eq',
+      iteration(scope, '/item/corpusId'),
+      pointer('request', '/corpusId'),
+    )),
+    forEach(hits, scope, binary(
+      'lte',
+      pointer('request', `${requestSlot}/threshold`),
+      iteration(scope, '/score'),
+    )),
+    // The request threshold's lower bound already implies score >= -1.
+    // Retaining that redundant clause would make it impossible to witness
+    // without also failing the threshold relation.
+    forEach(hits, scope, binary('lte', iteration(scope, '/score'), literal(1))),
   );
 });
 
@@ -108,26 +115,35 @@ export const FACT_EXPAND_REFINEMENT_PROGRAM: RefinementProgram = {
     node('length_lte_ref', { actual: expansionFacts, limit: pointer('request', '/plan/limit') }),
     unique(expansionFacts, expansionScope, iteration(expansionScope, '/factId')),
     ordered(expansionFacts, expansionScope, iteration(expansionScope, '/score'), iteration(expansionScope, '/factId')),
-    forEach(expansionFacts, expansionScope, list('all', [
-      binary('eq', iteration(expansionScope, '/factId'), iteration(expansionScope, '/fact/factId')),
-      binary('eq', iteration(expansionScope, '/fact/corpusId'), pointer('request', '/corpusId')),
-      unary('not', node('set_contains', {
-        set: pointer('request', '/plan/excludedSeedFactIds'),
-        value: iteration(expansionScope, '/factId'),
-      })),
-      list('any', [
-        unary('not', binary('eq', headScore, literal(null))),
-        unary('not', binary('eq', tailScore, literal(null))),
-      ]),
-      binary('eq', iteration(expansionScope, '/score'), binary(
+    forEach(expansionFacts, expansionScope, binary(
+      'eq',
+      iteration(expansionScope, '/factId'),
+      iteration(expansionScope, '/fact/factId'),
+    )),
+    forEach(expansionFacts, expansionScope, binary(
+      'eq',
+      iteration(expansionScope, '/fact/corpusId'),
+      pointer('request', '/corpusId'),
+    )),
+    forEach(expansionFacts, expansionScope, unary('not', node('set_contains', {
+      set: pointer('request', '/plan/excludedSeedFactIds'),
+      value: iteration(expansionScope, '/factId'),
+    }))),
+    forEach(expansionFacts, expansionScope, list('any', [
+      unary('not', binary('eq', headScore, literal(null))),
+      unary('not', binary('eq', tailScore, literal(null))),
+    ])),
+    forEach(expansionFacts, expansionScope, binary('eq',
+      iteration(expansionScope, '/score'),
+      binary(
         'multiply',
         list('max', [
           list('coalesce', [headScore, literal(0)]),
           list('coalesce', [tailScore, literal(0)]),
         ]),
         pointer('request', '/plan/attenuation'),
-      )),
-    ])),
+      ),
+    )),
   ],
 };
 
@@ -156,18 +172,32 @@ const pprExchangeAssertions: RefinementNode[] = [
     unique(collection, scope, iteration(scope, '/nodeId')),
     ordered(collection, scope, iteration(scope, '/score'), iteration(scope, '/nodeId')),
     node('rank_is_index_plus_one', { collection, scope, rank: iteration(scope, '/rank') }),
-    forEach(collection, scope, list('all', [
-      binary('eq', iteration(scope, '/nodeId'), node('concat', {
-        values: [literal(`${prefix}:`), iteration(scope, `/${itemField}/${idField}`)],
-      })),
-      binary('eq', iteration(scope, `/${itemField}/corpusId`), pointer('request', '/corpusId')),
-    ])),
+    forEach(collection, scope, binary('eq', iteration(scope, '/nodeId'), node('concat', {
+      values: [literal(`${prefix}:`), iteration(scope, `/${itemField}/${idField}`)],
+    }))),
+    forEach(collection, scope, binary(
+      'eq',
+      iteration(scope, `/${itemField}/corpusId`),
+      pointer('request', '/corpusId'),
+    )),
   );
 });
 
 pprExchangeAssertions.push(
   safeInteger(pointer('result', '/iterations'), 0, pointer('request', '/plan/maxIterations')),
   finiteRange(pointer('result', '/l1Delta'), 0, Number.MAX_VALUE),
+  // A zero-iteration result is valid exactly when all four conditions hold.
+  // Distributing the guard over the conjunction is logically equivalent, but
+  // gives each independently removable condition its own witness identity.
+  ...[
+    binary('eq', unary('array_length', pointer('result', '/rankedPassages')), literal(0)),
+    binary('eq', unary('array_length', pointer('result', '/rankedFacts')), literal(0)),
+    pointer('result', '/converged'),
+    binary('eq', pointer('result', '/l1Delta'), literal(0)),
+  ].map((condition) => assertTrue(list('any', [
+    unary('not', binary('eq', pointer('result', '/iterations'), literal(0))),
+    condition,
+  ]))),
   node('field_eq_ref', {
     value: pointer('result', '/converged'),
     expected: binary('lt', pointer('result', '/l1Delta'), pointer('request', '/plan/convergenceEpsilon')),
@@ -175,15 +205,6 @@ pprExchangeAssertions.push(
   assertTrue(list('any', [
     pointer('result', '/converged'),
     binary('eq', pointer('result', '/iterations'), pointer('request', '/plan/maxIterations')),
-  ])),
-  assertTrue(list('any', [
-    unary('not', binary('eq', pointer('result', '/iterations'), literal(0))),
-    list('all', [
-      binary('eq', unary('array_length', pointer('result', '/rankedPassages')), literal(0)),
-      binary('eq', unary('array_length', pointer('result', '/rankedFacts')), literal(0)),
-      pointer('result', '/converged'),
-      binary('eq', pointer('result', '/l1Delta'), literal(0)),
-    ]),
   ])),
 );
 
