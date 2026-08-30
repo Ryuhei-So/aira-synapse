@@ -14,7 +14,8 @@ const iteration = (scope: string, path: string): RefinementNode => ({ op: 'itera
 
 const candidateProgram: RefinementProgram = {
   version: REFINEMENT_IR_VERSION,
-  assertions: [
+  requestAssertions: [],
+  exchangeAssertions: [
     {
       op: 'length_eq',
       actual: pointer('result', '/hits'),
@@ -89,14 +90,16 @@ describe('refinement evaluator', () => {
     }
     expect(() => evaluateRefinementProgram({
       version: REFINEMENT_IR_VERSION,
-      assertions: [{ op: 'future_full_snapshot' } as unknown as RefinementNode],
+      requestAssertions: [],
+      exchangeAssertions: [{ op: 'future_full_snapshot' } as unknown as RefinementNode],
     }, context([]), structuralRoots)).toThrow(/failed closed/);
   });
 
   it('rejects a schema-unknown pointer even when its wildcard collection is empty', () => {
     const typoProgram: RefinementProgram = {
       version: REFINEMENT_IR_VERSION,
-      assertions: [{
+      requestAssertions: [],
+      exchangeAssertions: [{
         op: 'finite_range',
         value: pointer('result', '/hits/*/typo'),
         minimum: -1,
@@ -104,6 +107,30 @@ describe('refinement evaluator', () => {
       }],
     };
     expect(() => evaluateRefinementProgram(typoProgram, context([]), structuralRoots)).toThrow(/field typo is absent/);
+  });
+
+  it('cannot move a request invariant behind native work', () => {
+    const resultDependentRequest: RefinementProgram = {
+      version: REFINEMENT_IR_VERSION,
+      requestAssertions: [{
+        op: 'field_eq_ref',
+        value: pointer('result', '/hits/*/id'),
+        expected: { op: 'literal', value: 'a' },
+      }],
+      exchangeAssertions: [],
+    };
+    expect(validateRefinementProgramPointers(resultDependentRequest, structuralRoots).valid).toBe(false);
+
+    const requestOnlyExchange: RefinementProgram = {
+      version: REFINEMENT_IR_VERSION,
+      requestAssertions: [],
+      exchangeAssertions: [{
+        op: 'field_eq_ref',
+        value: pointer('request', '/ids/*'),
+        expected: { op: 'literal', value: 'a' },
+      }],
+    };
+    expect(validateRefinementProgramPointers(requestOnlyExchange, structuralRoots).valid).toBe(false);
   });
 
   it('resolves fixed tuple branches by index and rejects a branch-erasing wildcard', () => {
@@ -125,7 +152,8 @@ describe('refinement evaluator', () => {
     };
     const withPath = (path: string): RefinementProgram => ({
       version: REFINEMENT_IR_VERSION,
-      assertions: [{ op: 'field_eq_ref', value: pointer('result', path), expected: { op: 'literal', value: 'p1' } }],
+      requestAssertions: [],
+      exchangeAssertions: [{ op: 'field_eq_ref', value: pointer('result', path), expected: { op: 'literal', value: 'p1' } }],
     });
     expect(validateRefinementProgramPointers(withPath('/slots/0/hits/*/item/passageId'), tupleRoots).valid).toBe(true);
     expect(validateRefinementProgramPointers(withPath('/slots/*/hits/*/item/passageId'), tupleRoots).valid).toBe(false);

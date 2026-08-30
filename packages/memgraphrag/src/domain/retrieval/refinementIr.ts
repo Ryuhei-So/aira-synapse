@@ -37,7 +37,7 @@ export const REFINEMENT_NODE_DECLARATIONS = {
   array_length: expression({ value: 'expression' }),
   array_at: expression({ array: 'expression', index: 'expression' }),
   set_contains: expression({ set: 'expression', value: 'expression' }),
-  map_lookup: expression({ map: 'expression', key: 'expression' }),
+  map_lookup: expression({ map: 'expression', key: 'expression', keyField: 'string', valueField: 'string' }),
   normalize_ref: expression({ dependency: 'string', value: 'expression' }),
   concat: expression({ values: 'expression_array_nonempty' }),
   coalesce: expression({ values: 'expression_array_nonempty' }),
@@ -54,6 +54,7 @@ export const REFINEMENT_NODE_DECLARATIONS = {
   tuple_tags: assertion({ actual: 'expression', field: 'string', expected: 'string_array' }),
   unique_by: assertion({ collection: 'expression', scope: 'string', key: 'expression' }),
   ordered_score_desc_id_asc: assertion({ collection: 'expression', scope: 'string', score: 'expression', id: 'expression', idOrder: 'id_order' }),
+  for_each: assertion({ collection: 'expression', scope: 'string', predicate: 'expression' }),
   finite_range: assertion({ value: 'expression', minimum: 'number', maximum: 'number' }),
   safe_integer_range: assertion({ value: 'expression', minimum: 'number', maximum: 'expression' }),
   field_eq_ref: assertion({ value: 'expression', expected: 'expression' }),
@@ -67,7 +68,10 @@ export type RefinementNode = Readonly<{ op: RefinementOpcode } & Record<string, 
 
 export interface RefinementProgram {
   readonly version: typeof REFINEMENT_IR_VERSION;
-  readonly assertions: readonly RefinementNode[];
+  /** Complete request-only program; every assertion runs before native work. */
+  readonly requestAssertions: readonly RefinementNode[];
+  /** Assertions that require the native result and run on the exchange. */
+  readonly exchangeAssertions: readonly RefinementNode[];
 }
 
 export interface RefinementValidation {
@@ -244,28 +248,33 @@ export function validateRefinementProgram(value: unknown): RefinementValidation 
   if (!isPlainRecord(value)) return { valid: false, errors: ['$ must be a plain object'] };
   const keys = ownStringKeys(value, '$', errors);
   for (const key of keys) {
-    if (key !== 'version' && key !== 'assertions') errors.push(`$.${key} is unknown`);
+    if (key !== 'version' && key !== 'requestAssertions' && key !== 'exchangeAssertions') errors.push(`$.${key} is unknown`);
   }
   if (value.version !== REFINEMENT_IR_VERSION) errors.push('$.version is unknown');
-  if (!Array.isArray(value.assertions)) {
-    errors.push('$.assertions must be an array');
-  } else {
-    if (Object.getPrototypeOf(value.assertions) !== Array.prototype) {
-      errors.push('$.assertions must be a plain array');
+  const validateAssertions = (field: 'requestAssertions' | 'exchangeAssertions'): void => {
+    const assertions = value[field];
+    if (!Array.isArray(assertions)) {
+      errors.push(`$.${field} must be an array`);
+      return;
     }
-    for (const key of Reflect.ownKeys(value.assertions)) {
+    if (Object.getPrototypeOf(assertions) !== Array.prototype) {
+      errors.push(`$.${field} must be a plain array`);
+    }
+    for (const key of Reflect.ownKeys(assertions)) {
       const index = typeof key === 'string' && /^(0|[1-9]\d*)$/u.test(key) ? Number(key) : -1;
-      if (key !== 'length' && (!Number.isSafeInteger(index) || index < 0 || index >= value.assertions.length)) {
-        errors.push(`$.assertions.${String(key)} is unknown`);
+      if (key !== 'length' && (!Number.isSafeInteger(index) || index < 0 || index >= assertions.length)) {
+        errors.push(`$.${field}.${String(key)} is unknown`);
       }
     }
-    for (let index = 0; index < value.assertions.length; index += 1) {
-      if (!Object.prototype.hasOwnProperty.call(value.assertions, index)) {
-        errors.push(`$.assertions[${index}] must not be sparse`);
+    for (let index = 0; index < assertions.length; index += 1) {
+      if (!Object.prototype.hasOwnProperty.call(assertions, index)) {
+        errors.push(`$.${field}[${index}] must not be sparse`);
       } else {
-        validateNode(value.assertions[index], 'assertion', `$.assertions[${index}]`, errors, new Set(), new Set());
+        validateNode(assertions[index], 'assertion', `$.${field}[${index}]`, errors, new Set(), new Set());
       }
     }
-  }
+  };
+  validateAssertions('requestAssertions');
+  validateAssertions('exchangeAssertions');
   return { valid: errors.length === 0, errors };
 }

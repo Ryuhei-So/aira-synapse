@@ -57,7 +57,8 @@ describe('closed refinement IR', () => {
     expect(validateRefinementNode(future, 'expression').valid).toBe(false);
     expect(validateRefinementProgram({
       version: REFINEMENT_IR_VERSION,
-      assertions: [future],
+      requestAssertions: [],
+      exchangeAssertions: [future],
     }).valid).toBe(false);
   });
 
@@ -70,7 +71,8 @@ describe('closed refinement IR', () => {
     expect(validateRefinementNode({ op: 'iteration_pointer', scope: 'missing', path: '/id' }, 'expression').valid).toBe(false);
     expect(validateRefinementProgram({
       version: 'future-version',
-      assertions: [minimalNode('finite_range')],
+      requestAssertions: [],
+      exchangeAssertions: [minimalNode('finite_range')],
     }).valid).toBe(false);
 
     const cyclic: Record<string, unknown> = { op: 'not' };
@@ -78,17 +80,23 @@ describe('closed refinement IR', () => {
     expect(validateRefinementNode(cyclic, 'expression').valid).toBe(false);
 
     const sparse = Array<RefinementNode>(1);
-    expect(validateRefinementProgram({ version: REFINEMENT_IR_VERSION, assertions: sparse }).valid).toBe(false);
+    expect(validateRefinementProgram({ version: REFINEMENT_IR_VERSION, requestAssertions: sparse, exchangeAssertions: [] }).valid).toBe(false);
     const decorated = [minimalNode('finite_range')] as RefinementNode[] & { future?: boolean };
     decorated.future = true;
-    expect(validateRefinementProgram({ version: REFINEMENT_IR_VERSION, assertions: decorated }).valid).toBe(false);
+    expect(validateRefinementProgram({ version: REFINEMENT_IR_VERSION, requestAssertions: [], exchangeAssertions: decorated }).valid).toBe(false);
+    expect(validateRefinementProgram({
+      version: REFINEMENT_IR_VERSION,
+      requestAssertions: [],
+      exchangeAssertions: [],
+      requestAssertionCount: 0,
+    }).valid).toBe(false);
   });
 
   it('accepts a program containing every canonical assertion case', () => {
     const assertions = (Object.keys(REFINEMENT_NODE_DECLARATIONS) as RefinementOpcode[])
       .filter((op) => REFINEMENT_NODE_DECLARATIONS[op].role === 'assertion')
       .map(minimalNode);
-    expect(validateRefinementProgram({ version: REFINEMENT_IR_VERSION, assertions })).toEqual({
+    expect(validateRefinementProgram({ version: REFINEMENT_IR_VERSION, requestAssertions: [], exchangeAssertions: assertions })).toEqual({
       valid: true,
       errors: [],
     });

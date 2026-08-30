@@ -162,6 +162,18 @@ function walkAssertion(
   }
 }
 
+function containsResultPointer(node: RefinementNode): boolean {
+  if (node.op === 'pointer' && node.root === 'result') return true;
+  const declaration = REFINEMENT_NODE_DECLARATIONS[node.op];
+  return Object.entries(declaration.fields).some(([field, kind]) => {
+    if (kind === 'expression') return containsResultPointer(node[field] as RefinementNode);
+    if (kind === 'expression_array_nonempty') {
+      return (node[field] as readonly RefinementNode[]).some(containsResultPointer);
+    }
+    return false;
+  });
+}
+
 export function validateRefinementProgramPointers(
   program: RefinementProgram,
   roots: RefinementStructuralRoots,
@@ -169,11 +181,20 @@ export function validateRefinementProgramPointers(
   const structural = validateRefinementProgram(program);
   if (!structural.valid) return structural;
   const errors: string[] = [];
-  program.assertions.forEach((node, index) => {
+  program.requestAssertions.forEach((node, index) => {
     try {
+      if (containsResultPointer(node)) throw new TypeError('request assertion references result');
       walkAssertion(node, roots);
     } catch (error) {
-      errors.push(`$.assertions[${index}] pointer validation failed: ${error instanceof Error ? error.message : String(error)}`);
+      errors.push(`$.requestAssertions[${index}] pointer validation failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  });
+  program.exchangeAssertions.forEach((node, index) => {
+    try {
+      if (!containsResultPointer(node)) throw new TypeError('exchange assertion has no result dependency');
+      walkAssertion(node, roots);
+    } catch (error) {
+      errors.push(`$.exchangeAssertions[${index}] pointer validation failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   });
   return { valid: errors.length === 0, errors };

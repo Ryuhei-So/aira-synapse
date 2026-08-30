@@ -7,6 +7,7 @@
 import type { Fact } from '../memory/fact.js';
 import type { Passage } from '../memory/passage.js';
 import type { Schema } from '../memory/schema.js';
+import { DOMAIN_CONTRACTS, validateDomainObject } from '../memory/domainContract.js';
 import {
   arrayContract,
   booleanContract,
@@ -17,6 +18,7 @@ import {
   stringContract,
   tupleContract,
   validateContractDeclaration,
+  validateContractNode,
   type ContractNode,
   type ContractValue,
   type ContractValidation,
@@ -30,6 +32,22 @@ import type {
   PprMaterializeBoundedRequest,
   PprMaterializeBoundedResponse,
 } from './bounded.js';
+import {
+  CANDIDATE_SEARCH_REFINEMENT_PROGRAM,
+  FACT_EXPAND_REFINEMENT_PROGRAM,
+  PPR_MATERIALIZE_REFINEMENT_PROGRAM,
+} from './boundedRefinementPrograms.js';
+import { validateRefinementProgramPointers } from './refinementCompiler.js';
+import {
+  evaluateRefinementProgram,
+  evaluateRefinementRequest,
+} from './refinementEvaluator.js';
+import {
+  REFINEMENT_IR_VERSION,
+  REFINEMENT_NODE_DECLARATIONS,
+  type RefinementProgram,
+} from './refinementIr.js';
+import { normalizeV15Entity, V15_ENTITY_NORMALIZATION_DIGEST } from './v15Plan.js';
 
 export const BOUNDED_RETRIEVAL_CONTRACT_VERSION = 'aira-synapse-bounded-retrieval-contract@1' as const;
 export const CANDIDATE_SEARCH_BOUNDED_V1 = 'candidate_search_bounded@1' as const;
@@ -47,6 +65,35 @@ const DOMAIN_DEPENDENCY = 'aira-synapse-domain-contract@1' as const;
 const passageRef = externalRefContract<'passage', Passage>('passage', DOMAIN_DEPENDENCY);
 const factRef = externalRefContract<'fact', Fact>('fact', DOMAIN_DEPENDENCY);
 const schemaRef = externalRefContract<'schema', Schema>('schema', DOMAIN_DEPENDENCY);
+
+function pinnedDomainContract(
+  reference: { readonly referenceKind: string; readonly dependency: string },
+): ContractNode {
+  if (reference.dependency !== DOMAIN_DEPENDENCY) {
+    throw new TypeError(`external reference dependency must be ${DOMAIN_DEPENDENCY}`);
+  }
+  const kind = reference.referenceKind as keyof typeof DOMAIN_CONTRACTS;
+  if (!Object.prototype.hasOwnProperty.call(DOMAIN_CONTRACTS, kind)) {
+    throw new TypeError(`unknown external reference ${reference.referenceKind}`);
+  }
+  return DOMAIN_CONTRACTS[kind];
+}
+
+function validatePinnedDependencies(node: ContractNode, path: string, errors: string[]): void {
+  switch (node.kind) {
+    case 'externalRef':
+      try { pinnedDomainContract(node); } catch (error) {
+        errors.push(`${path}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      return;
+    case 'array': validatePinnedDependencies(node.items, `${path}.items`, errors); return;
+    case 'tuple': node.items.forEach((item, index) => validatePinnedDependencies(item, `${path}.items[${index}]`, errors)); return;
+    case 'optional': validatePinnedDependencies(node.value, `${path}.value`, errors); return;
+    case 'object': Object.entries(node.fields).forEach(([field, value]) => validatePinnedDependencies(value, `${path}.fields.${field}`, errors)); return;
+    case 'discriminatedUnion': Object.entries(node.branches).forEach(([branch, value]) => validatePinnedDependencies(value, `${path}.branches.${branch}`, errors)); return;
+    default: return;
+  }
+}
 
 const searchSlot = <const Kind extends 'passage' | 'fact' | 'schema'>(kind: Kind) => objectContract({
   slotId: literalContract(kind),
@@ -142,12 +189,19 @@ export interface BoundedSemanticDeclaration<
 > {
   readonly request: Request;
   readonly result: Result;
+  readonly refinement: RefinementProgram;
 }
 
 export const BOUNDED_RETRIEVAL_STRUCTURAL_DECLARATIONS = {
-  [CANDIDATE_SEARCH_BOUNDED_V1]: { request: candidateRequest, result: candidateResult },
-  [FACT_EXPAND_BOUNDED_V1]: { request: factExpandRequest, result: factExpandResult },
-  [PPR_MATERIALIZE_BOUNDED_V1]: { request: pprMaterializeRequest, result: pprMaterializeResult },
+  [CANDIDATE_SEARCH_BOUNDED_V1]: {
+    request: candidateRequest, result: candidateResult, refinement: CANDIDATE_SEARCH_REFINEMENT_PROGRAM,
+  },
+  [FACT_EXPAND_BOUNDED_V1]: {
+    request: factExpandRequest, result: factExpandResult, refinement: FACT_EXPAND_REFINEMENT_PROGRAM,
+  },
+  [PPR_MATERIALIZE_BOUNDED_V1]: {
+    request: pprMaterializeRequest, result: pprMaterializeResult, refinement: PPR_MATERIALIZE_REFINEMENT_PROGRAM,
+  },
 } as const satisfies Readonly<Record<BoundedRetrievalOperationName, BoundedSemanticDeclaration>>;
 
 type SemanticRequest<T> = Omit<T, 'generation'>;
@@ -243,7 +297,7 @@ export function validateBoundedRetrievalStructuralDeclarations(value: unknown): 
       errors.push(`$.${operation} must use a plain or null prototype`);
     }
     for (const key of Reflect.ownKeys(entry)) {
-      if (typeof key !== 'string' || (key !== 'request' && key !== 'result')) {
+      if (typeof key !== 'string' || (key !== 'request' && key !== 'result' && key !== 'refinement')) {
         errors.push(`$.${operation}.${typeof key === 'symbol' ? key.toString() : key} is unknown`);
       }
     }
@@ -254,6 +308,26 @@ export function validateBoundedRetrievalStructuralDeclarations(value: unknown): 
       }
       const validation = validateContractDeclaration(entry[side]);
       errors.push(...validation.errors.map((error) => `$.${operation}.${side}${error.slice(1)}`));
+      if (validation.valid) {
+        validatePinnedDependencies(
+          entry[side] as ContractNode,
+          `$.${operation}.${side}`,
+          errors,
+        );
+      }
+    }
+    if (!Object.prototype.hasOwnProperty.call(entry, 'refinement')) {
+      errors.push(`$.${operation}.refinement is required`);
+    } else {
+      const pointerValidation = validateRefinementProgramPointers(
+        entry.refinement as RefinementProgram,
+        {
+          request: entry.request as ContractNode,
+          result: entry.result as ContractNode,
+          resolveExternal: pinnedDomainContract,
+        },
+      );
+      errors.push(...pointerValidation.errors.map((error) => `$.${operation}.refinement${error.slice(1)}`));
     }
   }
   return { valid: errors.length === 0, errors };
@@ -261,7 +335,81 @@ export function validateBoundedRetrievalStructuralDeclarations(value: unknown): 
 
 export const BOUNDED_RETRIEVAL_STRUCTURAL_ARTIFACT = {
   contractVersion: BOUNDED_RETRIEVAL_CONTRACT_VERSION,
+  refinementIrVersion: REFINEMENT_IR_VERSION,
+  refinementNodes: REFINEMENT_NODE_DECLARATIONS,
   operations: BOUNDED_RETRIEVAL_STRUCTURAL_DECLARATIONS,
 } as const;
+
+const refinementRoots = (declaration: BoundedSemanticDeclaration) => ({
+  request: declaration.request,
+  result: declaration.result,
+  resolveExternal: pinnedDomainContract,
+});
+
+const normalizeRefinementValue = (dependency: string, value: string): string => {
+  if (dependency !== V15_ENTITY_NORMALIZATION_DIGEST) {
+    throw new TypeError(`unknown normalization dependency ${dependency}`);
+  }
+  return normalizeV15Entity(value);
+};
+
+const validateSemanticNode = (node: ContractNode, value: unknown): ContractValidation =>
+  validateContractNode(node, value, (reference, referencedValue, path, errors) => {
+    try {
+      pinnedDomainContract(reference);
+    } catch (error) {
+      errors.push(`${path}: ${error instanceof Error ? error.message : String(error)}`);
+      return;
+    }
+    const kind = reference.referenceKind as keyof typeof DOMAIN_CONTRACTS;
+    const validation = validateDomainObject(kind, referencedValue);
+    errors.push(...validation.errors.map((error) => `${path}${error.slice(1)}`));
+  });
+
+/** Validate every request-only invariant before native work begins. */
+export function validateBoundedSemanticRequest(
+  operation: BoundedRetrievalOperationName,
+  request: unknown,
+): ContractValidation {
+  const declaration = BOUNDED_RETRIEVAL_STRUCTURAL_DECLARATIONS[operation];
+  const validation = validateSemanticNode(declaration.request, request);
+  const errors = validation.errors.map((error) => `request${error.slice(1)}`);
+  if (errors.length === 0) {
+    try {
+      evaluateRefinementRequest(
+        declaration.refinement,
+        request,
+        refinementRoots(declaration),
+      );
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+  return { valid: errors.length === 0, errors };
+}
+
+export function validateBoundedSemanticExchange(
+  operation: BoundedRetrievalOperationName,
+  request: unknown,
+  result: unknown,
+): ContractValidation {
+  const declaration = BOUNDED_RETRIEVAL_STRUCTURAL_DECLARATIONS[operation];
+  const requestValidation = validateBoundedSemanticRequest(operation, request);
+  const resultValidation = validateSemanticNode(declaration.result, result);
+  const errors = [...requestValidation.errors];
+  errors.push(...resultValidation.errors.map((error) => `result${error.slice(1)}`));
+  if (errors.length === 0) {
+    try {
+      evaluateRefinementProgram(
+        declaration.refinement,
+        { request, result, normalize: normalizeRefinementValue },
+        refinementRoots(declaration),
+      );
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+  return { valid: errors.length === 0, errors };
+}
 
 export type BoundedRetrievalStructuralNode = ContractNode;

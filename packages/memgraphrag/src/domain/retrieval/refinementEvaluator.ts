@@ -97,6 +97,10 @@ function asComparableScalar(value: unknown, name: string): string | number | boo
   return fail(`${name} must be a canonical JSON scalar`);
 }
 
+function scalarEqual(left: string | number | boolean | null, right: string | number | boolean | null): boolean {
+  return left === right;
+}
+
 function binary(node: RefinementNode, context: RefinementEvaluationContext, scope: Scope): [unknown, unknown] {
   return [evaluate(expression(node, 'left'), context, scope), evaluate(expression(node, 'right'), context, scope)];
 }
@@ -138,14 +142,19 @@ export const REFINEMENT_EVALUATOR_DISPATCH = {
   set_contains: (node, context, scope) => {
     const expected = asComparableScalar(evaluate(expression(node, 'value'), context, scope), 'set value');
     return asArray(evaluate(expression(node, 'set'), context, scope), 'set')
-      .some((candidate) => Object.is(asComparableScalar(candidate, 'set candidate'), expected));
+      .some((candidate) => scalarEqual(asComparableScalar(candidate, 'set candidate'), expected));
   },
   map_lookup: (node, context, scope) => {
     const map = evaluate(expression(node, 'map'), context, scope);
-    const key = asString(evaluate(expression(node, 'key'), context, scope), 'map key');
-    if (typeof map !== 'object' || map === null || Array.isArray(map)
-      || !Object.prototype.hasOwnProperty.call(map, key)) return fail(`map key ${key} is absent`);
-    return (map as Record<string, unknown>)[key];
+    const key = asComparableScalar(evaluate(expression(node, 'key'), context, scope), 'map key');
+    const keyField = asString(field(node, 'keyField'), 'map key field');
+    const valueField = asString(field(node, 'valueField'), 'map value field');
+    const entries = asArray(map, 'map lookup');
+    const match = entries.find((entry) => typeof entry === 'object' && entry !== null
+      && scalarEqual(asComparableScalar((entry as Record<string, unknown>)[keyField], 'map entry key'), key));
+    if (!match) return null;
+    if (!Object.prototype.hasOwnProperty.call(match, valueField)) return fail(`map value field ${valueField} is absent`);
+    return (match as Record<string, unknown>)[valueField];
   },
   normalize_ref: (node, context, scope) => context.normalize(
     asString(field(node, 'dependency'), 'normalization dependency'),
@@ -160,7 +169,7 @@ export const REFINEMENT_EVALUATOR_DISPATCH = {
   },
   eq: (node, context, scope) => {
     const [left, right] = binary(node, context, scope);
-    return pairwise(left, right, (a, b) => Object.is(
+    return pairwise(left, right, (a, b) => scalarEqual(
       asComparableScalar(a, 'eq left'),
       asComparableScalar(b, 'eq right'),
     ));
@@ -204,7 +213,7 @@ export const REFINEMENT_EVALUATOR_DISPATCH = {
       evaluate(expression(node, 'key'), context, collectionScope(node, item, scope)),
       'unique key',
     ));
-    return keys.every((key, index) => keys.findIndex((candidate) => Object.is(candidate, key)) === index);
+    return keys.every((key, index) => keys.findIndex((candidate) => scalarEqual(candidate, key)) === index);
   },
   ordered_score_desc_id_asc: (node, context, scope) => {
     if (field(node, 'idOrder') !== 'unicode_utf16_code_unit_asc') return fail('unknown id order');
@@ -219,6 +228,13 @@ export const REFINEMENT_EVALUATOR_DISPATCH = {
     return pairs.every((item, index) => index === 0 || pairs[index - 1]!.score > item.score
       || (pairs[index - 1]!.score === item.score && pairs[index - 1]!.id < item.id));
   },
+  for_each: (node, context, scope) => asArray(
+    evaluate(expression(node, 'collection'), context, scope),
+    'for_each collection',
+  ).every((item) => asBoolean(
+    evaluate(expression(node, 'predicate'), context, collectionScope(node, item, scope)),
+    'for_each predicate',
+  )),
   finite_range: (node, context, scope) => everyLeaf(
     evaluate(expression(node, 'value'), context, scope),
     (value) => typeof value === 'number' && Number.isFinite(value)
@@ -235,7 +251,7 @@ export const REFINEMENT_EVALUATOR_DISPATCH = {
   field_eq_ref: (node, context, scope) => pairwise(
     evaluate(expression(node, 'value'), context, scope),
     evaluate(expression(node, 'expected'), context, scope),
-    (a, b) => Object.is(asComparableScalar(a, 'field value'), asComparableScalar(b, 'field expected')),
+    (a, b) => scalarEqual(asComparableScalar(a, 'field value'), asComparableScalar(b, 'field expected')),
   ),
   prefixed_identity: (node, context, scope) => pairwise(
     evaluate(expression(node, 'value'), context, scope),
@@ -245,7 +261,7 @@ export const REFINEMENT_EVALUATOR_DISPATCH = {
   corpus_eq_ref: (node, context, scope) => pairwise(
     evaluate(expression(node, 'corpus'), context, scope),
     evaluate(expression(node, 'expected'), context, scope),
-    (a, b) => Object.is(asComparableScalar(a, 'corpus value'), asComparableScalar(b, 'corpus expected')),
+    (a, b) => scalarEqual(asComparableScalar(a, 'corpus value'), asComparableScalar(b, 'corpus expected')),
   ),
   rank_is_index_plus_one: (node, context, scope) => asArray(
     evaluate(expression(node, 'collection'), context, scope),
@@ -260,9 +276,26 @@ export function evaluateRefinementProgram(
 ): void {
   const validation = validateRefinementProgramPointers(program, structuralRoots);
   if (!validation.valid) fail(validation.errors.join('; '));
-  for (const assertion of program.assertions) {
+  for (const assertion of [...program.requestAssertions, ...program.exchangeAssertions]) {
     const declaration = REFINEMENT_NODE_DECLARATIONS[assertion.op];
     if (declaration.role !== 'assertion') fail(`${assertion.op} is not an assertion`);
     if (evaluate(assertion, context, {}) !== true) fail(`assertion ${assertion.op} was false`);
+  }
+}
+
+export function evaluateRefinementRequest(
+  program: RefinementProgram,
+  request: unknown,
+  structuralRoots: RefinementStructuralRoots,
+): void {
+  const validation = validateRefinementProgramPointers(program, structuralRoots);
+  if (!validation.valid) fail(validation.errors.join('; '));
+  const context: RefinementEvaluationContext = {
+    request,
+    result: undefined,
+    normalize: () => fail('request assertion cannot normalize without an explicit dependency resolver'),
+  };
+  for (const assertion of program.requestAssertions) {
+    if (evaluate(assertion, context, {}) !== true) fail(`request assertion ${assertion.op} was false`);
   }
 }
