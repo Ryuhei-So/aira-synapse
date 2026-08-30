@@ -164,25 +164,67 @@ export const BOUNDED_RETRIEVAL_STRUCTURAL_DECLARATIONS = {
 type SemanticRequest<T> = Omit<T, 'generation'>;
 type SemanticResult<T> = Omit<T, 'generation' | 'sessionId'>;
 type AssertAssignable<From extends To, To> = From;
+type SameKeys<Left, Right> = keyof Left extends keyof Right
+  ? keyof Right extends keyof Left ? true : false
+  : false;
+type SameType<Left, Right> = (<Value>() => Value extends Left ? 1 : 2) extends
+  (<Value>() => Value extends Right ? 1 : 2)
+  ? (<Value>() => Value extends Right ? 1 : 2) extends
+    (<Value>() => Value extends Left ? 1 : 2) ? true : false
+  : false;
+type NormalizeShape<Value> = Value extends readonly (infer Item)[]
+  ? readonly NormalizeShape<Item>[]
+  : Value extends object
+    ? { readonly [Key in keyof Value]: NormalizeShape<Value[Key]> }
+    : Value;
+type SameShape<Left, Right> = SameType<NormalizeShape<Left>, NormalizeShape<Right>>;
+type AssertTrue<Value extends true> = Value;
 type CandidateWitness = [
   AssertAssignable<ContractValue<typeof candidateRequest>, SemanticRequest<CandidateSearchBoundedRequest>>,
   AssertAssignable<SemanticRequest<CandidateSearchBoundedRequest>, ContractValue<typeof candidateRequest>>,
   AssertAssignable<ContractValue<typeof candidateResult>, SemanticResult<CandidateSearchBoundedResponse>>,
   AssertAssignable<SemanticResult<CandidateSearchBoundedResponse>, ContractValue<typeof candidateResult>>,
+  AssertTrue<SameKeys<ContractValue<typeof candidateRequest>, SemanticRequest<CandidateSearchBoundedRequest>>>,
+  AssertTrue<SameKeys<ContractValue<typeof candidateResult>, SemanticResult<CandidateSearchBoundedResponse>>>,
+  AssertTrue<SameShape<ContractValue<typeof candidateRequest>, SemanticRequest<CandidateSearchBoundedRequest>>>,
+  AssertTrue<SameShape<ContractValue<typeof candidateResult>, SemanticResult<CandidateSearchBoundedResponse>>>,
 ];
 type FactExpandWitness = [
   AssertAssignable<ContractValue<typeof factExpandRequest>, SemanticRequest<FactExpandBoundedRequest>>,
   AssertAssignable<SemanticRequest<FactExpandBoundedRequest>, ContractValue<typeof factExpandRequest>>,
   AssertAssignable<ContractValue<typeof factExpandResult>, SemanticResult<FactExpandBoundedResponse>>,
   AssertAssignable<SemanticResult<FactExpandBoundedResponse>, ContractValue<typeof factExpandResult>>,
+  AssertTrue<SameKeys<ContractValue<typeof factExpandRequest>, SemanticRequest<FactExpandBoundedRequest>>>,
+  AssertTrue<SameKeys<ContractValue<typeof factExpandResult>, SemanticResult<FactExpandBoundedResponse>>>,
+  AssertTrue<SameShape<ContractValue<typeof factExpandRequest>, SemanticRequest<FactExpandBoundedRequest>>>,
+  AssertTrue<SameShape<ContractValue<typeof factExpandResult>, SemanticResult<FactExpandBoundedResponse>>>,
 ];
 type PprWitness = [
   AssertAssignable<ContractValue<typeof pprMaterializeRequest>, SemanticRequest<PprMaterializeBoundedRequest>>,
   AssertAssignable<SemanticRequest<PprMaterializeBoundedRequest>, ContractValue<typeof pprMaterializeRequest>>,
   AssertAssignable<ContractValue<typeof pprMaterializeResult>, SemanticResult<PprMaterializeBoundedResponse>>,
   AssertAssignable<SemanticResult<PprMaterializeBoundedResponse>, ContractValue<typeof pprMaterializeResult>>,
+  AssertTrue<SameKeys<ContractValue<typeof pprMaterializeRequest>, SemanticRequest<PprMaterializeBoundedRequest>>>,
+  AssertTrue<SameKeys<ContractValue<typeof pprMaterializeResult>, SemanticResult<PprMaterializeBoundedResponse>>>,
+  AssertTrue<SameShape<ContractValue<typeof pprMaterializeRequest>, SemanticRequest<PprMaterializeBoundedRequest>>>,
+  AssertTrue<SameShape<ContractValue<typeof pprMaterializeResult>, SemanticResult<PprMaterializeBoundedResponse>>>,
 ];
-export type BoundedRetrievalStructuralTypeWitness = CandidateWitness | FactExpandWitness | PprWitness;
+type WitnessRejectsOptionalDrift = AssertTrue<SameKeys<
+  ContractValue<typeof candidateRequest>,
+  SemanticRequest<CandidateSearchBoundedRequest> & { remainingBudget?: number }
+> extends false ? true : false>;
+type WitnessRejectsNestedOptionalDrift = AssertTrue<SameShape<
+  ContractValue<typeof factExpandRequest>,
+  SemanticRequest<FactExpandBoundedRequest> & {
+    plan: FactExpandBoundedRequest['plan'] & { futureNested?: number };
+  }
+> extends false ? true : false>;
+export type BoundedRetrievalStructuralTypeWitness =
+  | CandidateWitness
+  | FactExpandWitness
+  | PprWitness
+  | WitnessRejectsOptionalDrift
+  | WitnessRejectsNestedOptionalDrift;
 
 /** Reject an operation added outside the canonical three-operation declaration. */
 export function validateBoundedRetrievalStructuralDeclarations(value: unknown): ContractValidation {
@@ -207,8 +249,14 @@ export function validateBoundedRetrievalStructuralDeclarations(value: unknown): 
       continue;
     }
     const entry = declaration as Record<string, unknown>;
-    for (const key of Object.keys(entry)) {
-      if (key !== 'request' && key !== 'result') errors.push(`$.${operation}.${key} is unknown`);
+    const entryPrototype = Object.getPrototypeOf(declaration);
+    if (entryPrototype !== Object.prototype && entryPrototype !== null) {
+      errors.push(`$.${operation} must use a plain or null prototype`);
+    }
+    for (const key of Reflect.ownKeys(entry)) {
+      if (typeof key !== 'string' || (key !== 'request' && key !== 'result')) {
+        errors.push(`$.${operation}.${typeof key === 'symbol' ? key.toString() : key} is unknown`);
+      }
     }
     for (const side of ['request', 'result'] as const) {
       if (!(side in entry)) {

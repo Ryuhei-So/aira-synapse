@@ -316,6 +316,9 @@ function validateNode(
       }
       externalReferenceResolver(node, value, path, errors);
       return;
+    default:
+      errors.push(`${path} uses unknown contract node ${String((node as { kind?: unknown }).kind)}`);
+      return;
   }
 }
 

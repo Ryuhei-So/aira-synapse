@@ -66,6 +66,11 @@ describe('neutral structural contract DSL', () => {
     expect(validateContractDeclaration(ambiguous).valid).toBe(false);
   });
 
+  it('fails closed when runtime input contains an unknown node kind', () => {
+    const future = { kind: 'future-node' } as unknown as ContractNode;
+    expect(validateContractNode(future, 'anything').valid).toBe(false);
+  });
+
   it('delegates external references exactly and fails closed without a resolver', () => {
     const reference = externalRefContract<'passage', { passageId: string }>(
       'passage',

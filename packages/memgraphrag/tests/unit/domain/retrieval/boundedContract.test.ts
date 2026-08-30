@@ -42,5 +42,12 @@ describe('bounded retrieval structural declaration', () => {
         futureSide: { kind: 'string' },
       },
     }).valid).toBe(false);
+    expect(validateBoundedRetrievalStructuralDeclarations({
+      ...BOUNDED_RETRIEVAL_STRUCTURAL_DECLARATIONS,
+      [operation]: {
+        ...BOUNDED_RETRIEVAL_STRUCTURAL_DECLARATIONS[operation],
+        [Symbol('hidden')]: true,
+      },
+    }).valid).toBe(false);
   });
 });

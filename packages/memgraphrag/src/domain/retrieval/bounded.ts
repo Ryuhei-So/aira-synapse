@@ -10,6 +10,16 @@ import type { Fact } from '../memory/fact.js';
 import type { Passage } from '../memory/passage.js';
 import type { Schema } from '../memory/schema.js';
 import { validateDomainObject } from '../memory/domainContract.js';
+import {
+  CANDIDATE_SEARCH_BOUNDED_V1,
+  FACT_EXPAND_BOUNDED_V1,
+  PPR_MATERIALIZE_BOUNDED_V1,
+} from './boundedContract.js';
+export {
+  CANDIDATE_SEARCH_BOUNDED_V1,
+  FACT_EXPAND_BOUNDED_V1,
+  PPR_MATERIALIZE_BOUNDED_V1,
+} from './boundedContract.js';
 import type { FilteredMemoryCandidates, MemoryCandidate } from './memoryFilter.js';
 import {
   assertV15RetrievalRequestPlan,
@@ -27,10 +37,6 @@ import {
   type V15SearchSlot,
   type V15SearchSlotId,
 } from './v15Plan.js';
-
-export const CANDIDATE_SEARCH_BOUNDED_V1 = 'candidate_search_bounded@1' as const;
-export const FACT_EXPAND_BOUNDED_V1 = 'fact_expand_bounded@1' as const;
-export const PPR_MATERIALIZE_BOUNDED_V1 = 'ppr_materialize_bounded@1' as const;
 
 /** JSON-safe generation at every existing boundary. */
 export type Generation = number;
