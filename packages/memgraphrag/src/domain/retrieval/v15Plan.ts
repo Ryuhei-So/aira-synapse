@@ -350,6 +350,23 @@ export function buildV15SearchSlots(
   ];
 }
 
+/** Validate the request fields consumed by bounded planning before embedding. */
+export function assertV15PlanningRequest(input: unknown): asserts input is QueryRequest {
+  const query = record(input, 'query');
+  stringValue(query.corpusId, 'query.corpusId');
+  stringValue(query.text, 'query.text');
+  positiveInteger(query.topK, 'query.topK');
+  positiveInteger(query.topM, 'query.topM');
+  const threshold = finiteValue(query.threshold, 'query.threshold');
+  if (threshold < -1 || threshold > 1) invalid('query.threshold must be in [-1, 1]');
+  positiveInteger(query.contextTokenLimit, 'query.contextTokenLimit');
+}
+
+/** Validate provider output before it can become a native request. */
+export function assertV15QueryVector(input: unknown): asserts input is readonly number[] {
+  finiteVector(input, 'queryVector');
+}
+
 /**
  * Build the explicit comparison expansion request used by both paths.
  * Matching seed similarities are retained as signed values until the v15
@@ -460,6 +477,8 @@ export function buildV15RetrievalRequestPlan(
   options: V15RetrievalPlanOptions,
 ): V15RetrievalRequestPlan {
   assertV15FeatureProfile(options.featureFlags);
+  assertV15PlanningRequest(query);
+  assertV15QueryVector(queryVector);
   const comparisonMode = options.comparisonMode ?? false;
   const plan: V15RetrievalRequestPlan = {
     version: V15_RETRIEVAL_PLAN_VERSION,
