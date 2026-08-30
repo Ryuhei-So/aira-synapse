@@ -37,13 +37,15 @@ export type V15RetrievalProfile = typeof V15_RETRIEVAL_PROFILE;
 export type V15SearchNamespace = 'passage' | 'fact' | 'schema';
 export type V15SearchSlotId = V15SearchNamespace;
 
-export interface V15SearchSlot {
-  readonly slotId: V15SearchSlotId;
-  readonly namespace: V15SearchNamespace;
-  readonly queryVector: readonly number[];
-  readonly threshold: number;
-  readonly limit: number;
-}
+export type V15SearchSlot = {
+  readonly [Kind in V15SearchNamespace]: {
+    readonly slotId: Kind;
+    readonly namespace: Kind;
+    readonly queryVector: readonly number[];
+    readonly threshold: number;
+    readonly limit: number;
+  };
+}[V15SearchNamespace];
 
 export interface V15CandidateSearchPlan {
   readonly slots: readonly V15SearchSlot[];
