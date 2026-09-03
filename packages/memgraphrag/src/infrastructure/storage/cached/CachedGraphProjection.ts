@@ -12,39 +12,86 @@
  */
 import type { IGraphProjection, TransitionEntry } from '../../../domain/retrieval/ppr.js';
 
+export interface ProjectionCacheEvent {
+  readonly event: 'graph_projection_cache_loaded' | 'graph_projection_cache_invalidated';
+  readonly corpusId: string | null;
+  readonly entries: number;
+  /** Estimated resident bytes of the cached entries (string chars x2 + object overhead). */
+  readonly estimatedBytes: number;
+  readonly version?: unknown;
+}
+
+const ENTRY_OBJECT_OVERHEAD_BYTES = 56;
+
+function estimateEntryBytes(entries: readonly TransitionEntry[]): number {
+  let bytes = 0;
+  for (const entry of entries) {
+    bytes += ENTRY_OBJECT_OVERHEAD_BYTES + (entry.sourceNodeId.length + entry.targetNodeId.length) * 2;
+  }
+  return bytes;
+}
+
 export class CachedGraphProjection implements IGraphProjection {
   private readonly inner: IGraphProjection;
+  private readonly onEvent: (event: ProjectionCacheEvent) => void;
   private cache: { corpusId: string; entries: TransitionEntry[] } | null = null;
-  private loadPromise: Promise<void> | null = null;
+  private loadPromise: Promise<{ corpusId: string; entries: TransitionEntry[] }> | null = null;
   private version: unknown = undefined;
   private versionSeen = false;
+  /** Bumped by every invalidation; a load only publishes if its epoch is still current. */
+  private epoch = 0;
 
-  constructor(inner: IGraphProjection) {
+  constructor(inner: IGraphProjection, options: { onEvent?: (event: ProjectionCacheEvent) => void } = {}) {
     this.inner = inner;
+    this.onEvent = options.onEvent ?? (() => undefined);
   }
 
-  private async ensureCache(corpusId: string): Promise<void> {
-    if (this.cache && this.cache.corpusId === corpusId) return;
+  /**
+   * Invariant: an invalidation during an in-flight load wins. The load still
+   * completes for the caller that started it, but its result is not
+   * published as the cache, so the next call reloads. Callers are expected to
+   * serialise queries (the bridge does); concurrent loads for different
+   * corpora share one load slot and simply wait.
+   */
+  private async ensureCache(corpusId: string): Promise<readonly TransitionEntry[]> {
+    if (this.cache && this.cache.corpusId === corpusId) return this.cache.entries;
     if (this.loadPromise) {
-      await this.loadPromise;
-      return;
+      const shared = await this.loadPromise;
+      if (shared.corpusId === corpusId) return shared.entries;
     }
 
-    this.loadPromise = (async () => {
+    const epoch = this.epoch;
+    const load = (async () => {
       const entries: TransitionEntry[] = [];
       for await (const entry of this.inner.getTransitions(corpusId)) {
         entries.push(entry);
       }
-      this.cache = { corpusId, entries };
+      if (epoch === this.epoch) {
+        this.cache = { corpusId, entries };
+        this.onEvent({
+          event: 'graph_projection_cache_loaded',
+          corpusId,
+          entries: entries.length,
+          estimatedBytes: estimateEntryBytes(entries),
+          version: this.version,
+        });
+      }
+      return { corpusId, entries };
     })();
+    this.loadPromise = load;
 
-    await this.loadPromise;
-    this.loadPromise = null;
+    try {
+      return (await load).entries;
+    } finally {
+      if (this.loadPromise === load) this.loadPromise = null;
+    }
   }
 
   async *getTransitions(corpusId: string): AsyncIterable<TransitionEntry> {
-    await this.ensureCache(corpusId);
-    for (const entry of this.cache!.entries) {
+    // Iterate the entries this call loaded or found, not `this.cache`: an
+    // invalidation may have unpublished them meanwhile (see ensureCache).
+    const entries = await this.ensureCache(corpusId);
+    for (const entry of entries) {
       yield entry;
     }
   }
@@ -59,7 +106,16 @@ export class CachedGraphProjection implements IGraphProjection {
 
   /** Explicitly clear the cache. */
   invalidate(): void {
+    this.epoch += 1;
+    const dropped = this.cache;
     this.cache = null;
+    this.onEvent({
+      event: 'graph_projection_cache_invalidated',
+      corpusId: dropped?.corpusId ?? null,
+      entries: dropped?.entries.length ?? 0,
+      estimatedBytes: dropped ? estimateEntryBytes(dropped.entries) : 0,
+      version: this.version,
+    });
   }
 
   /**

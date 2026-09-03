@@ -235,3 +235,59 @@ describe('CachedGraphProjection version invalidation', () => {
     expect((await drain(cached))[0]!.sourceNodeId).toBe('new');
   });
 });
+
+describe('CachedGraphProjection observability and in-flight invalidation', () => {
+  const ENTRIES: TransitionEntry[] = [
+    { sourceNodeId: 'entity:a', targetNodeId: 'passage:b', weight: 1 },
+    { sourceNodeId: 'entity:c', targetNodeId: 'passage:d', weight: 0.5 },
+  ];
+  const drain = async (projection: IGraphProjection) => {
+    const out: TransitionEntry[] = [];
+    for await (const entry of projection.getTransitions('c')) out.push(entry);
+    return out;
+  };
+
+  it('reports entry count and estimated bytes on load and on invalidate', async () => {
+    const events: unknown[] = [];
+    const inner: IGraphProjection = {
+      async *getTransitions() { for (const e of ENTRIES) yield e; },
+      getDanglingNodes: vi.fn().mockResolvedValue([]),
+      getNodeCount: vi.fn().mockResolvedValue(4),
+    };
+    const cached = new CachedGraphProjection(inner, { onEvent: (e) => events.push(e) });
+    cached.invalidateIfVersionChanged(302);
+    await drain(cached);
+    const chars = ENTRIES.reduce((n, e) => n + e.sourceNodeId.length + e.targetNodeId.length, 0);
+    expect(events).toEqual([
+      { event: 'graph_projection_cache_loaded', corpusId: 'c', entries: 2, estimatedBytes: 2 * 56 + chars * 2, version: 302 },
+    ]);
+    cached.invalidateIfVersionChanged(303);
+    expect(events[1]).toEqual({ event: 'graph_projection_cache_invalidated', corpusId: 'c', entries: 2, estimatedBytes: 2 * 56 + chars * 2, version: 303 });
+  });
+
+  it('an invalidation during an in-flight load wins: the stale result is never published', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    let loads = 0;
+    const inner: IGraphProjection = {
+      async *getTransitions() {
+        loads += 1;
+        const mine = loads;
+        await gate;
+        yield { sourceNodeId: `load${mine}`, targetNodeId: 'x', weight: 1 };
+      },
+      getDanglingNodes: vi.fn().mockResolvedValue([]),
+      getNodeCount: vi.fn().mockResolvedValue(1),
+    };
+    const cached = new CachedGraphProjection(inner);
+    cached.invalidateIfVersionChanged(1);
+    const first = drain(cached);
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(cached.invalidateIfVersionChanged(2)).toBe(true);
+    release();
+    expect((await first)[0]!.sourceNodeId).toBe('load1');
+    // The load that raced the invalidation was not published: the next call reloads.
+    expect((await drain(cached))[0]!.sourceNodeId).toBe('load2');
+    expect(loads).toBe(2);
+  });
+});

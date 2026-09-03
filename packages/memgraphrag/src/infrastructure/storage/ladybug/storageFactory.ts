@@ -293,7 +293,11 @@ export async function createAiraGraphDbAdapters(
   const memoryStore = new AiraGraphDbMemoryStore(client);
   // One full-corpus transition pull per process (and per observed store
   // version), not per query: the aira-graphdb reply is the whole edge list.
-  const graphProjection = new CachedGraphProjection(new AiraGraphDbGraphProjection(client));
+  const graphProjection = new CachedGraphProjection(new AiraGraphDbGraphProjection(client), {
+    // Size is unbounded by design (it is the corpus graph); make growth
+    // toward the host's heap visible in the process log.
+    onEvent: (event) => { process.stderr.write(`${JSON.stringify(event)}\n`); },
+  });
   const lexicalRetriever = new AiraGraphDbLexicalRetriever(client);
 
   const adapters: StorageAdapters = {
