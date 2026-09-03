@@ -184,3 +184,54 @@ describe('CachedGraphProjection', () => {
     expect(inner.getNodeCount).toHaveBeenCalledWith('corpus1');
   });
 });
+
+describe('CachedGraphProjection version invalidation', () => {
+  function createMockProjection(entries: TransitionEntry[]): IGraphProjection & { loads: number } {
+    const projection = {
+      loads: 0,
+      async *getTransitions() {
+        projection.loads += 1;
+        for (const entry of entries) yield entry;
+      },
+      getDanglingNodes: vi.fn().mockResolvedValue([]),
+      getNodeCount: vi.fn().mockResolvedValue(entries.length),
+    };
+    return projection;
+  }
+  const ENTRIES: TransitionEntry[] = [{ sourceNodeId: 'a', targetNodeId: 'b', weight: 1 }];
+  const drain = async (projection: IGraphProjection) => {
+    const out: TransitionEntry[] = [];
+    for await (const entry of projection.getTransitions('c')) out.push(entry);
+    return out;
+  };
+
+  it('records the first version without invalidating, and reloads only when it changes', async () => {
+    const inner = createMockProjection(ENTRIES);
+    const cached = new CachedGraphProjection(inner);
+    expect(cached.invalidateIfVersionChanged(302)).toBe(false);
+    expect(await drain(cached)).toEqual(ENTRIES);
+    expect(cached.invalidateIfVersionChanged(302)).toBe(false);
+    expect(await drain(cached)).toEqual(ENTRIES);
+    expect(inner.loads).toBe(1);
+    expect(cached.invalidateIfVersionChanged(303)).toBe(true);
+    expect(cached.observedVersion).toBe(303);
+    expect(await drain(cached)).toEqual(ENTRIES);
+    expect(inner.loads).toBe(2);
+    // Version types are compared by identity, so a string generation is a change.
+    expect(cached.invalidateIfVersionChanged('303')).toBe(true);
+  });
+
+  it('never ranks on a superseded graph after a version change', async () => {
+    const entries: TransitionEntry[] = [{ sourceNodeId: 'old', targetNodeId: 'x', weight: 1 }];
+    const inner = createMockProjection(entries);
+    const cached = new CachedGraphProjection(inner);
+    cached.invalidateIfVersionChanged(1);
+    expect((await drain(cached))[0]!.sourceNodeId).toBe('old');
+    entries[0] = { sourceNodeId: 'new', targetNodeId: 'x', weight: 1 };
+    // Same version: the stale cache is intentionally kept.
+    cached.invalidateIfVersionChanged(1);
+    expect((await drain(cached))[0]!.sourceNodeId).toBe('old');
+    cached.invalidateIfVersionChanged(2);
+    expect((await drain(cached))[0]!.sourceNodeId).toBe('new');
+  });
+});

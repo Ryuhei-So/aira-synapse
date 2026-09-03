@@ -82,6 +82,8 @@ export const SERVICE_TOKENS = {
   CORPUS_MANAGER: Symbol('CorpusManager'),
   INDEXING_SERVICE: Symbol('IndexingService'),
   QUERY_SERVICE: Symbol('QueryService'),
+  /** The IGraphProjection the query path ranks on (a CachedGraphProjection for aira-graphdb). */
+  GRAPH_PROJECTION: Symbol('IGraphProjection'),
   DICTIONARY_SERVICE: Symbol('DictionaryService'),
   THESAURUS_SERVICE: Symbol('ThesaurusService'),
   DB: Symbol('Database'),
@@ -434,6 +436,7 @@ class RuntimeImpl implements MemGraphRagRuntime {
     this.services.set(SERVICE_TOKENS.CORPUS_MANAGER, corpusManager);
     this.services.set(SERVICE_TOKENS.INDEXING_SERVICE, indexingService);
     this.services.set(SERVICE_TOKENS.QUERY_SERVICE, queryService);
+    this.services.set(SERVICE_TOKENS.GRAPH_PROJECTION, graphProjection);
     this.services.set(SERVICE_TOKENS.DICTIONARY_SERVICE, dictionaryService);
     this.services.set(SERVICE_TOKENS.THESAURUS_SERVICE, thesaurusService);
     this.services.set(SERVICE_TOKENS.DB, this.db);

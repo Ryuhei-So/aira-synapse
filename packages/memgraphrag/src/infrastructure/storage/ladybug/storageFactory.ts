@@ -5,6 +5,7 @@
 
 import type { IGraphStore, IVectorIndex, IMemoryStore } from '../../../domain/storage/graphStore.js';
 import type { IIndexingMemory } from '../../../domain/storage/indexingMemory.js';
+import { CachedGraphProjection } from '../cached/CachedGraphProjection.js';
 import type { IGraphProjection, ILexicalRetriever } from '../../../domain/retrieval/ppr.js';
 import type {
   AiraGraphDbTerminationResult,
@@ -290,7 +291,9 @@ export async function createAiraGraphDbAdapters(
   const graphStore = new AiraGraphDbGraphStore(client);
   const vectorIndex = new AiraGraphDbVectorIndex(client);
   const memoryStore = new AiraGraphDbMemoryStore(client);
-  const graphProjection = new AiraGraphDbGraphProjection(client);
+  // One full-corpus transition pull per process (and per observed store
+  // version), not per query: the aira-graphdb reply is the whole edge list.
+  const graphProjection = new CachedGraphProjection(new AiraGraphDbGraphProjection(client));
   const lexicalRetriever = new AiraGraphDbLexicalRetriever(client);
 
   const adapters: StorageAdapters = {
