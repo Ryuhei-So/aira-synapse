@@ -35,12 +35,18 @@ function isObject(value: unknown): value is JsonObject {
  * failed every query touching such a passage (literature-hub #545 rollback,
  * 2026-09-17 12:02 JST).
  *
- * The rule is therefore: `metadata.sectionPath` must still be a plain,
- * non-sparse array, and every other field is checked exactly as the write
- * contract checks it, but the array's elements are handed through untouched,
- * as the legacy path and the snapshot reader do. Nothing is normalised: the
- * writer never normalised these values, so a reader that did would return a
- * different object than the snapshot path.
+ * The rule is therefore: `metadata.sectionPath` must still be an array whose
+ * elements are strings or `null`, and every other field is checked exactly
+ * as the write contract checks it; the `null` elements are handed through
+ * untouched, as the legacy path and the snapshot reader do. Nothing is
+ * normalised: the writer never normalised these values, so a reader that did
+ * would return a different object than the snapshot path. Any other element
+ * type was never stored and stays fail-closed.
+ *
+ * The write contract runs on a probe copy whose `null` elements are replaced
+ * by empty strings. The probe is a fresh array of the same length with the
+ * same holes, so the contract's array checks (plain prototype, not sparse)
+ * still apply to it; the caller keeps the stored object, not the probe.
  */
 export function assertStoredPassage(value: unknown, corpusId: string, name: string): asserts value is Passage {
   if (!isObject(value) || !isObject(value.metadata) || !Array.isArray(value.metadata.sectionPath)) {
@@ -48,11 +54,11 @@ export function assertStoredPassage(value: unknown, corpusId: string, name: stri
     assertPassage(value, corpusId, name);
     return;
   }
-  // `map` keeps the array's length and holes, so the contract still checks
-  // the array itself (plain prototype, not sparse); only the element type
-  // check is lifted. The caller keeps the stored object, not the probe.
   const sectionPath: unknown[] = value.metadata.sectionPath;
-  const probe = { ...value, metadata: { ...value.metadata, sectionPath: sectionPath.map(() => '') } };
+  const probe = {
+    ...value,
+    metadata: { ...value.metadata, sectionPath: sectionPath.map((element) => (element === null ? '' : element)) },
+  };
   assertPassage(probe, corpusId, name);
 }
 

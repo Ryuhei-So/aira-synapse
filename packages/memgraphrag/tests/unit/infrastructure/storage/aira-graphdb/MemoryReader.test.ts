@@ -277,8 +277,8 @@ describe('AiraGraphDbMemoryReader stored objects that predate the write contract
     };
   }
 
-  it('hands a non-string sectionPath element through untouched, identical to the snapshot reader', async () => {
-    const stored = legacyPassage(['Intro', 2, null]);
+  it('hands a null sectionPath element through untouched, identical to the snapshot reader', async () => {
+    const stored = legacyPassage(['Intro', null, 'Sub']);
     const { client } = clientWith(byIdHandler({ passages: [stored] }));
     const native = await AiraGraphDbMemoryReader.create(client);
     const legacy = new SnapshotBackedMemoryReader(snapshotStore([stored]));
@@ -288,7 +288,7 @@ describe('AiraGraphDbMemoryReader stored objects that predate the write contract
 
     expect(fromNative).toStrictEqual(fromSnapshot);
     expect(JSON.stringify(fromNative)).toBe(JSON.stringify(fromSnapshot));
-    expect(fromNative[0]!.metadata.sectionPath).toStrictEqual(['Intro', 2, null]);
+    expect(fromNative[0]!.metadata.sectionPath).toStrictEqual(['Intro', null, 'Sub']);
     // The stored object itself is returned, not a validated copy.
     expect(fromNative[0]).toBe(stored);
   });
@@ -298,6 +298,8 @@ describe('AiraGraphDbMemoryReader stored objects that predate the write contract
     ['a passage without passageId', () => { const { passageId: _id, ...rest } = legacyPassage(['Intro', null]); return rest; }, '$.passageId is required'],
     ['a sectionPath that is not an array', () => legacyPassage('Intro'), '$.metadata.sectionPath must be an array'],
     ['a sparse sectionPath', () => legacyPassage([, 'Intro']), '$.metadata.sectionPath[0] must not be sparse'],
+    ['a number sectionPath element (never stored; only null was measured)', () => legacyPassage(['Intro', 2, null]), '$.metadata.sectionPath[1] must be a string'],
+    ['an object sectionPath element', () => legacyPassage(['Intro', { title: 'Sub' }]), '$.metadata.sectionPath[1] must be a string'],
     ['an unknown metadata field', () => { const item = legacyPassage(['Intro', null]); return { ...item, metadata: { ...item.metadata, extra: 1 } }; }, '$.metadata.extra is an unknown field'],
     ['an empty offset range', () => { const item = legacyPassage(['Intro', null]); return { ...item, metadata: { ...item.metadata, offsetEnd: 0 } }; }, 'offsets must describe a non-empty range'],
   ])('still fails closed on %s', async (_label, reply, message) => {
