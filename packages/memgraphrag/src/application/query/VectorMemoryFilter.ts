@@ -10,8 +10,7 @@ import type {
   MemoryCandidate,
 } from '../../domain/retrieval/memoryFilter.js';
 import type { IEmbeddingProvider } from '../../domain/provider/index.js';
-import type { IVectorIndex } from '../../domain/storage/index.js';
-import type { IMemoryStore } from '../../domain/storage/index.js';
+import type { IMemoryReader, IVectorIndex } from '../../domain/storage/index.js';
 import type { Schema } from '../../domain/memory/schema.js';
 import type { Fact } from '../../domain/memory/fact.js';
 import type { Passage } from '../../domain/memory/passage.js';
@@ -19,12 +18,13 @@ import {
   buildV15SearchSlots,
   orderV15ScoreThenId,
 } from '../../domain/retrieval/v15Plan.js';
+import { indexById, lookupIds, resolveNode } from './memoryReadLookup.js';
 
 export class VectorMemoryFilter implements IMemoryFilter {
   constructor(
     private readonly embeddingProvider: IEmbeddingProvider,
     private readonly vectorIndex: IVectorIndex,
-    private readonly memoryStore: IMemoryStore,
+    private readonly memoryReader: IMemoryReader,
     _graphStore: unknown,
   ) {}
 
@@ -66,18 +66,22 @@ export class VectorMemoryFilter implements IMemoryFilter {
       }),
     ]);
 
-    // Load memory snapshot to resolve IDs to full objects
-    const snapshot = await this.memoryStore.load(request.corpusId);
-    const passageMap = new Map(snapshot.passages.map((p) => [p.passageId, p]));
-    const factMap = new Map(snapshot.facts.map((f) => [f.factId, f]));
-    const schemaMap = new Map(snapshot.schemas.map((s) => [s.schemaId, s]));
+    // Resolve the hit ids to full objects with bounded by-id reads: the
+    // reply volume is a function of the hits, never of the corpus.
+    const corpusId = request.corpusId;
+    const [passageRows, factRows, schemaRows] = await Promise.all([
+      this.memoryReader.getPassagesByIds({ corpusId, passageIds: lookupIds(passageHits.map((hit) => hit.id), 'passage:') }),
+      this.memoryReader.getFactsByIds({ corpusId, factIds: lookupIds(factHits.map((hit) => hit.id), 'fact:') }),
+      this.memoryReader.getSchemasByIds({ corpusId, schemaIds: lookupIds(schemaHits.map((hit) => hit.id), 'schema:') }),
+    ]);
+    const passageMap = indexById(passageRows, (p) => p.passageId);
+    const factMap = indexById(factRows, (f) => f.factId);
+    const schemaMap = indexById(schemaRows, (s) => s.schemaId);
 
     const passages: MemoryCandidate<Passage>[] = [];
     for (const hit of orderV15ScoreThenId(passageHits)) {
       // nodeId format: "passage:passage:chunkId" → passageId is the nodeId without prefix
-      const nodeId = hit.id;
-      const passageId = nodeId.startsWith('passage:') ? nodeId.slice('passage:'.length) : nodeId;
-      const passage = passageMap.get(passageId) ?? passageMap.get(nodeId);
+      const passage = resolveNode(passageMap, hit.id, 'passage:');
       if (passage) {
         passages.push({ layer: 'passage', item: passage, similarity: hit.score });
       }
@@ -85,9 +89,7 @@ export class VectorMemoryFilter implements IMemoryFilter {
 
     const facts: MemoryCandidate<Fact>[] = [];
     for (const hit of orderV15ScoreThenId(factHits)) {
-      const nodeId = hit.id;
-      const factId = nodeId.startsWith('fact:') ? nodeId.slice('fact:'.length) : nodeId;
-      const fact = factMap.get(factId) ?? factMap.get(nodeId);
+      const fact = resolveNode(factMap, hit.id, 'fact:');
       if (fact) {
         facts.push({ layer: 'fact', item: fact, similarity: hit.score });
       }
@@ -95,9 +97,7 @@ export class VectorMemoryFilter implements IMemoryFilter {
 
     const ontology: MemoryCandidate<Schema>[] = [];
     for (const hit of orderV15ScoreThenId(schemaHits)) {
-      const nodeId = hit.id;
-      const schemaId = nodeId.startsWith('schema:') ? nodeId.slice('schema:'.length) : nodeId;
-      const schema = schemaMap.get(schemaId) ?? schemaMap.get(nodeId);
+      const schema = resolveNode(schemaMap, hit.id, 'schema:');
       if (schema) {
         ontology.push({ layer: 'ontology', item: schema, similarity: hit.score });
       }

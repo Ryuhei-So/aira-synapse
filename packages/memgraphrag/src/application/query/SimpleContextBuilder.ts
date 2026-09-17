@@ -9,38 +9,41 @@ import type {
   PPRResult,
 } from '../../domain/retrieval/ppr.js';
 import type { QueryRequest } from '../../domain/retrieval/memoryFilter.js';
-import type { IMemoryStore } from '../../domain/storage/index.js';
+import type { IMemoryReader } from '../../domain/storage/index.js';
 import type { Passage } from '../../domain/memory/passage.js';
 import type { Fact } from '../../domain/memory/fact.js';
 import { isComparisonQuery } from './comparisonDetector.js';
+import { indexById, lookupIds, resolveNode } from './memoryReadLookup.js';
 
 export class SimpleContextBuilder implements IContextBuilder {
-  constructor(private readonly memoryStore: IMemoryStore) {}
+  constructor(private readonly memoryReader: IMemoryReader) {}
 
   public async build(query: QueryRequest, ranking: PPRResult): Promise<ContextBundle> {
-    const snapshot = await this.memoryStore.load(query.corpusId);
-    const passageMap = new Map(snapshot.passages.map((p) => [p.passageId, p]));
-    const factMap = new Map(snapshot.facts.map((f) => [f.factId, f]));
+    const rankedFacts = ranking.rankedEntities.filter((ranked) => ranked.layer === 'fact');
+    const [passageRows, factRows] = await Promise.all([
+      this.memoryReader.getPassagesByIds({
+        corpusId: query.corpusId,
+        passageIds: lookupIds(ranking.rankedPassages.map((ranked) => ranked.nodeId), 'passage:'),
+      }),
+      this.memoryReader.getFactsByIds({
+        corpusId: query.corpusId,
+        factIds: lookupIds(rankedFacts.map((ranked) => ranked.nodeId), 'fact:'),
+      }),
+    ]);
+    const passageMap = indexById(passageRows, (p) => p.passageId);
+    const factMap = indexById(factRows, (f) => f.factId);
 
     const citedPassages: Passage[] = [];
     const citedFacts: Fact[] = [];
 
     for (const ranked of ranking.rankedPassages) {
-      const passageId = ranked.nodeId.startsWith('passage:')
-        ? ranked.nodeId.slice('passage:'.length)
-        : ranked.nodeId;
-      const passage = passageMap.get(passageId) ?? passageMap.get(ranked.nodeId);
+      const passage = resolveNode(passageMap, ranked.nodeId, 'passage:');
       if (passage) citedPassages.push(passage);
     }
 
-    for (const ranked of ranking.rankedEntities) {
-      if (ranked.layer === 'fact') {
-        const factId = ranked.nodeId.startsWith('fact:')
-          ? ranked.nodeId.slice('fact:'.length)
-          : ranked.nodeId;
-        const fact = factMap.get(factId) ?? factMap.get(ranked.nodeId);
-        if (fact) citedFacts.push(fact);
-      }
+    for (const ranked of rankedFacts) {
+      const fact = resolveNode(factMap, ranked.nodeId, 'fact:');
+      if (fact) citedFacts.push(fact);
     }
 
     // Detect comparison queries — fact-first ordering benefits entity relationship tasks

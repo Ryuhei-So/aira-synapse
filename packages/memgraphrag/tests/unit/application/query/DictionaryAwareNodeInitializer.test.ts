@@ -5,7 +5,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { DictionaryAwareNodeInitializer } from '../../../../src/application/query/DictionaryAwareNodeInitializer.js';
 import type { INodeInitializer, NodeInitializationVector } from '../../../../src/domain/retrieval/memoryFilter.js';
 import type { ITermDictionary, DictionaryMatch, TermDictionaryEntry } from '../../../../src/domain/dictionary/termDictionary.js';
-import type { IMemoryStore } from '../../../../src/domain/storage/index.js';
+import type { IMemoryReader, IMemoryStore } from '../../../../src/domain/storage/index.js';
+import { SnapshotBackedMemoryReader } from '../../../../src/infrastructure/storage/SnapshotBackedMemoryReader.js';
 import type { Fact } from '../../../../src/domain/memory/fact.js';
 
 function makeEntry(overrides: Partial<TermDictionaryEntry> = {}): TermDictionaryEntry {
@@ -63,8 +64,8 @@ function mockDictionary(matches: DictionaryMatch[]): ITermDictionary {
   };
 }
 
-function mockMemoryStore(facts: Fact[]): IMemoryStore {
-  return {
+function mockMemoryStore(facts: Fact[]): IMemoryReader {
+  const store: IMemoryStore = {
     load: vi.fn().mockResolvedValue({
       corpusId: 'test-corpus',
       facts,
@@ -77,6 +78,7 @@ function mockMemoryStore(facts: Fact[]): IMemoryStore {
     loadCheckpoint: vi.fn().mockResolvedValue(null),
     validateIntegrity: vi.fn().mockResolvedValue([]),
   };
+  return new SnapshotBackedMemoryReader(store);
 }
 
 describe('DictionaryAwareNodeInitializer', () => {

@@ -18,6 +18,7 @@ import { HybridMemoryFilter } from '../dist/application/query/HybridMemoryFilter
 import { SimpleNodeInitializer } from '../dist/application/query/SimpleNodeInitializer.js';
 import { SimplePPR } from '../dist/application/query/SimplePPR.js';
 import { SimpleContextBuilder } from '../dist/application/query/SimpleContextBuilder.js';
+import { SnapshotBackedMemoryReader } from '../dist/infrastructure/storage/SnapshotBackedMemoryReader.js';
 import { ThesaurusExpansionPolicy } from '../dist/application/index.js';
 
 const ROOT_DATA_DIR = resolve(process.cwd(), '../../data/benchmark/hotpotqa-ja');
@@ -120,6 +121,7 @@ async function main() {
 
   const vectorIndex = new AiraGraphDbVectorIndex(agdbClient);
   const memoryStore = new CachedMemoryStore(new AiraGraphDbMemoryStore(agdbClient));
+  const memoryReader = new SnapshotBackedMemoryReader(memoryStore);
   const graphProjection = new CachedGraphProjection(new AiraGraphDbGraphProjection(agdbClient));
 
   const sqlitePath = resolve(ROOT_DATA_DIR, 'hotpotqa-ja.sqlite');
@@ -186,16 +188,16 @@ async function main() {
     deleteByCorpus: (c) => baseLexicalRetriever.deleteByCorpus(c),
   };
 
-  const memoryFilter = new HybridMemoryFilter(embedding, vectorIndex, memoryStore, tokenizedLexicalRetriever, graphStore);
+  const memoryFilter = new HybridMemoryFilter(embedding, vectorIndex, memoryReader, tokenizedLexicalRetriever, graphStore);
 
   const queryService = new DefaultQueryService({
     dictionary,
     expansionPolicy: new ThesaurusExpansionPolicy(thesaurus),
     memoryFilter,
-    nodeInitializer: new SimpleNodeInitializer(memoryStore),
+    nodeInitializer: new SimpleNodeInitializer(memoryReader),
     ppr: new SimplePPR(),
     projection: graphProjection,
-    contextBuilder: new SimpleContextBuilder(memoryStore),
+    contextBuilder: new SimpleContextBuilder(memoryReader),
     llm,
     hyperParams,
     featureFlags,

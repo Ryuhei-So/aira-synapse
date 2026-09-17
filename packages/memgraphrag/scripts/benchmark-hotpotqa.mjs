@@ -28,6 +28,7 @@ import { VectorMemoryFilter } from '../dist/application/query/VectorMemoryFilter
 import { SimpleNodeInitializer } from '../dist/application/query/SimpleNodeInitializer.js';
 import { SimplePPR } from '../dist/application/query/SimplePPR.js';
 import { SimpleContextBuilder } from '../dist/application/query/SimpleContextBuilder.js';
+import { SnapshotBackedMemoryReader } from '../dist/infrastructure/storage/SnapshotBackedMemoryReader.js';
 import { ThesaurusExpansionPolicy } from '../dist/application/index.js';
 
 const BENCHMARK_DIR = resolve(process.cwd(), 'data/benchmark/hotpotqa');
@@ -325,6 +326,7 @@ async function evaluateQueries(runtime, corpusId) {
   const graphStore = new AiraGraphDbGraphStore(agdbClient);
   const graphProjection = new CachedGraphProjection(new AiraGraphDbGraphProjection(agdbClient));
   const memoryStore = new CachedMemoryStore(new SQLiteMemoryStore(db));
+  const memoryReader = new SnapshotBackedMemoryReader(memoryStore);
   const vectorIndex = new CachedFileVectorIndex(vectorsDir);
   const dictionary = new SQLiteLexiconStore(db, corpusId);
   const thesaurus = new SQLiteLexiconStore(db, corpusId);
@@ -362,11 +364,11 @@ async function evaluateQueries(runtime, corpusId) {
   const queryService = new DefaultQueryService({
     dictionary,
     expansionPolicy: new ThesaurusExpansionPolicy(thesaurus),
-    memoryFilter: new VectorMemoryFilter(embedding, vectorIndex, memoryStore, graphStore),
-    nodeInitializer: new SimpleNodeInitializer(memoryStore),
+    memoryFilter: new VectorMemoryFilter(embedding, vectorIndex, memoryReader, graphStore),
+    nodeInitializer: new SimpleNodeInitializer(memoryReader),
     ppr: new SimplePPR(),
     projection: graphProjection,
-    contextBuilder: new SimpleContextBuilder(memoryStore),
+    contextBuilder: new SimpleContextBuilder(memoryReader),
     llm,
     hyperParams,
   });

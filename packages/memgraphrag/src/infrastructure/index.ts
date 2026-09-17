@@ -6,6 +6,7 @@
 export { SQLiteGraphStore } from './storage/SQLiteGraphStore.js';
 export { SQLiteMemoryStore } from './storage/SQLiteMemoryStore.js';
 export { SnapshotBackedIndexingMemory } from './storage/SnapshotBackedIndexingMemory.js';
+export { SnapshotBackedMemoryReader } from './storage/SnapshotBackedMemoryReader.js';
 export { SQLiteLexiconStore } from './storage/SQLiteLexiconStore.js';
 export { FileVectorIndex } from './storage/FileVectorIndex.js';
 export { CachedMemoryStore } from './storage/cached/CachedMemoryStore.js';
@@ -45,6 +46,7 @@ export {
   type NativeRequestLimits,
 } from './storage/aira-graphdb/NativeClient.js';
 export { AiraGraphDbIndexingMemory } from './storage/aira-graphdb/AiraGraphDbIndexingMemory.js';
+export { AiraGraphDbMemoryReader } from './storage/aira-graphdb/AiraGraphDbMemoryReader.js';
 export {
   AiraGraphDbGraphStore,
   AiraGraphDbVectorIndex,

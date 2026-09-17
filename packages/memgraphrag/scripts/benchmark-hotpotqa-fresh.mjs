@@ -24,6 +24,7 @@ import { VectorMemoryFilter } from '../dist/application/query/VectorMemoryFilter
 import { SimpleNodeInitializer } from '../dist/application/query/SimpleNodeInitializer.js';
 import { SimplePPR } from '../dist/application/query/SimplePPR.js';
 import { SimpleContextBuilder } from '../dist/application/query/SimpleContextBuilder.js';
+import { SnapshotBackedMemoryReader } from '../dist/infrastructure/storage/SnapshotBackedMemoryReader.js';
 
 // ─── Scoring ─────────────────────────────────────────────────────────────────
 
@@ -159,6 +160,7 @@ async function main() {
   const graphStore = new AiraGraphDbGraphStore(agdbClient);
   const graphProjection = new CachedGraphProjection(new AiraGraphDbGraphProjection(agdbClient));
   const memoryStore = new CachedMemoryStore(new AiraGraphDbMemoryStore(agdbClient));
+  const memoryReader = new SnapshotBackedMemoryReader(memoryStore);
   const vectorIndex = new AiraGraphDbVectorIndex(agdbClient);
 
   const llm = new OpenAILLMProvider({ apiKey, model: config.providers.llm.model });
@@ -175,11 +177,11 @@ async function main() {
   const queryService = new DefaultQueryService({
     dictionary: noopDict,
     expansionPolicy: noopExpansion,
-    memoryFilter: new VectorMemoryFilter(embedding, vectorIndex, memoryStore, graphStore),
-    nodeInitializer: new SimpleNodeInitializer(memoryStore),
+    memoryFilter: new VectorMemoryFilter(embedding, vectorIndex, memoryReader, graphStore),
+    nodeInitializer: new SimpleNodeInitializer(memoryReader),
     ppr: new SimplePPR(),
     projection: graphProjection,
-    contextBuilder: new SimpleContextBuilder(memoryStore),
+    contextBuilder: new SimpleContextBuilder(memoryReader),
     llm,
     hyperParams: { teleportProbability: 0.5, scTemperature: 0, scSamples: 1, hubDegreeThreshold: HP_HUB, reasoningEffort: 'high', verbosity: 'low' },
   });

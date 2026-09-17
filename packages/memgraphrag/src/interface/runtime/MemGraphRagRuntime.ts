@@ -37,6 +37,7 @@ import type {
   IGraphStore,
   IIndexingMemory,
   ILLMProvider,
+  IMemoryReader,
   IMemoryStore,
   INLPExtractor,
   ITermDictionary,
@@ -55,6 +56,7 @@ import {
   SQLiteLexiconStore,
   SQLiteMemoryStore,
   SnapshotBackedIndexingMemory,
+  SnapshotBackedMemoryReader,
   SemanticScholarCache,
   SemanticScholarClient,
   openDatabase,
@@ -63,6 +65,7 @@ import {
 import type { MemGraphRagConfig } from '../../infrastructure/config/index.js';
 import { resolveApiKey } from '../../infrastructure/config/index.js';
 import { createAiraGraphDbAdapters, resolveBackend, type StorageAdapters } from '../../infrastructure/storage/ladybug/storageFactory.js';
+import { syncProjectionVersion, type StoreGenerationSource } from '../../infrastructure/storage/cached/projectionVersionGate.js';
 
 export interface MemGraphRagRuntime {
   start(): Promise<void>;
@@ -82,6 +85,10 @@ export const SERVICE_TOKENS = {
   CORPUS_MANAGER: Symbol('CorpusManager'),
   INDEXING_SERVICE: Symbol('IndexingService'),
   QUERY_SERVICE: Symbol('QueryService'),
+  /** The IGraphProjection the query path ranks on (a CachedGraphProjection for aira-graphdb). */
+  GRAPH_PROJECTION: Symbol('IGraphProjection'),
+  /** Bounded query-path memory reads (IMemoryReader); the query path never loads the snapshot. */
+  MEMORY_READER: Symbol('IMemoryReader'),
   DICTIONARY_SERVICE: Symbol('DictionaryService'),
   THESAURUS_SERVICE: Symbol('ThesaurusService'),
   DB: Symbol('Database'),
@@ -275,23 +282,25 @@ class QueryServiceFacade implements QueryService {
     private readonly llm: ILLMProvider,
     private readonly embeddingProvider: IEmbeddingProvider,
     private readonly vectorIndex: IVectorIndex,
-    private readonly memoryStore: IMemoryStore,
+    private readonly memoryReader: IMemoryReader,
     private readonly graphStore: IGraphStore,
     private readonly graphProjection: IGraphProjection,
+    private readonly readGeneration: StoreGenerationSource | undefined,
   ) {}
 
   public async query(request: QueryRequest, hyperParams?: QueryHyperParams): Promise<QueryResponse> {
+    await syncProjectionVersion(this.graphProjection, this.readGeneration);
     const dictionary = new SQLiteLexiconStore(this.db, request.corpusId);
     const thesaurus = new SQLiteLexiconStore(this.db, request.corpusId);
     const hp = hyperParams;
     const service = new DefaultQueryService({
       dictionary,
       expansionPolicy: new ThesaurusExpansionPolicy(thesaurus),
-      memoryFilter: new VectorMemoryFilter(this.embeddingProvider, this.vectorIndex, this.memoryStore, this.graphStore),
-      nodeInitializer: new SimpleNodeInitializer(this.memoryStore),
+      memoryFilter: new VectorMemoryFilter(this.embeddingProvider, this.vectorIndex, this.memoryReader, this.graphStore),
+      nodeInitializer: new SimpleNodeInitializer(this.memoryReader),
       ppr: new SimplePPR(),
       projection: this.graphProjection,
-      contextBuilder: new SimpleContextBuilder(this.memoryStore),
+      contextBuilder: new SimpleContextBuilder(this.memoryReader),
       llm: this.llm,
       hyperParams: hp,
     });
@@ -299,16 +308,17 @@ class QueryServiceFacade implements QueryService {
   }
 
   public async retrieve(request: QueryRequest, precomputedVector?: readonly number[]): Promise<RetrievedQueryContext> {
+    await syncProjectionVersion(this.graphProjection, this.readGeneration);
     const dictionary = new SQLiteLexiconStore(this.db, request.corpusId);
     const thesaurus = new SQLiteLexiconStore(this.db, request.corpusId);
     const service = new DefaultQueryService({
       dictionary,
       expansionPolicy: new ThesaurusExpansionPolicy(thesaurus),
-      memoryFilter: new VectorMemoryFilter(this.embeddingProvider, this.vectorIndex, this.memoryStore, this.graphStore),
-      nodeInitializer: new SimpleNodeInitializer(this.memoryStore),
+      memoryFilter: new VectorMemoryFilter(this.embeddingProvider, this.vectorIndex, this.memoryReader, this.graphStore),
+      nodeInitializer: new SimpleNodeInitializer(this.memoryReader),
       ppr: new SimplePPR(),
       projection: this.graphProjection,
-      contextBuilder: new SimpleContextBuilder(this.memoryStore),
+      contextBuilder: new SimpleContextBuilder(this.memoryReader),
       llm: this.llm,
     });
     return service.retrieve(request, precomputedVector);
@@ -347,8 +357,10 @@ class RuntimeImpl implements MemGraphRagRuntime {
     let vectorIndex: IVectorIndex;
     let memoryStore: IMemoryStore;
     let indexingMemory: IIndexingMemory;
+    let memoryReader: IMemoryReader;
     let graphProjection: IGraphProjection;
     let storageBatch: StorageAdapters['batch'];
+    let readGeneration: StoreGenerationSource | undefined;
 
     if (graphDbRuntime) {
       const storageAdapters: StorageAdapters = await createAiraGraphDbAdapters({
@@ -358,7 +370,9 @@ class RuntimeImpl implements MemGraphRagRuntime {
       vectorIndex = storageAdapters.vectorIndex;
       memoryStore = storageAdapters.memoryStore;
       indexingMemory = storageAdapters.indexingMemory;
+      memoryReader = storageAdapters.memoryReader;
       graphProjection = storageAdapters.graphProjection;
+      readGeneration = storageAdapters.readGeneration;
       storageBatch = storageAdapters.batch;
       this.storageClose = storageAdapters.close;
     } else {
@@ -367,7 +381,9 @@ class RuntimeImpl implements MemGraphRagRuntime {
       vectorIndex = new FileVectorIndex(vectorIndexDir);
       memoryStore = new SQLiteMemoryStore(this.db);
       indexingMemory = new SnapshotBackedIndexingMemory(memoryStore);
+      memoryReader = new SnapshotBackedMemoryReader(memoryStore);
       graphProjection = new SQLiteGraphProjection(sqliteGraphStore);
+      readGeneration = undefined;
       this.storageClose = undefined;
     }
     const sharedLexiconStore = new SQLiteLexiconStore(this.db, RUNTIME_CORPUS_ID);
@@ -421,7 +437,7 @@ class RuntimeImpl implements MemGraphRagRuntime {
     const corpusManager = new CorpusManagerFacade(this.db, graphStore, vectorIndex);
     const dictionaryService = new DictionaryServiceFacade(this.db, this.config);
     const thesaurusService = new ThesaurusServiceFacade(this.db);
-    const queryService = new QueryServiceFacade(this.db, llmProvider, embeddingProvider, vectorIndex, memoryStore, graphStore, graphProjection);
+    const queryService = new QueryServiceFacade(this.db, llmProvider, embeddingProvider, vectorIndex, memoryReader, graphStore, graphProjection, readGeneration);
 
     this.services.set(SERVICE_TOKENS.GRAPH_STORE, graphStore);
     this.services.set(SERVICE_TOKENS.VECTOR_INDEX, vectorIndex);
@@ -434,6 +450,8 @@ class RuntimeImpl implements MemGraphRagRuntime {
     this.services.set(SERVICE_TOKENS.CORPUS_MANAGER, corpusManager);
     this.services.set(SERVICE_TOKENS.INDEXING_SERVICE, indexingService);
     this.services.set(SERVICE_TOKENS.QUERY_SERVICE, queryService);
+    this.services.set(SERVICE_TOKENS.GRAPH_PROJECTION, graphProjection);
+    this.services.set(SERVICE_TOKENS.MEMORY_READER, memoryReader);
     this.services.set(SERVICE_TOKENS.DICTIONARY_SERVICE, dictionaryService);
     this.services.set(SERVICE_TOKENS.THESAURUS_SERVICE, thesaurusService);
     this.services.set(SERVICE_TOKENS.DB, this.db);

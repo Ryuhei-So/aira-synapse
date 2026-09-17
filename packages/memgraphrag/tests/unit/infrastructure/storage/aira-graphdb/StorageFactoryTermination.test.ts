@@ -6,6 +6,7 @@ const state = vi.hoisted(() => ({
     request: ReturnType<typeof vi.fn>;
   }>,
   indexingCreate: vi.fn(),
+  readerCreate: vi.fn(),
   termination: Object.freeze({ kind: 'graceful_reaped' }) as Readonly<Record<string, unknown>>,
 }));
 
@@ -33,11 +34,19 @@ vi.mock('../../../../../src/infrastructure/storage/aira-graphdb/NativeClient.js'
   return {
     AiraGraphDbNativeClient: FakeNativeClient,
     readAiraGraphDbNativeTerminationReceipt: (client: FakeNativeClient) => client.receipt,
+    readAiraGraphDbGeneration: async (client: FakeNativeClient) => {
+      const protocol = await client.request('protocol_info', {}) as { generation?: unknown };
+      return protocol.generation;
+    },
   };
 });
 
 vi.mock('../../../../../src/infrastructure/storage/aira-graphdb/AiraGraphDbIndexingMemory.js', () => ({
   AiraGraphDbIndexingMemory: { create: state.indexingCreate },
+}));
+
+vi.mock('../../../../../src/infrastructure/storage/aira-graphdb/AiraGraphDbMemoryReader.js', () => ({
+  AiraGraphDbMemoryReader: { create: state.readerCreate },
 }));
 
 vi.mock('../../../../../src/infrastructure/storage/aira-graphdb/AiraGraphDbAdapters.js', () => ({
@@ -75,6 +84,8 @@ beforeEach(() => {
   state.clients.length = 0;
   state.indexingCreate.mockReset();
   state.indexingCreate.mockResolvedValue({ indexing: true });
+  state.readerCreate.mockReset();
+  state.readerCreate.mockResolvedValue({ reader: true });
   state.termination = frozenTermination({ kind: 'graceful_reaped' });
 });
 
@@ -93,9 +104,11 @@ describe.sequential('Aira GraphDB storage factory termination propagation', () =
       'vectorIndex',
       'memoryStore',
       'indexingMemory',
+      'memoryReader',
       'graphProjection',
       'lexicalRetriever',
       'close',
+      'readGeneration',
     ]);
     expect(Reflect.ownKeys(adapters.batch!)).toEqual(['begin', 'commit', 'abandon']);
     expect(adapters.close).toBe(adapters.batch!.abandon);
@@ -129,6 +142,16 @@ describe.sequential('Aira GraphDB storage factory termination propagation', () =
     await adapters.close();
   });
 
+  it('reads the generation through the shared client', async () => {
+    const adapters = await createAiraGraphDbAdapters({ dbPath: '/private/graphdb.agdb' });
+    const client = state.clients[0]!;
+    client.request.mockResolvedValueOnce({ generation: 41 });
+
+    await expect(adapters.readGeneration!()).resolves.toBe(41);
+    expect(client.request.mock.calls).toEqual([['protocol_info', {}]]);
+    await adapters.close();
+  });
+
   it('rethrows the exact acquisition error after a graceful direct-child reap', async () => {
     const primary = new Error('/private/primary-secret');
     state.indexingCreate.mockRejectedValueOnce(primary);
@@ -137,6 +160,18 @@ describe.sequential('Aira GraphDB storage factory termination propagation', () =
       .catch((error: unknown) => error);
 
     expect(thrown).toBe(primary);
+    expect(state.clients[0]!.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails closed with the exact memory reader acquisition error before any query', async () => {
+    const primary = new Error('aira-graphdb native does not advertise memory_get_passages_by_ids');
+    state.readerCreate.mockRejectedValueOnce(primary);
+
+    const thrown = await createAiraGraphDbAdapters({ dbPath: '/private/graphdb.agdb' })
+      .catch((error: unknown) => error);
+
+    expect(thrown).toBe(primary);
+    expect(state.indexingCreate).toHaveBeenCalledTimes(1);
     expect(state.clients[0]!.close).toHaveBeenCalledTimes(1);
   });
 

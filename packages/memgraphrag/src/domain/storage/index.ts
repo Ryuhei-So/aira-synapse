@@ -18,3 +18,16 @@ export {
   type IndexingMemoryMutationPlan,
   type IndexingSchemaRequest,
 } from './indexingMemory.js';
+export {
+  MEMORY_READ_CONTRACT,
+  SNAPSHOT_MEMORY_READ_BOUNDS,
+  type FactsByEntitiesRequest,
+  type FactsByIdsRequest,
+  type IMemoryReader,
+  type MemoryFactStateFilter,
+  type MemoryReadBounds,
+  type MemorySectionCounts,
+  type PassagesByIdsRequest,
+  type SchemasByIdsRequest,
+  type SectionCountsRequest,
+} from './memoryReader.js';

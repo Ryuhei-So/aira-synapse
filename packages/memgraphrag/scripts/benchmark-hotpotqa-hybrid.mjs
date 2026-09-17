@@ -36,6 +36,7 @@ import { VectorMemoryFilter } from '../dist/application/query/VectorMemoryFilter
 import { SimpleNodeInitializer } from '../dist/application/query/SimpleNodeInitializer.js';
 import { SimplePPR } from '../dist/application/query/SimplePPR.js';
 import { SimpleContextBuilder } from '../dist/application/query/SimpleContextBuilder.js';
+import { SnapshotBackedMemoryReader } from '../dist/infrastructure/storage/SnapshotBackedMemoryReader.js';
 import { ThesaurusExpansionPolicy } from '../dist/application/index.js';
 
 // ─── Config ────────────────────────────────────────────────────────────────────
@@ -128,6 +129,7 @@ async function main() {
     memoryStore = new CachedMemoryStore(remappedMemory);
     console.log(`[hybrid] Memory: SQLite (154,855 facts, remapped corpusId)`);
   }
+  const memoryReader = new SnapshotBackedMemoryReader(memoryStore);
 
   const corpusId = AGDB_CORPUS_ID;
 
@@ -159,11 +161,11 @@ async function main() {
   const queryService = new DefaultQueryService({
     dictionary,
     expansionPolicy,
-    memoryFilter: new VectorMemoryFilter(embedding, vectorIndex, memoryStore, graphStore),
-    nodeInitializer: new SimpleNodeInitializer(memoryStore),
+    memoryFilter: new VectorMemoryFilter(embedding, vectorIndex, memoryReader, graphStore),
+    nodeInitializer: new SimpleNodeInitializer(memoryReader),
     ppr: new SimplePPR(),
     projection: graphProjection,
-    contextBuilder: new SimpleContextBuilder(memoryStore),
+    contextBuilder: new SimpleContextBuilder(memoryReader),
     llm,
     hyperParams,
   });

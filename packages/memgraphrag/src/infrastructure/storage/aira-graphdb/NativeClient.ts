@@ -748,6 +748,25 @@ function nativeTerminationController(client: AiraGraphDbNativeClient): NativeTer
   return controller;
 }
 
+const PROTOCOL_INFO_LIMITS: NativeRequestLimits = {
+  maxRequestBytes: 1024 * 1024,
+  maxResponseBytes: 1024 * 1024,
+};
+
+/**
+ * The committed generation the native reports in `protocol_info`
+ * (classification `health`, admitted without a lease). One small read per
+ * query lets the cached ranking graph observe re-indexing.
+ */
+export async function readAiraGraphDbGeneration(client: AiraGraphDbRpcClient): Promise<number> {
+  const protocol = await client.request<unknown>('protocol_info', {}, PROTOCOL_INFO_LIMITS);
+  const generation = isObject(protocol) ? protocol.generation : undefined;
+  if (!Number.isSafeInteger(generation) || (generation as number) < 0) {
+    throw new Error('aira-graphdb protocol generation is invalid');
+  }
+  return generation as number;
+}
+
 /** Package-internal passive lifecycle receipt. Not re-exported from a public barrel. */
 export function readAiraGraphDbNativeTerminationReceipt(
   client: AiraGraphDbNativeClient,

@@ -4,7 +4,8 @@ import { VectorMemoryFilter } from '../../../../src/application/query/VectorMemo
 import { HybridMemoryFilter } from '../../../../src/application/query/HybridMemoryFilter.js';
 import { SimpleContextBuilder } from '../../../../src/application/query/SimpleContextBuilder.js';
 import type { IEmbeddingProvider } from '../../../../src/domain/provider/llmProvider.js';
-import type { IVectorIndex, IMemoryStore } from '../../../../src/domain/storage/index.js';
+import type { IVectorIndex, IMemoryReader, IMemoryStore } from '../../../../src/domain/storage/index.js';
+import { SnapshotBackedMemoryReader } from '../../../../src/infrastructure/storage/SnapshotBackedMemoryReader.js';
 import type { ILexicalRetriever, IGraphProjection, TransitionEntry } from '../../../../src/domain/retrieval/ppr.js';
 import type { QueryRequest } from '../../../../src/domain/retrieval/memoryFilter.js';
 import type { MemorySnapshot } from '../../../../src/domain/memory/globalMemory.js';
@@ -35,8 +36,9 @@ const snapshot = (passages: Passage[] = [passage('p1')], facts: Fact[] = [fact('
   corpusId: 'c1', exportedAt: '', passages, facts, schemas, schemaVersion: 1,
 });
 
-function memoryStore(value = snapshot()): IMemoryStore {
-  return { load: vi.fn().mockResolvedValue(value), save: vi.fn(), saveCheckpoint: vi.fn(), loadCheckpoint: vi.fn(), validateIntegrity: vi.fn() };
+function memoryStore(value = snapshot()): IMemoryReader {
+  const store: IMemoryStore = { load: vi.fn().mockResolvedValue(value), save: vi.fn(), saveCheckpoint: vi.fn(), loadCheckpoint: vi.fn(), validateIntegrity: vi.fn() };
+  return new SnapshotBackedMemoryReader(store);
 }
 
 function vectorIndex(matches: Record<string, readonly { id: string; score: number }[]>): IVectorIndex {

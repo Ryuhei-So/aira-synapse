@@ -5,6 +5,9 @@
 
 import type { IGraphStore, IVectorIndex, IMemoryStore } from '../../../domain/storage/graphStore.js';
 import type { IIndexingMemory } from '../../../domain/storage/indexingMemory.js';
+import type { IMemoryReader } from '../../../domain/storage/memoryReader.js';
+import { CachedGraphProjection } from '../cached/CachedGraphProjection.js';
+import type { StoreGenerationSource } from '../cached/projectionVersionGate.js';
 import type { IGraphProjection, ILexicalRetriever } from '../../../domain/retrieval/ppr.js';
 import type {
   AiraGraphDbTerminationResult,
@@ -18,9 +21,16 @@ export interface StorageAdapters {
   readonly vectorIndex: IVectorIndex;
   readonly memoryStore: IMemoryStore;
   readonly indexingMemory: IIndexingMemory;
+  /** Bounded query-path reads; never the whole snapshot (literature-hub #545). */
+  readonly memoryReader: IMemoryReader;
   readonly graphProjection: IGraphProjection;
   readonly lexicalRetriever: ILexicalRetriever;
   readonly close: () => Promise<void>;
+  /**
+   * The store's committed generation, when the backend reports one; the
+   * query path uses it to drop a cached ranking graph after re-indexing.
+   */
+  readonly readGeneration?: StoreGenerationSource;
   /** Optional write-batching: defer backend persistence between begin/commit. */
   readonly batch?: {
     readonly begin: () => Promise<void>;
@@ -108,6 +118,7 @@ export async function createLadybugAdapters(
   const { LadybugGraphProjection } = await import('./LadybugGraphProjection.js');
   const { LadybugLexicalRetriever } = await import('./LadybugLexicalRetriever.js');
   const { SnapshotBackedIndexingMemory } = await import('../SnapshotBackedIndexingMemory.js');
+  const { SnapshotBackedMemoryReader } = await import('../SnapshotBackedMemoryReader.js');
 
   const pool = new LadybugConnectionPool(opts.dbPath, opts.vectorDimensions);
   await pool.init();
@@ -116,6 +127,7 @@ export async function createLadybugAdapters(
   const vectorIndex = new LadybugVectorIndex(pool);
   const memoryStore = new LadybugMemoryStore(pool);
   const indexingMemory = new SnapshotBackedIndexingMemory(memoryStore);
+  const memoryReader = new SnapshotBackedMemoryReader(memoryStore);
   const graphProjection = new LadybugGraphProjection(graphStore);
   const lexicalRetriever = new LadybugLexicalRetriever(pool);
 
@@ -124,6 +136,7 @@ export async function createLadybugAdapters(
     vectorIndex,
     memoryStore,
     indexingMemory,
+    memoryReader,
     graphProjection,
     lexicalRetriever,
     close: () => pool.close(),
@@ -143,6 +156,7 @@ export async function createNeo4jAdapters(
   const { Neo4jGraphProjection } = await import('../neo4j/Neo4jGraphProjection.js');
   const { Neo4jLexicalRetriever } = await import('../neo4j/Neo4jLexicalRetriever.js');
   const { SnapshotBackedIndexingMemory } = await import('../SnapshotBackedIndexingMemory.js');
+  const { SnapshotBackedMemoryReader } = await import('../SnapshotBackedMemoryReader.js');
 
   const pool = new Neo4jConnectionPool(opts);
   await pool.init();
@@ -151,6 +165,7 @@ export async function createNeo4jAdapters(
   const vectorIndex = new Neo4jVectorIndex(pool);
   const memoryStore = new Neo4jMemoryStore(pool);
   const indexingMemory = new SnapshotBackedIndexingMemory(memoryStore);
+  const memoryReader = new SnapshotBackedMemoryReader(memoryStore);
   const graphProjection = new Neo4jGraphProjection(graphStore);
   const lexicalRetriever = new Neo4jLexicalRetriever(pool);
 
@@ -159,6 +174,7 @@ export async function createNeo4jAdapters(
     vectorIndex,
     memoryStore,
     indexingMemory,
+    memoryReader,
     graphProjection,
     lexicalRetriever,
     close: () => pool.close(),
@@ -222,6 +238,7 @@ async function createSQLiteAdapters(
     '../../retrieval/Bm25LexicalRetriever.js'
   );
   const { SnapshotBackedIndexingMemory } = await import('../SnapshotBackedIndexingMemory.js');
+  const { SnapshotBackedMemoryReader } = await import('../SnapshotBackedMemoryReader.js');
   const { openDatabase, runMigrations } = await import('../migrate.js');
 
   const db = openDatabase(sqlite.sqlitePath);
@@ -231,6 +248,7 @@ async function createSQLiteAdapters(
   const vectorIndex = new FileVectorIndex(sqlite.vectorIndexDir);
   const memoryStore = new SQLiteMemoryStore(db);
   const indexingMemory = new SnapshotBackedIndexingMemory(memoryStore);
+  const memoryReader = new SnapshotBackedMemoryReader(memoryStore);
   const graphProjection = new SQLiteGraphProjection(graphStore);
   const lexicalRetriever = new Bm25LexicalRetriever();
 
@@ -239,6 +257,7 @@ async function createSQLiteAdapters(
     vectorIndex,
     memoryStore,
     indexingMemory,
+    memoryReader,
     graphProjection,
     lexicalRetriever,
     close: async () => { db.close(); },
@@ -251,8 +270,10 @@ export async function createAiraGraphDbAdapters(
   const {
     AiraGraphDbNativeClient,
     readAiraGraphDbNativeTerminationReceipt,
+    readAiraGraphDbGeneration,
   } = await import('../aira-graphdb/NativeClient.js');
   const { AiraGraphDbIndexingMemory } = await import('../aira-graphdb/AiraGraphDbIndexingMemory.js');
+  const { AiraGraphDbMemoryReader } = await import('../aira-graphdb/AiraGraphDbMemoryReader.js');
   const {
     AiraGraphDbGraphStore,
     AiraGraphDbVectorIndex,
@@ -265,8 +286,12 @@ export async function createAiraGraphDbAdapters(
   const termination = readAiraGraphDbNativeTerminationReceipt(client);
   const close = client.close.bind(client);
   let indexingMemory: IIndexingMemory;
+  let memoryReader: IMemoryReader;
   try {
     indexingMemory = await AiraGraphDbIndexingMemory.create(client);
+    // Fail closed here, before any query, when the native lacks the
+    // bounded memory reads; the query path has no memory_load fallback.
+    memoryReader = await AiraGraphDbMemoryReader.create(client);
   } catch (error) {
     const closeSettlement = Promise.resolve().then(close);
     const [terminationResult] = await Promise.all([
@@ -290,7 +315,13 @@ export async function createAiraGraphDbAdapters(
   const graphStore = new AiraGraphDbGraphStore(client);
   const vectorIndex = new AiraGraphDbVectorIndex(client);
   const memoryStore = new AiraGraphDbMemoryStore(client);
-  const graphProjection = new AiraGraphDbGraphProjection(client);
+  // One full-corpus transition pull per process (and per observed store
+  // version), not per query: the aira-graphdb reply is the whole edge list.
+  const graphProjection = new CachedGraphProjection(new AiraGraphDbGraphProjection(client), {
+    // Size is unbounded by design (it is the corpus graph); make growth
+    // toward the host's heap visible in the process log.
+    onEvent: (event) => { process.stderr.write(`${JSON.stringify(event)}\n`); },
+  });
   const lexicalRetriever = new AiraGraphDbLexicalRetriever(client);
 
   const adapters: StorageAdapters = {
@@ -299,9 +330,11 @@ export async function createAiraGraphDbAdapters(
     vectorIndex,
     memoryStore,
     indexingMemory,
+    memoryReader,
     graphProjection,
     lexicalRetriever,
     close,
+    readGeneration: () => readAiraGraphDbGeneration(client),
   };
   AIRA_GRAPHDB_ADAPTER_TERMINATIONS.set(adapters, termination);
   return adapters;
