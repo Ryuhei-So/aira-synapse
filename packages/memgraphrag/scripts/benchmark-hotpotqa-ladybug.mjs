@@ -33,6 +33,7 @@ import { SimpleNodeInitializer } from '../dist/application/query/SimpleNodeIniti
 import { DictionaryAwareNodeInitializer } from '../dist/application/query/DictionaryAwareNodeInitializer.js';
 import { SimplePPR } from '../dist/application/query/SimplePPR.js';
 import { SimpleContextBuilder } from '../dist/application/query/SimpleContextBuilder.js';
+import { SnapshotBackedMemoryReader } from '../dist/infrastructure/storage/SnapshotBackedMemoryReader.js';
 import { AliasAwareContextBuilder } from '../dist/application/query/AliasAwareContextBuilder.js';
 import { SubQueryDecomposer } from '../dist/application/query/SubQueryDecomposer.js';
 import { ComparisonVerifier } from '../dist/application/query/ComparisonVerifier.js';
@@ -428,6 +429,7 @@ async function evaluateQueries() {
   // SQLite for memory and lexicon (cached for performance)
   const db = openDatabase(SQLITE_PATH);
   const memoryStore = new CachedMemoryStore(new SQLiteMemoryStore(db));
+  const memoryReader = new SnapshotBackedMemoryReader(memoryStore);
   const dictionary = new SQLiteLexiconStore(db, CORPUS_ID);
   const thesaurus = new SQLiteLexiconStore(db, CORPUS_ID);
 
@@ -486,10 +488,10 @@ async function evaluateQueries() {
 
   // Build components based on flags
   // Note: Dictionary injection is now context-based (inside QueryService), not teleport-vector-based
-  const baseInitializer = new SimpleNodeInitializer(memoryStore);
+  const baseInitializer = new SimpleNodeInitializer(memoryReader);
   const nodeInitializer = baseInitializer;
 
-  const baseContextBuilder = new SimpleContextBuilder(memoryStore);
+  const baseContextBuilder = new SimpleContextBuilder(memoryReader);
   const contextBuilder = featureFlags.enableAliasHints
     ? new AliasAwareContextBuilder(baseContextBuilder, dictionary, thesaurus)
     : baseContextBuilder;
@@ -514,7 +516,7 @@ async function evaluateQueries() {
   const queryService = new DefaultQueryService({
     dictionary,
     expansionPolicy,
-    memoryFilter: new VectorMemoryFilter(embedding, vectorIndex, memoryStore, null),
+    memoryFilter: new VectorMemoryFilter(embedding, vectorIndex, memoryReader, null),
     nodeInitializer,
     ppr,
     projection: graphProjection,

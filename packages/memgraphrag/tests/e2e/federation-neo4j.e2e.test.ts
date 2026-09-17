@@ -85,11 +85,11 @@ describeIf('E2E: Federated Query across EN + JP corpora (Neo4j)', () => {
     const primaryService = new DefaultQueryService({
       dictionary: stubDict,
       expansionPolicy: new ThesaurusExpansionPolicy(stubThesaurus),
-      memoryFilter: new VectorMemoryFilter(embeddingProvider, enAdapters.vectorIndex, enAdapters.memoryStore, enAdapters.graphStore),
-      nodeInitializer: new SimpleNodeInitializer(enAdapters.memoryStore),
+      memoryFilter: new VectorMemoryFilter(embeddingProvider, enAdapters.vectorIndex, enAdapters.memoryReader, enAdapters.graphStore),
+      nodeInitializer: new SimpleNodeInitializer(enAdapters.memoryReader),
       ppr: new SimplePPR(),
       projection: enAdapters.graphProjection,
-      contextBuilder: new SimpleContextBuilder(enAdapters.memoryStore),
+      contextBuilder: new SimpleContextBuilder(enAdapters.memoryReader),
       llm: llmProvider,
     });
 
@@ -114,11 +114,11 @@ describeIf('E2E: Federated Query across EN + JP corpora (Neo4j)', () => {
       const queryService = new DefaultQueryService({
         dictionary: stubDict,
         expansionPolicy: new ThesaurusExpansionPolicy(stubThesaurus),
-        memoryFilter: new VectorMemoryFilter(embeddingProvider, adapters.vectorIndex, adapters.memoryStore, adapters.graphStore),
-        nodeInitializer: new SimpleNodeInitializer(adapters.memoryStore),
+        memoryFilter: new VectorMemoryFilter(embeddingProvider, adapters.vectorIndex, adapters.memoryReader, adapters.graphStore),
+        nodeInitializer: new SimpleNodeInitializer(adapters.memoryReader),
         ppr: new SimplePPR(),
         projection: adapters.graphProjection,
-        contextBuilder: new SimpleContextBuilder(adapters.memoryStore),
+        contextBuilder: new SimpleContextBuilder(adapters.memoryReader),
         llm: llmProvider,
       });
       return { adapters, queryService };

@@ -32,6 +32,7 @@ import { VectorMemoryFilter } from '../dist/application/query/VectorMemoryFilter
 import { SimpleNodeInitializer } from '../dist/application/query/SimpleNodeInitializer.js';
 import { SimplePPR } from '../dist/application/query/SimplePPR.js';
 import { SimpleContextBuilder } from '../dist/application/query/SimpleContextBuilder.js';
+import { SnapshotBackedMemoryReader } from '../dist/infrastructure/storage/SnapshotBackedMemoryReader.js';
 import { ThesaurusExpansionPolicy } from '../dist/application/index.js';
 import { V15_BASELINE_QUERY_FLAGS } from '../dist/domain/config/featureFlags.js';
 import { normalizeJapanese, normalizedContainsJa } from './ja-eval-normalizer.mjs';
@@ -120,6 +121,7 @@ async function evaluateQueries() {
   // SQLite for memory and lexicon
   const db = openDatabase(SQLITE_PATH);
   const memoryStore = new CachedMemoryStore(new SQLiteMemoryStore(db));
+  const memoryReader = new SnapshotBackedMemoryReader(memoryStore);
   const dictionary = new SQLiteLexiconStore(db, CORPUS_ID);
   const thesaurus = new SQLiteLexiconStore(db, CORPUS_ID);
 
@@ -147,15 +149,15 @@ async function evaluateQueries() {
 
   const featureFlags = V15_BASELINE_QUERY_FLAGS;
 
-  const nodeInitializer = new SimpleNodeInitializer(memoryStore);
-  const contextBuilder = new SimpleContextBuilder(memoryStore);
+  const nodeInitializer = new SimpleNodeInitializer(memoryReader);
+  const contextBuilder = new SimpleContextBuilder(memoryReader);
   const expansionPolicy = new ThesaurusExpansionPolicy(thesaurus, { synonymLimit: 3, hypernymLimit: 0 });
   const ppr = new SimplePPR();
 
   const queryService = new DefaultQueryService({
     dictionary,
     expansionPolicy,
-    memoryFilter: new VectorMemoryFilter(embedding, vectorIndex, memoryStore, neo4jGraphStore),
+    memoryFilter: new VectorMemoryFilter(embedding, vectorIndex, memoryReader, neo4jGraphStore),
     nodeInitializer,
     ppr,
     projection: graphProjection,

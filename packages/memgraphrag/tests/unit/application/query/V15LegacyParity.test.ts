@@ -3,12 +3,13 @@ import type { IEmbeddingProvider } from '../../../../src/domain/provider/index.j
 import type { Fact } from '../../../../src/domain/memory/fact.js';
 import type { Passage } from '../../../../src/domain/memory/passage.js';
 import type { MemorySnapshot } from '../../../../src/domain/memory/globalMemory.js';
-import type { IVectorIndex, IMemoryStore, VectorSearchMatch } from '../../../../src/domain/storage/index.js';
+import type { IVectorIndex, IMemoryReader, IMemoryStore, VectorSearchMatch } from '../../../../src/domain/storage/index.js';
 import type { QueryRequest } from '../../../../src/domain/retrieval/memoryFilter.js';
 import type { IGraphProjection, TransitionEntry } from '../../../../src/domain/retrieval/ppr.js';
 import { VectorMemoryFilter } from '../../../../src/application/query/VectorMemoryFilter.js';
 import { SimpleNodeInitializer } from '../../../../src/application/query/SimpleNodeInitializer.js';
 import { SimplePPR } from '../../../../src/application/query/SimplePPR.js';
+import { SnapshotBackedMemoryReader } from '../../../../src/infrastructure/storage/SnapshotBackedMemoryReader.js';
 
 const query: QueryRequest = {
   corpusId: 'corpus-1',
@@ -134,20 +135,21 @@ describe('v15 legacy path parity hardenings', () => {
   });
 });
 
-function makeMemoryStore(snapshot: Pick<MemorySnapshot, 'passages' | 'facts' | 'schemas'>): IMemoryStore {
+function makeMemoryStore(snapshot: Pick<MemorySnapshot, 'passages' | 'facts' | 'schemas'>): IMemoryReader {
   const fullSnapshot = {
     ...snapshot,
     corpusId: 'corpus-1',
     exportedAt: '2026-01-01T00:00:00Z',
     schemaVersion: 1,
   } as MemorySnapshot;
-  return {
+  const store: IMemoryStore = {
     load: vi.fn().mockResolvedValue(fullSnapshot),
     save: vi.fn(),
     saveCheckpoint: vi.fn(),
     loadCheckpoint: vi.fn(),
     validateIntegrity: vi.fn(),
   };
+  return new SnapshotBackedMemoryReader(store);
 }
 
 function makePassage(id: string): Passage {

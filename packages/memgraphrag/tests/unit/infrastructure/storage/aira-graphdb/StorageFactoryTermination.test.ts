@@ -6,6 +6,7 @@ const state = vi.hoisted(() => ({
     request: ReturnType<typeof vi.fn>;
   }>,
   indexingCreate: vi.fn(),
+  readerCreate: vi.fn(),
   termination: Object.freeze({ kind: 'graceful_reaped' }) as Readonly<Record<string, unknown>>,
 }));
 
@@ -38,6 +39,10 @@ vi.mock('../../../../../src/infrastructure/storage/aira-graphdb/NativeClient.js'
 
 vi.mock('../../../../../src/infrastructure/storage/aira-graphdb/AiraGraphDbIndexingMemory.js', () => ({
   AiraGraphDbIndexingMemory: { create: state.indexingCreate },
+}));
+
+vi.mock('../../../../../src/infrastructure/storage/aira-graphdb/AiraGraphDbMemoryReader.js', () => ({
+  AiraGraphDbMemoryReader: { create: state.readerCreate },
 }));
 
 vi.mock('../../../../../src/infrastructure/storage/aira-graphdb/AiraGraphDbAdapters.js', () => ({
@@ -75,6 +80,8 @@ beforeEach(() => {
   state.clients.length = 0;
   state.indexingCreate.mockReset();
   state.indexingCreate.mockResolvedValue({ indexing: true });
+  state.readerCreate.mockReset();
+  state.readerCreate.mockResolvedValue({ reader: true });
   state.termination = frozenTermination({ kind: 'graceful_reaped' });
 });
 
@@ -93,6 +100,7 @@ describe.sequential('Aira GraphDB storage factory termination propagation', () =
       'vectorIndex',
       'memoryStore',
       'indexingMemory',
+      'memoryReader',
       'graphProjection',
       'lexicalRetriever',
       'close',
@@ -137,6 +145,18 @@ describe.sequential('Aira GraphDB storage factory termination propagation', () =
       .catch((error: unknown) => error);
 
     expect(thrown).toBe(primary);
+    expect(state.clients[0]!.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails closed with the exact memory reader acquisition error before any query', async () => {
+    const primary = new Error('aira-graphdb native does not advertise memory_get_passages_by_ids');
+    state.readerCreate.mockRejectedValueOnce(primary);
+
+    const thrown = await createAiraGraphDbAdapters({ dbPath: '/private/graphdb.agdb' })
+      .catch((error: unknown) => error);
+
+    expect(thrown).toBe(primary);
+    expect(state.indexingCreate).toHaveBeenCalledTimes(1);
     expect(state.clients[0]!.close).toHaveBeenCalledTimes(1);
   });
 

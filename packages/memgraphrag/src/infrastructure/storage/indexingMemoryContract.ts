@@ -123,7 +123,7 @@ export function assertFact(value: unknown, corpusId: string, name: string): asse
   }
 }
 
-function assertPassage(value: unknown, corpusId: string, name: string): asserts value is Passage {
+export function assertPassage(value: unknown, corpusId: string, name: string): asserts value is Passage {
   assertSharedDomainShape('passage', value, name);
   const passage = value as Passage;
   assertDomainId(passage.passageId, `${name}.passageId`);

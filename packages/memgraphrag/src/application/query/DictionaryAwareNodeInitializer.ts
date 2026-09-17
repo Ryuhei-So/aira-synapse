@@ -12,8 +12,9 @@ import type {
   NodeInitializationVector,
 } from '../../domain/retrieval/memoryFilter.js';
 import type { ITermDictionary } from '../../domain/dictionary/termDictionary.js';
-import type { IMemoryStore } from '../../domain/storage/index.js';
+import type { IMemoryReader } from '../../domain/storage/index.js';
 import type { LanguageCode } from '../../domain/memory/types.js';
+import { normalizeV15Entity } from '../../domain/retrieval/v15Plan.js';
 
 /** Max dictionary-injected facts per matched entity */
 const MAX_PER_ENTITY = parseInt(process.env.DICT_MAX_PER_ENTITY || '3');
@@ -28,7 +29,7 @@ export class DictionaryAwareNodeInitializer implements INodeInitializer {
   constructor(
     private readonly inner: INodeInitializer,
     private readonly dictionary: ITermDictionary,
-    private readonly memoryStore: IMemoryStore,
+    private readonly memoryReader: IMemoryReader,
     private readonly language: LanguageCode = 'en',
   ) {}
 
@@ -49,18 +50,26 @@ export class DictionaryAwareNodeInitializer implements INodeInitializer {
     const maxBaseScore = positiveScores.length > 0 ? Math.max(...positiveScores) : 1.0;
     const injectionScore = maxBaseScore * INJECTION_SCORE_RATIO;
 
-    // Collect matched entity names (canonical + aliases)
+    // Collect matched entity names (canonical + aliases). Equality with a
+    // fact's head/tail entity is decided by the memory reader under the
+    // pinned Unicode 16 case fold; the same fold keys the per-entity cap.
+    const requestedEntities = new Set<string>();
     const matchedEntities = new Set<string>();
     for (const m of validMatches) {
-      matchedEntities.add(m.entry.canonicalForm.toLowerCase());
-      for (const alias of m.entry.aliases) {
-        matchedEntities.add(alias.toLowerCase());
+      for (const entity of [m.entry.canonicalForm, ...m.entry.aliases]) {
+        requestedEntities.add(entity);
+        matchedEntities.add(normalizeV15Entity(entity));
       }
     }
 
-    // Load snapshot to find facts matching dictionary entities
-    const snapshot = await this.memoryStore.load(request.query.corpusId);
-    const activeFacts = snapshot.facts.filter((f) => f.state === 'active');
+    // Active facts mentioning a matched entity, factId ascending, bounded by
+    // the reader's advertised limit.
+    const activeFacts = await this.memoryReader.findFactsByEntities({
+      corpusId: request.query.corpusId,
+      entities: [...requestedEntities],
+      state: 'active',
+      limit: this.memoryReader.bounds.maxLimit,
+    });
 
     // Find facts referencing matched entities, capped per entity
     const entityFactCounts = new Map<string, number>();
@@ -74,8 +83,8 @@ export class DictionaryAwareNodeInitializer implements INodeInitializer {
       // Skip facts already in base vector
       if (base.scores[factKey] !== undefined) continue;
 
-      const headNorm = fact.headEntity.toLowerCase();
-      const tailNorm = fact.tailEntity.toLowerCase();
+      const headNorm = normalizeV15Entity(fact.headEntity);
+      const tailNorm = normalizeV15Entity(fact.tailEntity);
       const matchedEntity = matchedEntities.has(headNorm)
         ? headNorm
         : matchedEntities.has(tailNorm)

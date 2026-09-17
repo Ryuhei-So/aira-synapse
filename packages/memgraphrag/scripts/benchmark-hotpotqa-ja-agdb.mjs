@@ -21,6 +21,7 @@ import { HybridMemoryFilter } from '../dist/application/query/HybridMemoryFilter
 import { SimpleNodeInitializer } from '../dist/application/query/SimpleNodeInitializer.js';
 import { SimplePPR } from '../dist/application/query/SimplePPR.js';
 import { SimpleContextBuilder } from '../dist/application/query/SimpleContextBuilder.js';
+import { SnapshotBackedMemoryReader } from '../dist/infrastructure/storage/SnapshotBackedMemoryReader.js';
 import { ThesaurusExpansionPolicy } from '../dist/application/index.js';
 
 // --- JA benchmark paths ---
@@ -276,6 +277,7 @@ async function main() {
 
   const vectorIndex = new AiraGraphDbVectorIndex(agdbClient);
   const memoryStore = new CachedMemoryStore(new AiraGraphDbMemoryStore(agdbClient));
+  const memoryReader = new SnapshotBackedMemoryReader(memoryStore);
   const graphProjection = new CachedGraphProjection(new AiraGraphDbGraphProjection(agdbClient));
 
   // Dictionary/Thesaurus: SQLite (if exists, otherwise skip)
@@ -365,17 +367,17 @@ async function main() {
   };
 
   const memoryFilter = ENABLE_HYBRID
-    ? new HybridMemoryFilter(embedding, vectorIndex, memoryStore, tokenizedLexicalRetriever, graphStore)
-    : new VectorMemoryFilter(embedding, vectorIndex, memoryStore, graphStore);
+    ? new HybridMemoryFilter(embedding, vectorIndex, memoryReader, tokenizedLexicalRetriever, graphStore)
+    : new VectorMemoryFilter(embedding, vectorIndex, memoryReader, graphStore);
 
   const queryService = new DefaultQueryService({
     dictionary,
     expansionPolicy: new ThesaurusExpansionPolicy(thesaurus),
     memoryFilter,
-    nodeInitializer: new SimpleNodeInitializer(memoryStore),
+    nodeInitializer: new SimpleNodeInitializer(memoryReader),
     ppr: new SimplePPR(),
     projection: graphProjection,
-    contextBuilder: new SimpleContextBuilder(memoryStore),
+    contextBuilder: new SimpleContextBuilder(memoryReader),
     llm: jaLlm,
     hyperParams,
     featureFlags,
