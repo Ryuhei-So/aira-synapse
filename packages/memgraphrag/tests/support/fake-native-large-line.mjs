@@ -25,6 +25,33 @@ input.on('line', (line) => {
     result = [];
   } else if (request.method === 'calls') {
     result = Object.fromEntries(calls);
+  } else if (request.method === 'protocol_info') {
+    // The adapters validate the bounded indexing inventory at startup.
+    result = {
+      protocolVersion: 'native-method-policy@1',
+      generation: 0,
+      state: 'idle',
+      limits: {
+        indexingMemory: {
+          schema: 'native-indexing-memory@1',
+          maxRequestBytes: 64 * 1024 * 1024,
+          maxResponseBytes: 8 * 1024 * 1024,
+          maxSchemaIds: 4096,
+          maxActiveFacts: 100,
+          maxDeltaItemsPerSection: 4096,
+          maxDomainIdBytes: 4096,
+          maxCorpusIdBytes: 1024,
+          maxUpdatedAtBytes: 128,
+        },
+        wal: { mutationRequestIdUniqueness: 'activeTransaction' },
+      },
+      methods: [
+        { name: 'memory_get_schemas_by_ids', classification: 'read', wal: false },
+        { name: 'memory_get_active_facts', classification: 'read', wal: false },
+        { name: 'memory_activate_facts_by_schema_ids', classification: 'mutation', wal: true },
+        { name: 'memory_upsert', classification: 'mutation', wal: true },
+      ],
+    };
   }
   process.stdout.write(`${JSON.stringify({ id: request.id, ok: true, result })}\n`);
 });
