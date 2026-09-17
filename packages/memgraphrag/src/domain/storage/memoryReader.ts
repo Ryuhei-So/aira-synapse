@@ -85,7 +85,11 @@ export interface MemorySectionCounts {
  *
  * By-id reads return full stored objects in request order (first occurrence
  * of a repeated id wins) and omit ids that are not stored. Requests larger
- * than the advertised bound are chunked by the implementation.
+ * than the advertised bound are chunked by the implementation. The objects
+ * are the stored ones, untouched: a passage written before the metadata
+ * canonicalisation (bf42f7f, #8) may carry `null` elements in
+ * `metadata.sectionPath`, and every implementation returns them as stored
+ * (see `assertStoredPassage` in the read contract).
  *
  * `findFactsByEntities` returns the stored facts whose `headEntity` or
  * `tailEntity` equals one of the request entities under the Unicode 16

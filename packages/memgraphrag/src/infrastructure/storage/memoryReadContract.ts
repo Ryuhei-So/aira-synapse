@@ -15,6 +15,47 @@ import { assertFact, assertPassage, assertSchema } from './indexingMemoryContrac
 
 type JsonObject = Record<string, unknown>;
 
+function isObject(value: unknown): value is JsonObject {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Read-path passage validation: the write contract (`assertPassage`) with one
+ * measured tolerance for stored data that predates it.
+ *
+ * Passages chunked before bf42f7f (#8, 2026-08-25) carry `null` elements in
+ * `metadata.sectionPath` where the chunker skipped a heading level: it
+ * assigned `sectionStack[level - 1]` into a sparse array whose holes became
+ * `null` on the wire. The production `libfull` corpus holds 16128 such
+ * elements in 10607 of 43445 passages (measured 2026-09-17 against the
+ * owner's store file; every fact and schema of every corpus passes the write
+ * contract, and no other passage field deviates). The legacy `memory_load`
+ * path never validated them and handed the objects to the query path
+ * untouched; validating them with the write contract on the query path
+ * failed every query touching such a passage (literature-hub #545 rollback,
+ * 2026-09-17 12:02 JST).
+ *
+ * The rule is therefore: `metadata.sectionPath` must still be a plain,
+ * non-sparse array, and every other field is checked exactly as the write
+ * contract checks it, but the array's elements are handed through untouched,
+ * as the legacy path and the snapshot reader do. Nothing is normalised: the
+ * writer never normalised these values, so a reader that did would return a
+ * different object than the snapshot path.
+ */
+export function assertStoredPassage(value: unknown, corpusId: string, name: string): asserts value is Passage {
+  if (!isObject(value) || !isObject(value.metadata) || !Array.isArray(value.metadata.sectionPath)) {
+    // Not the tolerated case: let the write contract name the defect.
+    assertPassage(value, corpusId, name);
+    return;
+  }
+  // `map` keeps the array's length and holes, so the contract still checks
+  // the array itself (plain prototype, not sparse); only the element type
+  // check is lifted. The caller keeps the stored object, not the probe.
+  const sectionPath: unknown[] = value.metadata.sectionPath;
+  const probe = { ...value, metadata: { ...value.metadata, sectionPath: sectionPath.map(() => '') } };
+  assertPassage(probe, corpusId, name);
+}
+
 export type MemorySectionKind = 'passage' | 'fact' | 'schema';
 
 export interface MemorySectionSpec<TItem> {
@@ -32,7 +73,7 @@ export const PASSAGE_SECTION: MemorySectionSpec<Passage> = {
   section: 'passages',
   idsKey: 'passageIds',
   idOf: (item) => item.passageId,
-  assert: assertPassage,
+  assert: assertStoredPassage,
 };
 
 export const FACT_SECTION: MemorySectionSpec<Fact> = {
@@ -52,10 +93,6 @@ export const SCHEMA_SECTION: MemorySectionSpec<Schema> = {
   idOf: (item) => item.schemaId,
   assert: assertSchema,
 };
-
-function isObject(value: unknown): value is JsonObject {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 function positiveSafeInteger(value: unknown, name: string): number {
   if (!Number.isSafeInteger(value) || (value as number) <= 0) {

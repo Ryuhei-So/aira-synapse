@@ -263,6 +263,59 @@ describe('AiraGraphDbMemoryReader by-id reads', () => {
   });
 });
 
+describe('AiraGraphDbMemoryReader stored objects that predate the write contract (literature-hub #545 rollback)', () => {
+  /** A libfull-shaped passage: the pre-bf42f7f chunker left holes in sectionPath that became null on the wire. */
+  function legacyPassage(sectionPath: unknown): Passage {
+    const base = passage('p-legacy');
+    return { ...base, metadata: { ...base.metadata, sectionPath: sectionPath as readonly string[] } };
+  }
+
+  function snapshotStore(passages: Passage[]): IMemoryStore {
+    return {
+      load: vi.fn().mockResolvedValue({ corpusId: CORPUS, exportedAt: NOW, schemaVersion: 1, passages, facts: [], schemas: [] }),
+      save: vi.fn(), saveCheckpoint: vi.fn(), loadCheckpoint: vi.fn(), validateIntegrity: vi.fn(),
+    };
+  }
+
+  it('hands a non-string sectionPath element through untouched, identical to the snapshot reader', async () => {
+    const stored = legacyPassage(['Intro', 2, null]);
+    const { client } = clientWith(byIdHandler({ passages: [stored] }));
+    const native = await AiraGraphDbMemoryReader.create(client);
+    const legacy = new SnapshotBackedMemoryReader(snapshotStore([stored]));
+    const request = { corpusId: CORPUS, passageIds: ['p-legacy'] };
+
+    const [fromNative, fromSnapshot] = await Promise.all([native.getPassagesByIds(request), legacy.getPassagesByIds(request)]);
+
+    expect(fromNative).toStrictEqual(fromSnapshot);
+    expect(JSON.stringify(fromNative)).toBe(JSON.stringify(fromSnapshot));
+    expect(fromNative[0]!.metadata.sectionPath).toStrictEqual(['Intro', 2, null]);
+    // The stored object itself is returned, not a validated copy.
+    expect(fromNative[0]).toBe(stored);
+  });
+
+  it.each([
+    ['a passage without text', () => { const { text: _text, ...rest } = legacyPassage(['Intro', null]); return rest; }, '$.text is required'],
+    ['a passage without passageId', () => { const { passageId: _id, ...rest } = legacyPassage(['Intro', null]); return rest; }, '$.passageId is required'],
+    ['a sectionPath that is not an array', () => legacyPassage('Intro'), '$.metadata.sectionPath must be an array'],
+    ['a sparse sectionPath', () => legacyPassage([, 'Intro']), '$.metadata.sectionPath[0] must not be sparse'],
+    ['an unknown metadata field', () => { const item = legacyPassage(['Intro', null]); return { ...item, metadata: { ...item.metadata, extra: 1 } }; }, '$.metadata.extra is an unknown field'],
+    ['an empty offset range', () => { const item = legacyPassage(['Intro', null]); return { ...item, metadata: { ...item.metadata, offsetEnd: 0 } }; }, 'offsets must describe a non-empty range'],
+  ])('still fails closed on %s', async (_label, reply, message) => {
+    const { client } = clientWith(() => [reply()]);
+    const reader = await AiraGraphDbMemoryReader.create(client);
+    await expect(reader.getPassagesByIds({ corpusId: CORPUS, passageIds: ['p-legacy'] })).rejects.toThrow(message);
+  });
+
+  it.each([
+    ['fact', (reader: AiraGraphDbMemoryReader) => reader.getFactsByIds({ corpusId: CORPUS, factIds: ['f1'] }), () => [{ ...fact('f1'), confidence: 'high' }], '$.confidence must be a finite number'],
+    ['schema', (reader: AiraGraphDbMemoryReader) => reader.getSchemasByIds({ corpusId: CORPUS, schemaIds: ['s1'] }), () => [{ ...schema('s1'), aliases: [null] }], '$.aliases[0] must be an object'],
+  ])('keeps the write contract for a stored %s (no deviation measured in any production corpus)', async (_kind, read, reply, message) => {
+    const { client } = clientWith(() => reply());
+    const reader = await AiraGraphDbMemoryReader.create(client);
+    await expect(read(reader)).rejects.toThrow(message);
+  });
+});
+
 describe('AiraGraphDbMemoryReader entity reads', () => {
   const facts = [
     fact('f-b', 'Ärzte', 'Beta'),
