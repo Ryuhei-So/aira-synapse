@@ -71,7 +71,7 @@ describe('TASK-AGDB-040/041: backend compatibility workflow contract', () => {
       const job = jobs[jobName]!;
       expect(job.env, `missing GraphDB env in ${jobName}`).toEqual(expect.objectContaining({
         AIRA_GRAPHDB_REPO_PATH: '${{ github.workspace }}/aira-graphdb',
-        AIRA_GRAPHDB_EXPECTED_SHA: 'a5e25c008a704363a323782fa6571f07a47f9975',
+        AIRA_GRAPHDB_EXPECTED_SHA: '83ef0eb309deec7e1ddc156ecda19eb4edb51010',
       }));
       const graphDbCheckout = job.steps.find(
         (step) => step.uses === 'actions/checkout@v4'
@@ -79,7 +79,7 @@ describe('TASK-AGDB-040/041: backend compatibility workflow contract', () => {
       );
       expect(graphDbCheckout, `missing exact GraphDB checkout in ${jobName}`).toBeDefined();
       expect(graphDbCheckout?.with).toEqual(expect.objectContaining({
-        ref: 'a5e25c008a704363a323782fa6571f07a47f9975',
+        ref: '83ef0eb309deec7e1ddc156ecda19eb4edb51010',
         path: 'aira-graphdb',
       }));
     }
