@@ -57,6 +57,10 @@ function passage(passageId: string, text: string): Passage {
   };
 }
 
+function legacyPassage(base: Passage, sectionPath: readonly (string | null)[]): Passage {
+  return { ...base, metadata: { ...base.metadata, sectionPath: sectionPath as readonly string[] } };
+}
+
 function fact(factId: string, headEntity: string, relation: string, tailEntity: string, state: Fact['state'], passageIds: string[]): Fact {
   return {
     factId,
@@ -97,7 +101,10 @@ const SCHEMA: Schema = {
 const STORE = {
   corpusId: CORPUS,
   passages: [
-    passage('p1', 'Alpha is a method from Germany.'),
+    // p1 is shaped like the production libfull corpus: chunked before the
+    // metadata canonicalisation (bf42f7f), a skipped heading level left a
+    // null in sectionPath. The query path must return it exactly as stored.
+    legacyPassage(passage('p1', 'Alpha is a method from Germany.'), ['Intro', null, 'Methods']),
     passage('p2', 'Beta is a method from Japan.'),
     passage('p3', 'Ärzte work in Москва.'),
     passage('p4', 'Unrelated passage.'),
@@ -324,6 +331,7 @@ describe('aira-graphdb memory reader against the fake owner native', () => {
     const bridge = await native.retrieve(BRIDGE);
     expect(bridge.passages.map((item) => item.passage.passageId)).toEqual(['p1', 'p2']);
     expect(bridge.contextBundle.promptContext).toContain('Alpha is a method from Germany.');
+    expect(bridge.passages[0]!.passage.metadata.sectionPath).toStrictEqual(['Intro', null, 'Methods']);
     expect(stable(bridge)).toBe(stable(await legacy.retrieve(BRIDGE)));
 
     const comparison = await native.retrieve(COMPARISON);
