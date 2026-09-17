@@ -68,10 +68,12 @@ function uniqueSeedEntities(facts: readonly Fact[]): string[] {
 /**
  * All stored facts (any state, as the legacy whole-snapshot scan saw them)
  * mentioning a seed entity. One batched read covers the common case; when
- * that reply is saturated at the advertised limit, each entity is re-read
- * on its own so a frequent entity cannot hide another entity's facts. An
- * entity with more matching facts than the limit is still truncated to its
- * first `limit` by factId; that residual is recorded in the PR body.
+ * that reply is saturated at the reader's limit, each entity is re-read on
+ * its own (one RPC per distinct seed entity, at most 2 x topM) so a
+ * frequent entity cannot hide another entity's facts. An entity with more
+ * matching facts than the limit is still truncated to its first `limit` by
+ * factId. Snapshot-backed readers advertise no limit, so for them this is
+ * the legacy unbounded scan in one call.
  */
 async function findExpansionFacts(
   memoryReader: IMemoryReader,

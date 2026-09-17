@@ -34,6 +34,10 @@ vi.mock('../../../../../src/infrastructure/storage/aira-graphdb/NativeClient.js'
   return {
     AiraGraphDbNativeClient: FakeNativeClient,
     readAiraGraphDbNativeTerminationReceipt: (client: FakeNativeClient) => client.receipt,
+    readAiraGraphDbGeneration: async (client: FakeNativeClient) => {
+      const protocol = await client.request('protocol_info', {}) as { generation?: unknown };
+      return protocol.generation;
+    },
   };
 });
 
@@ -104,6 +108,7 @@ describe.sequential('Aira GraphDB storage factory termination propagation', () =
       'graphProjection',
       'lexicalRetriever',
       'close',
+      'readGeneration',
     ]);
     expect(Reflect.ownKeys(adapters.batch!)).toEqual(['begin', 'commit', 'abandon']);
     expect(adapters.close).toBe(adapters.batch!.abandon);
@@ -134,6 +139,16 @@ describe.sequential('Aira GraphDB storage factory termination propagation', () =
       ['batch_begin', {}],
       ['batch_commit', {}],
     ]);
+    await adapters.close();
+  });
+
+  it('reads the generation through the shared client', async () => {
+    const adapters = await createAiraGraphDbAdapters({ dbPath: '/private/graphdb.agdb' });
+    const client = state.clients[0]!;
+    client.request.mockResolvedValueOnce({ generation: 41 });
+
+    await expect(adapters.readGeneration!()).resolves.toBe(41);
+    expect(client.request.mock.calls).toEqual([['protocol_info', {}]]);
     await adapters.close();
   });
 

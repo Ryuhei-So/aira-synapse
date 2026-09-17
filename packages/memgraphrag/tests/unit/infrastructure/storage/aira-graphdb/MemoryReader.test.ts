@@ -301,6 +301,14 @@ describe('AiraGraphDbMemoryReader entity reads', () => {
     expect(reads.every((call) => (call.params as { limit: number }).limit === 4)).toBe(true);
   });
 
+  it('truncates to the advertised maxLimit (the native residual the snapshot path does not have)', async () => {
+    const many = Array.from({ length: 7 }, (_, index) => fact(`f-${index}`, 'Alpha', `Tail ${index}`));
+    const { client } = clientWith((_method, params) => many.slice(0, (params as { limit: number }).limit));
+    const reader = await AiraGraphDbMemoryReader.create(client);
+    const result = await reader.findFactsByEntities({ corpusId: CORPUS, entities: ['Alpha'], state: 'any', limit: reader.bounds.maxLimit });
+    expect(result.map((item) => item.factId)).toEqual(['f-0', 'f-1', 'f-2', 'f-3', 'f-4']);
+  });
+
   it('applies the state filter and returns [] without a request for limit 0 or no entities', async () => {
     const { client, calls } = clientWith(nativeLike);
     const reader = await AiraGraphDbMemoryReader.create(client);
@@ -370,8 +378,17 @@ describe('SnapshotBackedMemoryReader parity with the native semantics', () => {
     expect(any.map((item) => item.factId)).toEqual(['f-a', 'f-b']);
     const active = await reader.findFactsByEntities({ corpusId: CORPUS, entities: ['ärzte'], state: 'active', limit: 10 });
     expect(active.map((item) => item.factId)).toEqual(['f-b']);
-    await expect(reader.findFactsByEntities({ corpusId: CORPUS, entities: ['ärzte'], state: 'any', limit: 101 }))
-      .rejects.toThrow('limit must not exceed the advertised bound 100');
     await expect(reader.sectionCounts({ corpusId: CORPUS })).resolves.toEqual({ passages: 2, facts: 3, schemas: 0 });
+  });
+
+  it('advertises no bound and keeps the legacy unbounded scan (review M2)', async () => {
+    const many = Array.from({ length: 150 }, (_, index) => fact(`f-${String(index).padStart(3, '0')}`, 'Alpha', `Tail ${index}`));
+    const reader = new SnapshotBackedMemoryReader(snapshotStore({ facts: many }));
+    expect(reader.bounds.maxLimit).toBe(Number.MAX_SAFE_INTEGER);
+    const all = await reader.findFactsByEntities({ corpusId: CORPUS, entities: ['alpha'], state: 'any', limit: reader.bounds.maxLimit });
+    expect(all).toHaveLength(150);
+    expect(all.map((item) => item.factId)).toEqual(many.map((item) => item.factId));
+    const ids = many.map((item) => item.factId);
+    await expect(reader.getFactsByIds({ corpusId: CORPUS, factIds: ids })).resolves.toHaveLength(150);
   });
 });

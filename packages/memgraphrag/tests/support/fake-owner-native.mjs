@@ -13,7 +13,9 @@
 //   FAKE_OWNER_GENERATION_CHANGE_AFTER  after this many admitted memory reads every further read
 //                                     fails with the owner's GENERATION_MISMATCH error
 //
-// The `fake_events` method returns the request log (method and param sizes).
+// The `fake_events` method returns the request log (method and param sizes);
+// `fake_set_generation {generation}` changes the generation protocol_info
+// reports, standing in for a commit by the index worker.
 import { readFileSync } from 'node:fs';
 import readline from 'node:readline';
 
@@ -67,6 +69,7 @@ const store = process.env.FAKE_OWNER_STORE
   : { corpusId: 'fake', passages: [], facts: [], schemas: [], vectors: {}, transitions: [] };
 const events = [];
 let admittedMemoryReads = 0;
+let generation = 7;
 
 class ClientError extends Error {
   constructor(code, message) {
@@ -161,7 +164,7 @@ function handle(method, params) {
     case 'protocol_info':
       return {
         protocolVersion: 'native-method-policy@1',
-        generation: 7,
+        generation,
         state: 'idle',
         limits: {
           indexingMemory: INDEXING,
@@ -243,6 +246,9 @@ function handle(method, params) {
       return [];
     case 'fake_events':
       return events;
+    case 'fake_set_generation':
+      generation = params.generation;
+      return null;
     default:
       throw new ClientError('UNSUPPORTED_METHOD', `unsupported method ${method}`);
   }
@@ -260,7 +266,7 @@ function summarize(params) {
 const input = readline.createInterface({ input: process.stdin });
 input.on('line', (line) => {
   const request = JSON.parse(line);
-  if (request.method !== 'fake_events') {
+  if (request.method !== 'fake_events' && request.method !== 'fake_set_generation') {
     events.push({ method: request.method, params: summarize(request.params) });
   }
   let reply;

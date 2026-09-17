@@ -24,6 +24,8 @@ import type { IEmbeddingProvider, ILLMProvider } from '../../../../../src/domain
 import type { QueryRequest } from '../../../../../src/domain/retrieval/memoryFilter.js';
 import type { IMemoryReader, IMemoryStore } from '../../../../../src/domain/storage/index.js';
 import { SnapshotBackedMemoryReader } from '../../../../../src/infrastructure/storage/SnapshotBackedMemoryReader.js';
+import { CachedGraphProjection } from '../../../../../src/infrastructure/storage/cached/CachedGraphProjection.js';
+import { syncProjectionVersion } from '../../../../../src/infrastructure/storage/cached/projectionVersionGate.js';
 import { createAiraGraphDbAdapters, type StorageAdapters } from '../../../../../src/infrastructure/storage/ladybug/storageFactory.js';
 
 const FAKE = fileURLToPath(new URL('../../../../support/fake-owner-native.mjs', import.meta.url));
@@ -176,9 +178,12 @@ afterEach(async () => {
   for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
 });
 
+function fakeClient(current: StorageAdapters): { request<T>(method: string, params?: unknown): Promise<T> } {
+  return (current.lexicalRetriever as unknown as { client: { request<T>(method: string, params?: unknown): Promise<T> } }).client;
+}
+
 async function fakeEvents(current: StorageAdapters): Promise<Array<{ method: string; params: Record<string, unknown> }>> {
-  const client = (current.lexicalRetriever as unknown as { client: { request<T>(method: string): Promise<T> } }).client;
-  return client.request('fake_events');
+  return fakeClient(current).request('fake_events');
 }
 
 function snapshotReader(): IMemoryReader {
@@ -334,6 +339,29 @@ describe('aira-graphdb memory reader against the fake owner native', () => {
     expect(methods).toContain('memory_get_facts_by_ids');
     expect(methods).toContain('memory_get_schemas_by_ids');
     expect(methods).toContain('memory_find_facts_by_entities');
+  });
+
+  it('drops the cached ranking graph when the reported generation changes between queries (review M1)', async () => {
+    adapters = await createAiraGraphDbAdapters({ dbPath: useFake() });
+    expect(adapters.graphProjection).toBeInstanceOf(CachedGraphProjection);
+    const service = queryService(adapters, adapters.memoryReader);
+    const transitionsPulled = async () => (await fakeEvents(adapters!))
+      .filter((event) => event.method === 'projection_get_transitions').length;
+
+    // Same generation across queries: one projection pull per process.
+    await expect(syncProjectionVersion(adapters.graphProjection, adapters.readGeneration)).resolves.toBe(false);
+    await service.retrieve(BRIDGE);
+    await expect(syncProjectionVersion(adapters.graphProjection, adapters.readGeneration)).resolves.toBe(false);
+    await service.retrieve(BRIDGE);
+    expect(await transitionsPulled()).toBe(1);
+
+    // The index worker commits: protocol_info reports a new generation and
+    // the next query reloads the graph.
+    await fakeClient(adapters).request('fake_set_generation', { generation: 8 });
+    await expect(syncProjectionVersion(adapters.graphProjection, adapters.readGeneration)).resolves.toBe(true);
+    await service.retrieve(BRIDGE);
+    expect(await transitionsPulled()).toBe(2);
+    expect((adapters.graphProjection as CachedGraphProjection).observedVersion).toBe(8);
   });
 
   it('expands comparison seeds through findFactsByEntities with the same scores as the snapshot scan', async () => {

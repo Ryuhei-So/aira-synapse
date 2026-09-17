@@ -2,10 +2,17 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['dist/**', 'node_modules/**', '*.js', '*.mjs', 'tests/support/**/*.mjs'],
+    ignores: ['dist/**', 'node_modules/**', '*.js', '*.mjs'],
   },
   ...tseslint.configs.recommended,
   {
+    // Test-support fakes are plain ESM scripts outside every tsconfig
+    // project: lint them syntactically, without type information.
+    files: ['tests/support/**/*.mjs'],
+    languageOptions: { parserOptions: { project: null, projectService: false } },
+  },
+  {
+    files: ['**/*.ts'],
     languageOptions: {
       parserOptions: {
         project: ['./tsconfig.json', './tests/tsconfig.json'],

@@ -32,14 +32,15 @@ export interface MemoryReadBounds {
 }
 
 /**
- * Bounds of the in-process snapshot-backed reader. They describe that
- * implementation only; the aira-graphdb reader takes its bounds from the
- * native's advertisement.
+ * Bounds of the in-process snapshot-backed reader: none. It scans the
+ * store's own snapshot exactly as the legacy query path did, so SQLite,
+ * LadybugDB and Neo4j keep their unbounded behaviour. Only the aira-graphdb
+ * reader is bounded, by the native's advertisement.
  */
 export const SNAPSHOT_MEMORY_READ_BOUNDS: MemoryReadBounds = Object.freeze({
-  maxIdsPerRequest: 4096,
-  maxEntitiesPerRequest: 64,
-  maxLimit: 100,
+  maxIdsPerRequest: Number.MAX_SAFE_INTEGER,
+  maxEntitiesPerRequest: Number.MAX_SAFE_INTEGER,
+  maxLimit: Number.MAX_SAFE_INTEGER,
 });
 
 export type MemoryFactStateFilter = 'active' | 'any';

@@ -7,6 +7,7 @@ import type { IGraphStore, IVectorIndex, IMemoryStore } from '../../../domain/st
 import type { IIndexingMemory } from '../../../domain/storage/indexingMemory.js';
 import type { IMemoryReader } from '../../../domain/storage/memoryReader.js';
 import { CachedGraphProjection } from '../cached/CachedGraphProjection.js';
+import type { StoreGenerationSource } from '../cached/projectionVersionGate.js';
 import type { IGraphProjection, ILexicalRetriever } from '../../../domain/retrieval/ppr.js';
 import type {
   AiraGraphDbTerminationResult,
@@ -25,6 +26,11 @@ export interface StorageAdapters {
   readonly graphProjection: IGraphProjection;
   readonly lexicalRetriever: ILexicalRetriever;
   readonly close: () => Promise<void>;
+  /**
+   * The store's committed generation, when the backend reports one; the
+   * query path uses it to drop a cached ranking graph after re-indexing.
+   */
+  readonly readGeneration?: StoreGenerationSource;
   /** Optional write-batching: defer backend persistence between begin/commit. */
   readonly batch?: {
     readonly begin: () => Promise<void>;
@@ -264,6 +270,7 @@ export async function createAiraGraphDbAdapters(
   const {
     AiraGraphDbNativeClient,
     readAiraGraphDbNativeTerminationReceipt,
+    readAiraGraphDbGeneration,
   } = await import('../aira-graphdb/NativeClient.js');
   const { AiraGraphDbIndexingMemory } = await import('../aira-graphdb/AiraGraphDbIndexingMemory.js');
   const { AiraGraphDbMemoryReader } = await import('../aira-graphdb/AiraGraphDbMemoryReader.js');
@@ -327,6 +334,7 @@ export async function createAiraGraphDbAdapters(
     graphProjection,
     lexicalRetriever,
     close,
+    readGeneration: () => readAiraGraphDbGeneration(client),
   };
   AIRA_GRAPHDB_ADAPTER_TERMINATIONS.set(adapters, termination);
   return adapters;

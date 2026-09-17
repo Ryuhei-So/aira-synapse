@@ -65,6 +65,7 @@ import {
 import type { MemGraphRagConfig } from '../../infrastructure/config/index.js';
 import { resolveApiKey } from '../../infrastructure/config/index.js';
 import { createAiraGraphDbAdapters, resolveBackend, type StorageAdapters } from '../../infrastructure/storage/ladybug/storageFactory.js';
+import { syncProjectionVersion, type StoreGenerationSource } from '../../infrastructure/storage/cached/projectionVersionGate.js';
 
 export interface MemGraphRagRuntime {
   start(): Promise<void>;
@@ -284,9 +285,11 @@ class QueryServiceFacade implements QueryService {
     private readonly memoryReader: IMemoryReader,
     private readonly graphStore: IGraphStore,
     private readonly graphProjection: IGraphProjection,
+    private readonly readGeneration: StoreGenerationSource | undefined,
   ) {}
 
   public async query(request: QueryRequest, hyperParams?: QueryHyperParams): Promise<QueryResponse> {
+    await syncProjectionVersion(this.graphProjection, this.readGeneration);
     const dictionary = new SQLiteLexiconStore(this.db, request.corpusId);
     const thesaurus = new SQLiteLexiconStore(this.db, request.corpusId);
     const hp = hyperParams;
@@ -305,6 +308,7 @@ class QueryServiceFacade implements QueryService {
   }
 
   public async retrieve(request: QueryRequest, precomputedVector?: readonly number[]): Promise<RetrievedQueryContext> {
+    await syncProjectionVersion(this.graphProjection, this.readGeneration);
     const dictionary = new SQLiteLexiconStore(this.db, request.corpusId);
     const thesaurus = new SQLiteLexiconStore(this.db, request.corpusId);
     const service = new DefaultQueryService({
@@ -356,6 +360,7 @@ class RuntimeImpl implements MemGraphRagRuntime {
     let memoryReader: IMemoryReader;
     let graphProjection: IGraphProjection;
     let storageBatch: StorageAdapters['batch'];
+    let readGeneration: StoreGenerationSource | undefined;
 
     if (graphDbRuntime) {
       const storageAdapters: StorageAdapters = await createAiraGraphDbAdapters({
@@ -367,6 +372,7 @@ class RuntimeImpl implements MemGraphRagRuntime {
       indexingMemory = storageAdapters.indexingMemory;
       memoryReader = storageAdapters.memoryReader;
       graphProjection = storageAdapters.graphProjection;
+      readGeneration = storageAdapters.readGeneration;
       storageBatch = storageAdapters.batch;
       this.storageClose = storageAdapters.close;
     } else {
@@ -377,6 +383,7 @@ class RuntimeImpl implements MemGraphRagRuntime {
       indexingMemory = new SnapshotBackedIndexingMemory(memoryStore);
       memoryReader = new SnapshotBackedMemoryReader(memoryStore);
       graphProjection = new SQLiteGraphProjection(sqliteGraphStore);
+      readGeneration = undefined;
       this.storageClose = undefined;
     }
     const sharedLexiconStore = new SQLiteLexiconStore(this.db, RUNTIME_CORPUS_ID);
@@ -430,7 +437,7 @@ class RuntimeImpl implements MemGraphRagRuntime {
     const corpusManager = new CorpusManagerFacade(this.db, graphStore, vectorIndex);
     const dictionaryService = new DictionaryServiceFacade(this.db, this.config);
     const thesaurusService = new ThesaurusServiceFacade(this.db);
-    const queryService = new QueryServiceFacade(this.db, llmProvider, embeddingProvider, vectorIndex, memoryReader, graphStore, graphProjection);
+    const queryService = new QueryServiceFacade(this.db, llmProvider, embeddingProvider, vectorIndex, memoryReader, graphStore, graphProjection, readGeneration);
 
     this.services.set(SERVICE_TOKENS.GRAPH_STORE, graphStore);
     this.services.set(SERVICE_TOKENS.VECTOR_INDEX, vectorIndex);
