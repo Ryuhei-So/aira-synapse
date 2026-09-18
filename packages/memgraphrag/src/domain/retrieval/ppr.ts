@@ -27,6 +27,16 @@ export interface IGraphProjection {
   getTransitions(corpusId: string): AsyncIterable<TransitionEntry>;
   getDanglingNodes(corpusId: string): Promise<readonly string[]>;
   getNodeCount(corpusId: string): Promise<number>;
+  /**
+   * The corpus transition list as one array whose identity is stable for as
+   * long as the projection's underlying graph is unchanged. A projection that
+   * caches its transitions returns the cached array itself, so a consumer can
+   * key derived structures (for example a compiled adjacency) on the array
+   * and have them expire exactly when the projection invalidates. Optional:
+   * projections without a stable snapshot leave it undefined and consumers
+   * fall back to streaming getTransitions on every call.
+   */
+  getTransitionSnapshot?(corpusId: string): Promise<readonly TransitionEntry[]>;
 }
 
 export interface PPRRequest {
