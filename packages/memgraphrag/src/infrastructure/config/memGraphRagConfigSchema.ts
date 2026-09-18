@@ -59,6 +59,8 @@ export interface EmbeddingProviderConfig {
   readonly backend: string;
   readonly model: string;
   readonly dimensions?: number;
+  /** Texts per /embeddings request (YAML `batch_size`); provider default when unset. */
+  readonly batchSize?: number;
   readonly cacheDir: string;
 }
 
@@ -269,6 +271,12 @@ function validateProviders(
     assertString(embedding, 'backend', 'providers.embedding', errors);
     assertString(embedding, 'model', 'providers.embedding', errors);
     assertString(embedding, 'cacheDir', 'providers.embedding', errors);
+    if (embedding['batchSize'] !== undefined) {
+      assertNumber(embedding, 'batchSize', 'providers.embedding', errors, { min: 1 });
+      if (typeof embedding['batchSize'] === 'number' && !Number.isInteger(embedding['batchSize'])) {
+        errors.push({ path: 'providers.embedding.batchSize', message: 'must be an integer', actual: embedding['batchSize'] });
+      }
+    }
   }
 
   const nlp = assertObject(providers, 'nlp', 'providers', errors);
