@@ -15,7 +15,18 @@ interface OpenAIEmbeddingProviderOptions {
   readonly model: string;
   readonly baseUrl?: string;
   readonly dimensions?: number;
+  /**
+   * Maximum number of texts per /embeddings request. A document's chunks used
+   * to travel in one request, so a long document (190 chunks of 900 tokens on
+   * a CPU embedder at ~400 tokens/s) could not finish inside any per-request
+   * deadline and tripped the caller's infrastructure circuit
+   * (literature-hub #575). Bounded batches keep each request's cost
+   * proportional to the batch, not to the document.
+   */
+  readonly batchSize?: number;
 }
+
+export const DEFAULT_EMBEDDING_BATCH_SIZE = 32;
 
 interface EmbeddingApiResponse {
   readonly data?: ReadonlyArray<{
@@ -33,6 +44,7 @@ export class OpenAIEmbeddingProvider implements IEmbeddingProvider {
   private readonly model: string;
   private readonly baseUrl: string;
   private readonly dimensions: number | undefined;
+  private readonly batchSize: number;
   private readonly cache = new Map<string, readonly number[]>();
 
   public constructor(options: OpenAIEmbeddingProviderOptions) {
@@ -40,6 +52,11 @@ export class OpenAIEmbeddingProvider implements IEmbeddingProvider {
     this.model = options.model;
     this.baseUrl = (options.baseUrl ?? 'https://api.openai.com/v1').replace(/\/$/, '');
     this.dimensions = options.dimensions;
+    const batchSize = options.batchSize ?? DEFAULT_EMBEDDING_BATCH_SIZE;
+    if (!Number.isInteger(batchSize) || batchSize < 1) {
+      throw new Error(`embedding batchSize must be a positive integer, got ${String(options.batchSize)}`);
+    }
+    this.batchSize = batchSize;
   }
 
   public async embed(request: EmbeddingRequest): Promise<EmbeddingResponse> {
@@ -68,10 +85,15 @@ export class OpenAIEmbeddingProvider implements IEmbeddingProvider {
       }
     }
 
-    if (missingTexts.length > 0) {
+    // One request per batch: a failure or deadline in one batch cannot retry
+    // work another batch already finished, and each request's cost is bounded
+    // by batchSize rather than by the caller's document.
+    for (let start = 0; start < missingTexts.length; start += this.batchSize) {
+      const batchTexts = missingTexts.slice(start, start + this.batchSize);
+      const batchIndices = missingIndices.slice(start, start + this.batchSize);
       // Truncate inputs that may exceed model token limit (8191 for text-embedding-3-*)
       const MAX_INPUT_CHARS = 7000;
-      const truncatedTexts = missingTexts.map(t =>
+      const truncatedTexts = batchTexts.map(t =>
         t.length > MAX_INPUT_CHARS ? t.slice(0, MAX_INPUT_CHARS) : t
       );
 
@@ -99,11 +121,14 @@ export class OpenAIEmbeddingProvider implements IEmbeddingProvider {
 
           const body = (await response.json()) as EmbeddingApiResponse;
           const rows = [...(body.data ?? [])].sort((a, b) => a.index - b.index);
+          if (rows.length !== batchTexts.length) {
+            throw new Error(`OpenAI embeddings response returned ${rows.length} vectors for ${batchTexts.length} inputs`);
+          }
           for (let j = 0; j < rows.length; j++) {
             const embedding = rows[j]!.embedding;
-            const originalIdx = missingIndices[j]!;
+            const originalIdx = batchIndices[j]!;
             resultVectors[originalIdx] = embedding;
-            this.putCache(this.cacheKey(model, missingTexts[j]!), embedding);
+            this.putCache(this.cacheKey(model, batchTexts[j]!), embedding);
           }
           lastError = undefined;
           break;

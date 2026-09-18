@@ -104,6 +104,7 @@ function createConfiguredEmbeddingProvider(config: MemGraphRagConfig): IEmbeddin
       apiKey,
       model: config.providers.embedding.model,
       baseUrl: process.env['OPENAI_EMBEDDING_BASE_URL'] ?? process.env['OPENAI_BASE_URL'],
+      ...(config.providers.embedding.batchSize === undefined ? {} : { batchSize: config.providers.embedding.batchSize }),
       // Existing persisted vectors use the provider model's default dimensions.
       // Forwarding the optional config requires a vector-generation migration;
       // this additive planner must share the existing runtime authority.
