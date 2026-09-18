@@ -67,6 +67,80 @@ function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/**
+ * Dictionary match index (literature-hub #575).
+ *
+ * `match()` used to build one RegExp per term (and per alias) for every row of
+ * the corpus dictionary on every call: ~250k regexes per query, twice per
+ * retrieval, several seconds of CPU. The index below is the same predicate
+ * evaluated the other way round: a `\bX\b` test succeeds exactly when X is a
+ * substring of the haystack that starts and ends on an ASCII word boundary
+ * (JavaScript `\b` without the `u` flag), so the query enumerates its
+ * boundary-delimited substrings once and looks each up in a map of normalized
+ * candidates. Row order, first-matching-candidate order and matchedText are
+ * unchanged.
+ *
+ * The index is shared by every store instance on the same connection (the
+ * runtime constructs a store per request) and is dropped when this connection
+ * writes the dictionary or when SQLite reports that another connection
+ * committed (`PRAGMA data_version`).
+ */
+interface LexiconMatchIndex {
+  readonly dataVersion: number;
+  readonly rows: readonly TermDictionaryRow[];
+  /** Raw candidates per row in [term, canonicalForm, ...aliases] order. */
+  readonly candidates: readonly (readonly string[])[];
+  /** Normalized candidates aligned with `candidates`. */
+  readonly normalized: readonly (readonly string[])[];
+  /** normalized candidate -> row indices that carry it. */
+  readonly byCandidate: ReadonlyMap<string, readonly number[]>;
+  /** Rows carrying an empty normalized candidate (`\b\b`: matches any boundary). */
+  readonly emptyCandidateRows: readonly number[];
+  readonly maxCandidateLength: number;
+}
+
+const lexiconMatchIndexes = new WeakMap<Database.Database, Map<string, LexiconMatchIndex>>();
+
+function isAsciiWordChar(code: number): boolean {
+  return (code >= 48 && code <= 57) || (code >= 65 && code <= 90) || (code >= 97 && code <= 122) || code === 95;
+}
+
+/** Positions p in [0, text.length] where JavaScript `\b` holds. */
+function wordBoundaries(text: string): number[] {
+  const boundaries: number[] = [];
+  let previous = false;
+  for (let p = 0; p <= text.length; p++) {
+    const current = p < text.length && isAsciiWordChar(text.charCodeAt(p));
+    if (current !== previous) boundaries.push(p);
+    previous = current;
+  }
+  return boundaries;
+}
+
+function buildLexiconMatchIndex(rows: readonly TermDictionaryRow[], dataVersion: number): LexiconMatchIndex {
+  const candidates: (readonly string[])[] = [];
+  const normalized: (readonly string[])[] = [];
+  const byCandidate = new Map<string, number[]>();
+  const emptyCandidateRows: number[] = [];
+  let maxCandidateLength = 0;
+  rows.forEach((row, index) => {
+    const raw = [row.term, row.canonical_form, ...parseJsonArray<string>(row.aliases_json)];
+    const forms = raw.map((candidate) => normalizeText(String(candidate)));
+    candidates.push(raw);
+    normalized.push(forms);
+    let hasEmpty = false;
+    for (const form of forms) {
+      if (form === '') { hasEmpty = true; continue; }
+      if (form.length > maxCandidateLength) maxCandidateLength = form.length;
+      const owners = byCandidate.get(form);
+      if (owners) { if (owners[owners.length - 1] !== index) owners.push(index); }
+      else byCandidate.set(form, [index]);
+    }
+    if (hasEmpty) emptyCandidateRows.push(index);
+  });
+  return { dataVersion, rows, candidates, normalized, byCandidate, emptyCandidateRows, maxCandidateLength };
+}
+
 function nowIsoString(): string {
   return new Date().toISOString();
 }
@@ -139,12 +213,19 @@ export class SQLiteLexiconStore implements ITermDictionary, IThesaurus {
     });
 
     transaction(entries);
+    this.invalidateMatchIndex();
   }
 
-  public async match(
-    text: string,
-    _language: LanguageCode,
-  ): Promise<readonly DictionaryMatch[]> {
+  /** Drop this connection's dictionary indexes after a local write. */
+  private invalidateMatchIndex(): void {
+    lexiconMatchIndexes.delete(this.db);
+  }
+
+  private matchIndex(): LexiconMatchIndex {
+    const dataVersion = Number(this.db.pragma('data_version', { simple: true }));
+    let perCorpus = lexiconMatchIndexes.get(this.db);
+    const cached = perCorpus?.get(this.corpusId);
+    if (cached && cached.dataVersion === dataVersion) return cached;
     const rows = this.db.prepare(
       `SELECT term_id, term, canonical_form, domain_category, aliases_json, frequency,
               confidence, source, version, created_at, updated_at
@@ -152,24 +233,57 @@ export class SQLiteLexiconStore implements ITermDictionary, IThesaurus {
        WHERE corpus_id = ?
        ORDER BY frequency DESC, confidence DESC, term`,
     ).all(this.corpusId) as TermDictionaryRow[];
+    const index = buildLexiconMatchIndex(rows, dataVersion);
+    if (!perCorpus) {
+      perCorpus = new Map();
+      lexiconMatchIndexes.set(this.db, perCorpus);
+    }
+    perCorpus.set(this.corpusId, index);
+    return index;
+  }
 
+  /**
+   * Reference predicate the index reproduces; kept for tests and as executable
+   * documentation of the matching rule.
+   */
+  public static candidateMatches(haystack: string, candidate: string): boolean {
+    return new RegExp(`\\b${escapeRegex(normalizeText(candidate))}\\b`).test(haystack);
+  }
+
+  public async match(
+    text: string,
+    _language: LanguageCode,
+  ): Promise<readonly DictionaryMatch[]> {
+    const index = this.matchIndex();
     const haystack = normalizeText(text);
-    const matches: DictionaryMatch[] = [];
+    const boundaries = wordBoundaries(haystack);
 
-    for (const row of rows) {
-      const entry = toDictionaryEntry(row);
-      const candidates = [entry.term, entry.canonicalForm, ...entry.aliases];
-      const matchedCandidate = candidates.find((candidate) => {
-        const pattern = new RegExp(`\\b${escapeRegex(normalizeText(candidate))}\\b`);
-        return pattern.test(haystack);
-      });
-      if (!matchedCandidate) {
-        continue;
+    // Every boundary-delimited substring the regex form could have matched.
+    const present = new Set<string>();
+    for (let a = 0; a < boundaries.length; a++) {
+      const start = boundaries[a]!;
+      for (let b = a + 1; b < boundaries.length; b++) {
+        const end = boundaries[b]!;
+        if (end - start > index.maxCandidateLength) break;
+        present.add(haystack.slice(start, end));
       }
+    }
 
+    const matchedRows = new Set<number>(boundaries.length > 0 ? index.emptyCandidateRows : []);
+    for (const substring of present) {
+      const owners = index.byCandidate.get(substring);
+      if (owners) for (const row of owners) matchedRows.add(row);
+    }
+
+    const matches: DictionaryMatch[] = [];
+    for (const rowIndex of [...matchedRows].sort((left, right) => left - right)) {
+      const forms = index.normalized[rowIndex]!;
+      const position = forms.findIndex((form) => (form === '' ? boundaries.length > 0 : present.has(form)));
+      if (position === -1) continue;
+      const entry = toDictionaryEntry(index.rows[rowIndex]!);
       matches.push({
         entry,
-        matchedText: matchedCandidate,
+        matchedText: index.candidates[rowIndex]![position]!,
         boostFactor: 1 + entry.confidence + Math.min(entry.frequency, 10) / 10,
       });
     }
@@ -352,6 +466,7 @@ export class SQLiteLexiconStore implements ITermDictionary, IThesaurus {
     });
 
     transaction();
+    this.invalidateMatchIndex();
   }
 
   public async getStatistics(): Promise<DictionaryStatistics> {

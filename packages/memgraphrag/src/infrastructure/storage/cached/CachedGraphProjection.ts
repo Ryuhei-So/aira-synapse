@@ -87,6 +87,15 @@ export class CachedGraphProjection implements IGraphProjection {
     }
   }
 
+  /**
+   * The cached entries array itself. Its identity changes only when the cache
+   * is invalidated and reloaded, which is exactly when anything derived from
+   * the transitions (a compiled PPR graph) must be rebuilt.
+   */
+  async getTransitionSnapshot(corpusId: string): Promise<readonly TransitionEntry[]> {
+    return this.ensureCache(corpusId);
+  }
+
   async *getTransitions(corpusId: string): AsyncIterable<TransitionEntry> {
     // Iterate the entries this call loaded or found, not `this.cache`: an
     // invalidation may have unpublished them meanwhile (see ensureCache).
