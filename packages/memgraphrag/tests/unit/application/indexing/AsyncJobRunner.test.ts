@@ -164,15 +164,14 @@ describe('TASK-MG-035: AsyncJobRunner and DefaultIndexingService', () => {
   ] as const)('retains the trusted indexing method in durable and console errors for %s', async (method) => {
     const secret = 'request-secret-must-not-cross-boundary';
     const nativeError = Object.assign(
-      new Error('bounded indexing response exceeds its byte limit'),
+      new Error(`${method}: bounded indexing response exceeds its byte limit`),
       {
         code: 'REQUEST_EXECUTION_FAILED',
         failureClass: 'CLIENT_INPUT',
         rpcMethod: method,
       },
     );
-    // The adapter must repair the durable first line even when native code has
-    // already materialized the unprefixed stack.
+    // Exercise the already-prefixed native Error after its stack is materialized.
     void nativeError.stack;
     const consoleLog = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     try {

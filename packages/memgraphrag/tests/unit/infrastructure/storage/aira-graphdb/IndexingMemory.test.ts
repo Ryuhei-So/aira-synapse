@@ -138,18 +138,18 @@ describe('AiraGraphDbIndexingMemory strict bounded contract', () => {
   it.each([
     'memory_get_schemas_by_ids',
     'memory_get_active_facts',
-  ] as const)('preserves native code/class and prefixes the trusted method for %s', async (method) => {
+  ] as const)('preserves a trusted native error for %s without inferring or rewriting it', async (method) => {
     const secret = 'request-secret-must-not-cross-boundary';
     const nativeError = Object.assign(
-      new Error('bounded indexing response exceeds its byte limit'),
+      new Error(`${method}: bounded indexing response exceeds its byte limit`),
       {
         code: 'REQUEST_EXECUTION_FAILED',
         failureClass: 'CLIENT_INPUT',
         rpcMethod: method,
       },
     );
-    // Exercise the case where an Error stack was read before the adapter
-    // receives it; mutating only message would leave the durable first line stale.
+    // The native client constructs this already-prefixed message before the
+    // stack can be materialized; the consumer must preserve it verbatim.
     void nativeError.stack;
     const { client, request } = clientWith((actualMethod) => {
       expect(actualMethod).toBe(method);
@@ -162,7 +162,7 @@ describe('AiraGraphDbIndexingMemory strict bounded contract', () => {
 
     const rejected = await operation.catch((error: unknown) => error);
     expect(rejected).toBeInstanceOf(Error);
-    expect(rejected).not.toBe(nativeError);
+    expect(rejected).toBe(nativeError);
     const indexedError = rejected as Error & {
       code?: string;
       failureClass?: string;
