@@ -12,6 +12,9 @@ import { DefaultIndexingService } from '../../../../src/application/indexing/Ind
 import type { IndexDocumentsCommand } from '../../../../src/application/indexing/IndexingService.js';
 import type { DeleteDocumentResult } from '../../../../src/application/indexing/DeleteDocumentService.js';
 import { JOB_ERROR_CONTRACT } from '../../../../src/application/indexing/jobErrorContract.js';
+import { INDEXING_MEMORY_CONTRACT } from '../../../../src/domain/storage/indexingMemory.js';
+import { AiraGraphDbIndexingMemory } from '../../../../src/infrastructure/storage/aira-graphdb/AiraGraphDbIndexingMemory.js';
+import type { AiraGraphDbRpcClient } from '../../../../src/infrastructure/storage/aira-graphdb/NativeClient.js';
 
 function command(): IndexDocumentsCommand {
   return {
@@ -153,6 +156,102 @@ describe('TASK-MG-035: AsyncJobRunner and DefaultIndexingService', () => {
       chunkedMemoryDeltaDocuments: 0,
     }));
     expect(storageBatch.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    'memory_get_schemas_by_ids',
+    'memory_get_active_facts',
+  ] as const)('retains the trusted indexing method in durable and console errors for %s', async (method) => {
+    const secret = 'request-secret-must-not-cross-boundary';
+    const nativeError = Object.assign(
+      new Error('bounded indexing response exceeds its byte limit'),
+      {
+        code: 'REQUEST_EXECUTION_FAILED',
+        failureClass: 'CLIENT_INPUT',
+        rpcMethod: method,
+      },
+    );
+    // The adapter must repair the durable first line even when native code has
+    // already materialized the unprefixed stack.
+    void nativeError.stack;
+    const consoleLog = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    try {
+      const graphClient = {
+        request: vi.fn(async (actualMethod: string) => {
+          if (actualMethod === 'protocol_info') {
+            return {
+              protocolVersion: 'native-method-policy@1',
+              generation: 0,
+              state: 'idle',
+              limits: {
+                indexingMemory: { ...INDEXING_MEMORY_CONTRACT },
+                wal: { mutationRequestIdUniqueness: 'activeTransaction' },
+              },
+              methods: [
+                { name: 'memory_get_schemas_by_ids', classification: 'read', wal: false },
+                { name: 'memory_get_active_facts', classification: 'read', wal: false },
+                { name: 'memory_activate_facts_by_schema_ids', classification: 'mutation', wal: true },
+                { name: 'memory_upsert', classification: 'mutation', wal: true },
+              ],
+            };
+          }
+          throw nativeError;
+        }),
+      } as AiraGraphDbRpcClient;
+      const indexingMemory = await AiraGraphDbIndexingMemory.create(graphClient);
+      const pipeline = {
+        processDocument: vi.fn(async () => {
+          if (method === 'memory_get_schemas_by_ids') {
+            await indexingMemory.getSchemasByIds({ corpusId: 'corpus-1', schemaIds: [secret] });
+          } else {
+            await indexingMemory.getActiveFacts({ corpusId: 'corpus-1', limit: 1 });
+          }
+          throw new Error('unexpected indexing success');
+        }),
+      };
+      const storageBatch = {
+        begin: vi.fn<() => Promise<void>>().mockResolvedValue(),
+        commit: vi.fn<() => Promise<void>>().mockResolvedValue(),
+        abandon: vi.fn<() => Promise<void>>().mockResolvedValue(),
+      };
+      const runner = new AsyncJobRunner(db, memoryStore, pipeline, storageBatch);
+      runner.registerJob('job-1', command());
+      await runner.enqueue('job-1');
+      await runner.execute('job-1');
+
+      const row = db.prepare(
+        'SELECT status, processed, total, errors_json, summary FROM jobs WHERE job_id = ?',
+      ).get('job-1') as { status: string; processed: number; total: number; errors_json: string; summary: string };
+      const errors = JSON.parse(row.errors_json) as Array<{ code: string; message: string; documentId: string }>;
+      expect(row).toEqual(expect.objectContaining({ status: 'completed', processed: 0, total: 1 }));
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toEqual(expect.objectContaining({
+        code: JOB_ERROR_CONTRACT.documentError.code,
+        documentId: 'doc-1',
+        message: expect.stringContaining(`${method}: bounded indexing response exceeds its byte limit`),
+      }));
+      expect(errors[0]!.message.split('\n')[0]).toBe(
+        `${method}: bounded indexing response exceeds its byte limit`,
+      );
+      expect(JSON.parse(row.summary)).toEqual(expect.objectContaining({
+        skippedCount: 1,
+        documentErrorCount: 1,
+        chunkedMemoryDeltaDocuments: 0,
+      }));
+      expect(consoleLog).toHaveBeenCalledWith(
+        `  [Doc] FAILED (skipping): ${method}: bounded indexing response exceeds its byte limit`,
+      );
+      expect(row.errors_json).not.toContain(secret);
+      expect(JSON.stringify(consoleLog.mock.calls)).not.toContain(secret);
+      expect(nativeError).toMatchObject({
+        code: 'REQUEST_EXECUTION_FAILED',
+        failureClass: 'CLIENT_INPUT',
+        rpcMethod: method,
+      });
+      expect(storageBatch.commit).toHaveBeenCalledTimes(1);
+    } finally {
+      consoleLog.mockRestore();
+    }
   });
 
   it('commits an earlier clean document when the next document fails before mutation', async () => {

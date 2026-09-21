@@ -17,7 +17,9 @@ import {
   validateSchemaResponse,
 } from '../indexingMemoryContract.js';
 import type {
+  AiraGraphDbNativeRpcError,
   AiraGraphDbRpcClient,
+  IndexingDiagnosticMethod,
   NativeRequestLimits,
 } from './NativeClient.js';
 
@@ -101,6 +103,31 @@ function validateProtocolInfo(value: unknown): IndexingMemoryCapabilities {
   };
 }
 
+function annotateIndexingReadError(
+  method: IndexingDiagnosticMethod,
+  error: unknown,
+): never {
+  if (!(error instanceof Error)) throw error;
+  const nativeError = error as AiraGraphDbNativeRpcError;
+  if (nativeError.rpcMethod !== method) throw nativeError;
+  const prefix = `${method}: `;
+  if (nativeError.message.startsWith(prefix)) throw nativeError;
+
+  // A native Error may have materialized its stack before reaching this
+  // boundary. Create a fresh, payload-free Error so its durable first line is
+  // guaranteed to carry the trusted method as well as its code/class.
+  const annotated = new Error(`${prefix}${nativeError.message}`) as AiraGraphDbNativeRpcError;
+  if (nativeError.code !== undefined) annotated.code = nativeError.code;
+  if (nativeError.failureClass !== undefined) annotated.failureClass = nativeError.failureClass;
+  Object.defineProperty(annotated, 'rpcMethod', {
+    value: method,
+    enumerable: true,
+    configurable: false,
+    writable: false,
+  });
+  throw annotated;
+}
+
 export class AiraGraphDbIndexingMemory implements IIndexingMemory {
   private constructor(
     private readonly client: AiraGraphDbRpcClient,
@@ -115,21 +142,31 @@ export class AiraGraphDbIndexingMemory implements IIndexingMemory {
 
   public async getSchemasByIds(request: IndexingSchemaRequest) {
     validateSchemaRequest(request);
-    const response = await this.client.request<unknown>(
-      'memory_get_schemas_by_ids',
-      request,
-      INDEXING_LIMITS,
-    );
+    let response: unknown;
+    try {
+      response = await this.client.request<unknown>(
+        'memory_get_schemas_by_ids',
+        request,
+        INDEXING_LIMITS,
+      );
+    } catch (error) {
+      annotateIndexingReadError('memory_get_schemas_by_ids', error);
+    }
     return validateSchemaResponse(response, request);
   }
 
   public async getActiveFacts(request: ActiveFactRequest) {
     validateActiveFactRequest(request);
-    const response = await this.client.request<unknown>(
-      'memory_get_active_facts',
-      request,
-      INDEXING_LIMITS,
-    );
+    let response: unknown;
+    try {
+      response = await this.client.request<unknown>(
+        'memory_get_active_facts',
+        request,
+        INDEXING_LIMITS,
+      );
+    } catch (error) {
+      annotateIndexingReadError('memory_get_active_facts', error);
+    }
     return validateActiveFactResponse(response, request);
   }
 

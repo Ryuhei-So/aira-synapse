@@ -23,6 +23,7 @@ function fakeNative(mode:
   | 'error-result'
   | 'error-basic'
   | 'error-failure-class'
+  | 'error-bounded'
   | 'error-invalid-failure-class'
   | 'error-extra'
 ): string {
@@ -51,6 +52,7 @@ process.stdin.on('data', (chunk) => {
     if (mode === 'error-result') process.stdout.write(JSON.stringify({ id: request.id, ok: false, error: { code: 'X', message: 'failed' }, result: null }) + '\\n');
     if (mode === 'error-basic') process.stdout.write(JSON.stringify({ id: request.id, ok: false, error: { code: 'X', message: 'failed' } }) + '\\n');
     if (mode === 'error-failure-class') process.stdout.write(JSON.stringify({ id: request.id, ok: false, error: { code: 'X', message: 'failed', failureClass: 'CLIENT_INPUT' } }) + '\\n');
+    if (mode === 'error-bounded') process.stdout.write(JSON.stringify({ id: request.id, ok: false, error: { code: 'REQUEST_EXECUTION_FAILED', message: 'bounded indexing response exceeds its byte limit', failureClass: 'CLIENT_INPUT' } }) + '\\n');
     if (mode === 'error-invalid-failure-class') process.stdout.write(JSON.stringify({ id: request.id, ok: false, error: { code: 'X', message: 'failed', failureClass: 1 } }) + '\\n');
     if (mode === 'error-extra') process.stdout.write(JSON.stringify({ id: request.id, ok: false, error: { code: 'X', message: 'failed', extra: true } }) + '\\n');
   }
@@ -188,6 +190,63 @@ describe.sequential('AiraGraphDbNativeClient physical frame bounds', () => {
       expect.objectContaining({ outcome: 'native-error' }),
     ]);
     await client.close();
+  });
+
+  it.each([
+    'memory_get_schemas_by_ids',
+    'memory_get_active_facts',
+  ] as const)('attaches only the trusted active method to a bounded native error for %s', async (method) => {
+    const secret = 'schema-secret-must-not-cross-boundary';
+    const client = new AiraGraphDbNativeClient(fakeNative('error-bounded'));
+    const error = await client.request(method, { corpusId: secret, schemaIds: [secret] }, {
+      maxRequestBytes: 1024,
+      maxResponseBytes: 1024,
+    }).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error).toMatchObject({
+      code: 'REQUEST_EXECUTION_FAILED',
+      failureClass: 'CLIENT_INPUT',
+      rpcMethod: method,
+    });
+    expect((error as Error).message).toBe(`${method}: bounded indexing response exceeds its byte limit`);
+    expect(JSON.stringify(error)).not.toContain(secret);
+    await client.close();
+  });
+
+  it('keeps queued candidate methods independently attributed and leaves wrong-ID poison unattributed', async () => {
+    const client = new AiraGraphDbNativeClient(fakeNative('error-bounded'));
+    const first = client.request('memory_get_schemas_by_ids', { corpusId: 'c1', schemaIds: ['s1'] }, {
+      maxRequestBytes: 1024,
+      maxResponseBytes: 1024,
+    }).catch((caught: unknown) => caught);
+    const second = client.request('memory_get_active_facts', { corpusId: 'c1', limit: 1 }, {
+      maxRequestBytes: 1024,
+      maxResponseBytes: 1024,
+    }).catch((caught: unknown) => caught);
+    const [firstError, secondError] = await Promise.all([first, second]);
+
+    expect(firstError).toMatchObject({ rpcMethod: 'memory_get_schemas_by_ids' });
+    expect(secondError).toMatchObject({ rpcMethod: 'memory_get_active_facts' });
+    expect(firstError).toMatchObject({ code: 'REQUEST_EXECUTION_FAILED', failureClass: 'CLIENT_INPUT' });
+    expect(secondError).toMatchObject({ code: 'REQUEST_EXECUTION_FAILED', failureClass: 'CLIENT_INPUT' });
+    await client.close();
+
+    const poisoned = new AiraGraphDbNativeClient(wrongIdOwnerFixture());
+    const poisonedFirst = poisoned.request('memory_get_schemas_by_ids', { corpusId: 'c1', schemaIds: ['s1'] }, {
+      maxRequestBytes: 1024,
+      maxResponseBytes: 1024,
+    }).catch((caught: unknown) => caught);
+    const poisonedSecond = poisoned.request('memory_get_active_facts', { corpusId: 'c1', limit: 1 }, {
+      maxRequestBytes: 1024,
+      maxResponseBytes: 1024,
+    }).catch((caught: unknown) => caught);
+    const [poisonedFirstError, poisonedSecondError] = await Promise.all([poisonedFirst, poisonedSecond]);
+
+    expect(poisonedFirstError).toBe(poisonedSecondError);
+    expect(poisonedFirstError).not.toHaveProperty('rpcMethod');
+    expect(poisonedFirstError).toBeInstanceOf(Error);
+    await poisoned.close();
   });
 
   it('fails closed when the test owner sees a mismatched native response ID', async () => {

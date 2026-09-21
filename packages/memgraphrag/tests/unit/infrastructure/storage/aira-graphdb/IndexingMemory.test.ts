@@ -135,6 +135,65 @@ describe('AiraGraphDbIndexingMemory strict bounded contract', () => {
       && call[2]?.maxResponseBytes === 8 * 1024 * 1024)).toBe(true);
   });
 
+  it.each([
+    'memory_get_schemas_by_ids',
+    'memory_get_active_facts',
+  ] as const)('preserves native code/class and prefixes the trusted method for %s', async (method) => {
+    const secret = 'request-secret-must-not-cross-boundary';
+    const nativeError = Object.assign(
+      new Error('bounded indexing response exceeds its byte limit'),
+      {
+        code: 'REQUEST_EXECUTION_FAILED',
+        failureClass: 'CLIENT_INPUT',
+        rpcMethod: method,
+      },
+    );
+    // Exercise the case where an Error stack was read before the adapter
+    // receives it; mutating only message would leave the durable first line stale.
+    void nativeError.stack;
+    const { client, request } = clientWith((actualMethod) => {
+      expect(actualMethod).toBe(method);
+      throw nativeError;
+    });
+    const memory = await AiraGraphDbIndexingMemory.create(client);
+    const operation = method === 'memory_get_schemas_by_ids'
+      ? memory.getSchemasByIds({ corpusId: 'c1', schemaIds: [secret] })
+      : memory.getActiveFacts({ corpusId: 'c1', limit: 1 });
+
+    const rejected = await operation.catch((error: unknown) => error);
+    expect(rejected).toBeInstanceOf(Error);
+    expect(rejected).not.toBe(nativeError);
+    const indexedError = rejected as Error & {
+      code?: string;
+      failureClass?: string;
+      rpcMethod?: string;
+    };
+    expect(indexedError.message).toBe(`${method}: bounded indexing response exceeds its byte limit`);
+    expect(indexedError.stack?.split('\n')[0]).toContain(indexedError.message);
+    expect(indexedError).toMatchObject({
+      code: 'REQUEST_EXECUTION_FAILED',
+      failureClass: 'CLIENT_INPUT',
+      rpcMethod: method,
+    });
+    expect(JSON.stringify(indexedError)).not.toContain(secret);
+    expect(request).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not infer an indexing method for a transport or protocol error', async () => {
+    const poison = new Error('aira-graphdb response envelope or request ID is invalid');
+    const { client, request } = clientWith(() => {
+      throw poison;
+    });
+    const memory = await AiraGraphDbIndexingMemory.create(client);
+
+    const rejected = await memory.getSchemasByIds({ corpusId: 'c1', schemaIds: ['s1'] })
+      .catch((error: unknown) => error);
+    expect(rejected).toBe(poison);
+    expect(rejected).not.toHaveProperty('rpcMethod');
+    expect((rejected as Error).message).toBe('aira-graphdb response envelope or request ID is invalid');
+    expect(request).toHaveBeenCalledTimes(2);
+  });
+
   it('fails startup for cap, method, state, or request-ID-scope drift', async () => {
     const invalid = [
       protocolInfo({ state: 'recoveryPending' }),
