@@ -149,6 +149,7 @@ describe('schema canonicalization wire contract', () => {
       exportedAt: NOW,
     };
     expect(() => validateSchemaCanonicalizationMemoryDelta(projected)).not.toThrow();
+    expect(() => validateSchemaCanonicalizationMemoryDelta({ ...projected, exportedAt: '' })).not.toThrow();
     expect(() => validateIndexingMemoryWireDelta(projected)).not.toThrow();
     expect(Object.prototype.hasOwnProperty.call(projected, 'schemas')).toBe(false);
 
@@ -223,6 +224,10 @@ describe('schema canonicalization wire contract', () => {
       projection(),
       mergeIntent({ expectedMergeToken: 'b'.repeat(64) }) as never,
     )).toThrow('token');
+    expect(() => validateSchemaMergeAgainstProjection(
+      projection(),
+      mergeIntent({ frequencyDelta: 0 }) as never,
+    )).toThrow('positive frequencyDelta');
   });
 
   it('keeps hydration markers bounded without materializing a fake full Schema', () => {
@@ -243,7 +248,7 @@ describe('schema canonicalization wire contract', () => {
     expect(() => validateGraphUpsertWireParams({
       ...hydrated,
       nodes: [{ nodeId: marker.nodeId, corpusId: marker.corpusId }],
-    })).toThrow('duplicate node identity');
+    })).toThrow('layer');
     expect(() => validateGraphUpsertWireParams({
       ...hydrated,
       schemaNodeRefs: [{ ...marker, label: `${marker.label}x` }],

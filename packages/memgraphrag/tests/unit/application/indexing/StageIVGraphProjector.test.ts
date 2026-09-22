@@ -8,6 +8,9 @@ import {
   projectGraph,
   buildTypeBasedBridges,
   buildSimilarityBridges,
+  buildVectorRecordsFromInputs,
+  persistGraphProjection,
+  planCanonicalGraphProjection,
   upsertVectors,
 } from '../../../../src/application/indexing/StageIVGraphProjector.js';
 import { DeleteDocumentService } from '../../../../src/application/indexing/DeleteDocumentService.js';
@@ -159,6 +162,82 @@ describe('TASK-MG-033: StageIVGraphProjector', () => {
       expect.objectContaining({ id: 'schema:s1', namespace: 'schema' }),
       expect.objectContaining({ id: 'fact:f1', namespace: 'fact' }),
     ]));
+  });
+
+  it('uses native schema markers and preserves historical first-source ownership', async () => {
+    const schemaView = {
+      ...createSchema('schema-1'),
+      firstSourceDocumentId: 'doc-historical',
+      contributionPresent: false,
+      isNew: false,
+      mergeToken: 'a'.repeat(64),
+    };
+    const plan = planCanonicalGraphProjection(
+      [createFact('fact-1', 'schema-1')],
+      [schemaView],
+      [createPassage('passage-1')],
+      'doc-1',
+    );
+
+    expect(plan.nodes.some((node) => node.layer === 'ontology')).toBe(false);
+    expect(plan.schemaNodeRefs).toEqual([{
+      nodeId: 'schema:schema-1',
+      corpusId: 'corpus-1',
+      schemaId: 'schema-1',
+      label: 'Person worksAt Organization',
+    }]);
+    expect(plan.vectorInputs?.[0]).toMatchObject({
+      id: 'schema:schema-1',
+      documentId: 'doc-historical',
+    });
+
+    const embeddingProvider = {
+      ...createNotImplementedStub<IEmbeddingProvider>('IEmbeddingProvider'),
+      embed: vi.fn<IEmbeddingProvider['embed']>().mockResolvedValue({
+        model: 'embed',
+        cached: false,
+        vectors: plan.vectorInputs!.map(() => [1, 0]),
+      }),
+    } satisfies IEmbeddingProvider;
+    const records = await buildVectorRecordsFromInputs(embeddingProvider, plan.vectorInputs!);
+    expect(records[0]).toMatchObject({
+      id: 'schema:schema-1',
+      metadata: { documentId: 'doc-historical', layer: 'ontology' },
+    });
+  });
+
+  it('sends canonical graph plans through the hydration boundary', async () => {
+    const graph = {
+      ...createNotImplementedStub<IGraphStore>('IGraphStore'),
+      preflightSchemaHydration: vi.fn(),
+      upsertNodesWithSchemaHydration: vi.fn<IGraphStore['upsertNodes']>().mockResolvedValue(),
+      upsertEdges: vi.fn<IGraphStore['upsertEdges']>().mockResolvedValue(),
+    };
+    const plan = planCanonicalGraphProjection(
+      [],
+      [{
+        ...createSchema('schema-1'),
+        firstSourceDocumentId: 'doc-old',
+        contributionPresent: false,
+        isNew: true,
+      }],
+      [],
+      'doc-current',
+    );
+
+    await persistGraphProjection(graph as unknown as IGraphStore, plan);
+    expect(graph.preflightSchemaHydration).not.toHaveBeenCalled();
+    expect(graph.upsertNodesWithSchemaHydration).toHaveBeenCalledWith({
+      nodes: [],
+      schemaRefHydration: 'memory-schema@1',
+      schemaNodeRefs: [{
+        nodeId: 'schema:schema-1',
+        corpusId: 'corpus-1',
+        schemaId: 'schema-1',
+        label: 'Person worksAt Organization',
+      }],
+    });
+    expect(graph.upsertEdges).toHaveBeenCalledWith([]);
   });
 
   it('deletes a document and adjusts linked schema frequency', async () => {

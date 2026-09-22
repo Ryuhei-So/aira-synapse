@@ -13,6 +13,7 @@ import type { IndexDocumentsCommand } from '../../../../src/application/indexing
 import type { DeleteDocumentResult } from '../../../../src/application/indexing/DeleteDocumentService.js';
 import { JOB_ERROR_CONTRACT } from '../../../../src/application/indexing/jobErrorContract.js';
 import { INDEXING_MEMORY_CONTRACT } from '../../../../src/domain/storage/indexingMemory.js';
+import { SCHEMA_CANONICALIZATION_CONTRACT } from '../../../../src/domain/storage/schemaCanonicalization.js';
 import { AiraGraphDbIndexingMemory } from '../../../../src/infrastructure/storage/aira-graphdb/AiraGraphDbIndexingMemory.js';
 import type { AiraGraphDbRpcClient } from '../../../../src/infrastructure/storage/aira-graphdb/NativeClient.js';
 
@@ -183,7 +184,10 @@ describe('TASK-MG-035: AsyncJobRunner and DefaultIndexingService', () => {
               generation: 0,
               state: 'idle',
               limits: {
-                indexingMemory: { ...INDEXING_MEMORY_CONTRACT },
+                indexingMemory: {
+                  ...INDEXING_MEMORY_CONTRACT,
+                  schemaCanonicalization: SCHEMA_CANONICALIZATION_CONTRACT,
+                },
                 wal: { mutationRequestIdUniqueness: 'activeTransaction' },
               },
               methods: [

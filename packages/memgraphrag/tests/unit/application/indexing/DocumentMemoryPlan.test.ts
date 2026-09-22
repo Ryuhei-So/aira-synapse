@@ -4,6 +4,7 @@ import type { FactCandidate } from '../../../../src/domain/memory/fact.js';
 import type { Passage } from '../../../../src/domain/memory/passage.js';
 import type { Schema } from '../../../../src/domain/memory/schema.js';
 import {
+  buildCanonicalizationMemoryDelta,
   buildDocumentFacts,
   buildDocumentMemoryDelta,
 } from '../../../../src/application/indexing/DocumentMemoryPlan.js';
@@ -249,5 +250,50 @@ describe('document memory mutation plan', () => {
       [sourcePassage],
       TS,
     )).toThrow('belongs to the wrong corpus');
+  });
+
+  it('keeps same-document new aliases and fact links with a zero-frequency merge', () => {
+    const sourcePassage = passage('p0');
+    const facts = buildDocumentFacts(
+      CORPUS_ID,
+      DOCUMENT_ID,
+      [record(sourcePassage, candidate(0.9))],
+      [schema()],
+      TS,
+    );
+    const factId = facts[0]!.factId;
+    const delta = buildCanonicalizationMemoryDelta(
+      CORPUS_ID,
+      [schema()],
+      [{
+        mode: 'merge',
+        schemaId: schema().schemaId,
+        expectedMergeToken: 'a'.repeat(64),
+        contributionDocumentId: DOCUMENT_ID,
+        frequencyDelta: 0,
+        desiredState: 'stable',
+        stabilizationThreshold: 2,
+        updatedAt: TS,
+        aliasAdditions: [{
+          label: 'new-alias',
+          language: 'en',
+          source: 'extractor',
+          confidence: 0.8,
+          isCanonical: false,
+        }],
+        factIdAdditions: [],
+      }],
+      facts,
+      [sourcePassage],
+      TS,
+    );
+
+    expect(Object.hasOwn(delta, 'schemas')).toBe(false);
+    expect(delta.schemaMerges[0]).toMatchObject({
+      frequencyDelta: 0,
+      aliasAdditions: [expect.objectContaining({ label: 'new-alias' })],
+      factIdAdditions: [factId],
+    });
+    expect(delta.passages[0]?.factIds).toEqual([factId]);
   });
 });

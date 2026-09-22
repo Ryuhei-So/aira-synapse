@@ -12,6 +12,8 @@ import type {
 } from '../../../domain/storage/graphStore.js';
 import type { MemorySnapshot } from '../../../domain/memory/globalMemory.js';
 import type { IGraphStore } from '../../../domain/storage/graphStore.js';
+import type { SchemaHydrationWireParams } from '../../../domain/storage/schemaCanonicalization.js';
+import { validateGraphUpsertWireParams } from '../schemaCanonicalizationContract.js';
 import type { AiraGraphDbNativeClient } from './NativeClient.js';
 
 export class AiraGraphDbGraphStore implements IGraphStore {
@@ -19,6 +21,15 @@ export class AiraGraphDbGraphStore implements IGraphStore {
 
   public async upsertNodes(nodes: readonly GraphNode[]): Promise<void> {
     await this.client.request('upsert_nodes', { nodes });
+  }
+
+  public preflightSchemaHydration(params: SchemaHydrationWireParams): void {
+    validateGraphUpsertWireParams(params);
+  }
+
+  public async upsertNodesWithSchemaHydration(params: SchemaHydrationWireParams): Promise<void> {
+    this.preflightSchemaHydration(params);
+    await this.client.request('upsert_nodes', params);
   }
 
   public async upsertEdges(edges: readonly GraphEdge[]): Promise<void> {

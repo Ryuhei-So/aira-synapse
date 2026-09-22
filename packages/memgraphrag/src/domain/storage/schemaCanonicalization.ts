@@ -1,5 +1,6 @@
 import type { GraphNode } from './graphStore.js';
 import type { IndexingMemoryDelta } from './indexingMemory.js';
+import type { IndexingMemoryUpsertResult } from './indexingMemory.js';
 import type { SchemaAlias, Schema } from '../memory/schema.js';
 import type { SchemaState } from '../memory/types.js';
 
@@ -124,3 +125,34 @@ export interface LegacyGraphUpsertWireParams {
 export type GraphUpsertWireParams =
   | LegacyGraphUpsertWireParams
   | SchemaHydrationWireParams;
+
+/** Optional native capability owned by the indexing-memory adapter. */
+export interface ISchemaCanonicalizationMemory {
+  readonly schemaCanonicalizationCapability?: SchemaCanonicalizationCapability;
+  /** Pure validation before provider work or a memory mutation. */
+  preflightSchemaCanonicalizationDelta(delta: SchemaCanonicalizationMemoryDelta): void;
+  getSchemaCanonicalizationProjection(
+    request: SchemaCanonicalizationProjectionRequest,
+  ): Promise<readonly SchemaCanonicalizationProjection[]>;
+  upsertSchemaCanonicalizationDelta(
+    delta: SchemaCanonicalizationMemoryDelta,
+  ): Promise<IndexingMemoryUpsertResult | void>;
+}
+
+/** Optional native graph boundary; legacy IGraphStore remains unchanged. */
+export interface ISchemaHydratingGraphStore {
+  /** Pure validation before provider work or graph persistence. */
+  preflightSchemaHydration(params: SchemaHydrationWireParams): void;
+  upsertNodesWithSchemaHydration(params: SchemaHydrationWireParams): Promise<void>;
+}
+
+export function isSchemaCanonicalizationMemory(
+  value: unknown,
+): value is ISchemaCanonicalizationMemory {
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as Partial<ISchemaCanonicalizationMemory>;
+  return typeof candidate.preflightSchemaCanonicalizationDelta === 'function'
+    && typeof candidate.getSchemaCanonicalizationProjection === 'function'
+    && typeof candidate.upsertSchemaCanonicalizationDelta === 'function'
+    && candidate.schemaCanonicalizationCapability !== undefined;
+}

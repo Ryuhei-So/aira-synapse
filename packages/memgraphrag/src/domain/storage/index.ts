@@ -22,6 +22,8 @@ export {
   SCHEMA_CANONICALIZATION_CONTRACT,
   type GraphUpsertWireParams,
   type IndexingMemoryWireDelta,
+  type ISchemaCanonicalizationMemory,
+  type ISchemaHydratingGraphStore,
   type LegacyGraphUpsertWireParams,
   type LegacyIndexingMemoryWireDelta,
   type SchemaCanonicalizationCapability,
@@ -33,6 +35,7 @@ export {
   type SchemaHydrationWireParams,
   type SchemaMergeIntent,
   type SchemaNodeReference,
+  isSchemaCanonicalizationMemory,
 } from './schemaCanonicalization.js';
 export {
   MEMORY_READ_CONTRACT,

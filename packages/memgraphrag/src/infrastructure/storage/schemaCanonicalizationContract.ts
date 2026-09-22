@@ -465,6 +465,9 @@ export function validateSchemaMergeAgainstProjection(
   if (projection.contributionPresent && intent.frequencyDelta !== 0) {
     throw new Error('existing document contribution requires frequencyDelta zero');
   }
+  if (!projection.contributionPresent && intent.frequencyDelta === 0) {
+    throw new Error('new document contribution requires a positive frequencyDelta');
+  }
 }
 
 export function validateSchemaCanonicalizationMemoryDelta(
@@ -479,7 +482,14 @@ export function validateSchemaCanonicalizationMemoryDelta(
     'schema canonicalization memory delta',
   );
   assertCorpusId(value.corpusId);
-  assertUpdatedAt(value.exportedAt, 'exportedAt');
+  // Match the unchanged legacy delta envelope: an empty exportedAt is valid
+  // for compatibility fixtures and carries no schema payload.
+  assertBoundedString(
+    value.exportedAt,
+    'exportedAt',
+    INDEXING_MEMORY_CONTRACT.maxUpdatedAtBytes,
+    true,
+  );
   assertDeltaSections(value, value.corpusId);
   validateSchemaMergeIntents(value.schemaMerges, value.corpusId, capability);
 
@@ -527,6 +537,15 @@ function assertNodeArray(
       capability.maxSchemaNodeIdBytes,
     );
     assertCorpusId(node.corpusId, `upsert_nodes.nodes[${index}].corpusId`);
+    if (typeof node.layer !== 'string') {
+      throw new Error(`upsert_nodes.nodes[${index}].layer must be a string`);
+    }
+    if (!hasOwn(node, 'ref') || node.ref === undefined) {
+      throw new Error(`upsert_nodes.nodes[${index}].ref is required`);
+    }
+    if (typeof node.label !== 'string') {
+      throw new Error(`upsert_nodes.nodes[${index}].label must be a string`);
+    }
   }
 }
 
