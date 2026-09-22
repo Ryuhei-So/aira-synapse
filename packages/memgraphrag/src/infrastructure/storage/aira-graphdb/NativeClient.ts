@@ -17,6 +17,28 @@ interface RpcError {
   failureClass?: string;
 }
 
+/**
+ * Bounded indexing methods whose trusted active method may cross the document
+ * error boundary. Keep this list finite: diagnostics must never copy a caller
+ * supplied method or any request data into a job error.
+ */
+export const INDEXING_DIAGNOSTIC_METHODS = [
+  'memory_get_schemas_by_ids',
+  'memory_get_active_facts',
+] as const;
+
+export type IndexingDiagnosticMethod = (typeof INDEXING_DIAGNOSTIC_METHODS)[number];
+
+export interface AiraGraphDbNativeRpcError extends Error {
+  code?: string;
+  failureClass?: string;
+  rpcMethod?: IndexingDiagnosticMethod;
+}
+
+function isIndexingDiagnosticMethod(method: string): method is IndexingDiagnosticMethod {
+  return (INDEXING_DIAGNOSTIC_METHODS as readonly string[]).includes(method);
+}
+
 /** Result from the cypher_query RPC. Discriminated by variant key. */
 export type CypherQueryResult =
   | { Nodes: CypherNode[] }
@@ -680,10 +702,22 @@ export class AiraGraphDbNativeClient {
       }
       const code = response.error.code;
       const message = response.error.message;
-      const error = new Error(message) as Error & { code?: string; failureClass?: string };
+      const rpcMethod = isIndexingDiagnosticMethod(active.method) ? active.method : undefined;
+      const diagnosticMessage = rpcMethod !== undefined && !message.startsWith(`${rpcMethod}: `)
+        ? `${rpcMethod}: ${message}`
+        : message;
+      const error = new Error(diagnosticMessage) as AiraGraphDbNativeRpcError;
       error.code = code;
       if (response.error.failureClass !== undefined) {
         error.failureClass = response.error.failureClass;
+      }
+      if (rpcMethod !== undefined) {
+        Object.defineProperty(error, 'rpcMethod', {
+          value: rpcMethod,
+          enumerable: true,
+          configurable: false,
+          writable: false,
+        });
       }
       this.emitTraffic(active, 'native-error', responseBytes);
       active.reject(error);
