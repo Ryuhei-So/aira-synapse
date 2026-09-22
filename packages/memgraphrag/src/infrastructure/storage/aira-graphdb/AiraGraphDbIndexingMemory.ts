@@ -7,6 +7,13 @@ import {
   type IndexingMemoryMutationPlan,
   type IndexingSchemaRequest,
 } from '../../../domain/storage/indexingMemory.js';
+import type {
+  ISchemaCanonicalizationMemory,
+  SchemaCanonicalizationCapability,
+  SchemaCanonicalizationMemoryDelta,
+  SchemaCanonicalizationProjection,
+  SchemaCanonicalizationProjectionRequest,
+} from '../../../domain/storage/schemaCanonicalization.js';
 import {
   planMutationChunks,
   validateActivatedResult,
@@ -16,6 +23,12 @@ import {
   validateSchemaRequest,
   validateSchemaResponse,
 } from '../indexingMemoryContract.js';
+import {
+  validateSchemaCanonicalizationCapability,
+  validateSchemaCanonicalizationMemoryDelta,
+  validateSchemaCanonicalizationProjectionRequest,
+  validateSchemaCanonicalizationProjectionResponse,
+} from '../schemaCanonicalizationContract.js';
 import type {
   AiraGraphDbRpcClient,
   NativeRequestLimits,
@@ -23,6 +36,7 @@ import type {
 
 interface IndexingMemoryCapabilities {
   readonly maxDeltaItemsPerSection: number;
+  readonly schemaCanonicalization: SchemaCanonicalizationCapability;
 }
 
 type JsonObject = Record<string, unknown>;
@@ -41,6 +55,7 @@ const REQUIRED_METHODS = new Map([
   ['memory_get_active_facts', { classification: 'read', wal: false }],
   ['memory_activate_facts_by_schema_ids', { classification: 'mutation', wal: true }],
   ['memory_upsert', { classification: 'mutation', wal: true }],
+  ['upsert_nodes', { classification: 'mutation', wal: true }],
 ] as const);
 
 function isObject(value: unknown): value is JsonObject {
@@ -72,6 +87,11 @@ function validateProtocolInfo(value: unknown): IndexingMemoryCapabilities {
       throw new Error(`aira-graphdb indexing capability mismatch for ${name}`);
     }
   }
+  if (indexing.schemaCanonicalization === undefined) {
+    throw new Error('aira-graphdb schema canonicalization capability is missing');
+  }
+  validateSchemaCanonicalizationCapability(indexing.schemaCanonicalization);
+  const schemaCanonicalization = indexing.schemaCanonicalization;
   const wal = requireObject(limits.wal, 'protocol_info.limits.wal');
   if (wal.mutationRequestIdUniqueness !== 'activeTransaction') {
     throw new Error('aira-graphdb mutation request ID scope is incompatible');
@@ -98,14 +118,26 @@ function validateProtocolInfo(value: unknown): IndexingMemoryCapabilities {
   }
   return {
     maxDeltaItemsPerSection: indexing.maxDeltaItemsPerSection as number,
+    schemaCanonicalization,
   };
 }
 
-export class AiraGraphDbIndexingMemory implements IIndexingMemory {
+export class AiraGraphDbIndexingMemory implements IIndexingMemory, ISchemaCanonicalizationMemory {
   private constructor(
     private readonly client: AiraGraphDbRpcClient,
     private readonly capabilities: IndexingMemoryCapabilities,
   ) {}
+
+  public get schemaCanonicalizationCapability(): SchemaCanonicalizationCapability | undefined {
+    return this.capabilities.schemaCanonicalization;
+  }
+
+  private requireSchemaCanonicalizationCapability(): SchemaCanonicalizationCapability {
+    if (this.schemaCanonicalizationCapability === undefined) {
+      throw new Error('aira-graphdb schema canonicalization capability is unavailable');
+    }
+    return this.schemaCanonicalizationCapability;
+  }
 
   public static async create(client: AiraGraphDbRpcClient): Promise<AiraGraphDbIndexingMemory> {
     const protocol = await client.request<unknown>('protocol_info', {}, PROTOCOL_LIMITS);
@@ -123,6 +155,26 @@ export class AiraGraphDbIndexingMemory implements IIndexingMemory {
     return validateSchemaResponse(response, request);
   }
 
+  public async getSchemaCanonicalizationProjection(
+    request: SchemaCanonicalizationProjectionRequest,
+  ): Promise<readonly SchemaCanonicalizationProjection[]> {
+    const capability = this.requireSchemaCanonicalizationCapability();
+    validateSchemaCanonicalizationProjectionRequest(
+      request,
+      capability,
+    );
+    const response = await this.client.request<unknown>(
+      'memory_get_schemas_by_ids',
+      request,
+      INDEXING_LIMITS,
+    );
+    return validateSchemaCanonicalizationProjectionResponse(
+      response,
+      request,
+      capability,
+    );
+  }
+
   public async getActiveFacts(request: ActiveFactRequest) {
     validateActiveFactRequest(request);
     const response = await this.client.request<unknown>(
@@ -135,6 +187,13 @@ export class AiraGraphDbIndexingMemory implements IIndexingMemory {
 
   public preflightMutation(plan: IndexingMemoryMutationPlan): void {
     planMutationChunks(plan, this.capabilities.maxDeltaItemsPerSection);
+  }
+
+  public preflightSchemaCanonicalizationDelta(
+    delta: SchemaCanonicalizationMemoryDelta,
+  ): void {
+    const capability = this.requireSchemaCanonicalizationCapability();
+    validateSchemaCanonicalizationMemoryDelta(delta, capability);
   }
 
   public async activateFactsBySchemaIds(request: ActivateFactsRequest): Promise<number> {
@@ -163,5 +222,20 @@ export class AiraGraphDbIndexingMemory implements IIndexingMemory {
       }
     }
     return { mutationCount: plans.length };
+  }
+
+  public async upsertSchemaCanonicalizationDelta(
+    delta: SchemaCanonicalizationMemoryDelta,
+  ): Promise<{ readonly mutationCount: number }> {
+    this.preflightSchemaCanonicalizationDelta(delta);
+    const response = await this.client.request<unknown>(
+      'memory_upsert',
+      delta,
+      INDEXING_LIMITS,
+    );
+    if (response !== null) {
+      throw new Error('memory_upsert response must be null');
+    }
+    return { mutationCount: 1 };
   }
 }

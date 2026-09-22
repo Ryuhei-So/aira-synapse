@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import Database from 'better-sqlite3';
 import { runMigrations } from '../../../../src/infrastructure/storage/migrate.js';
 import { SQLiteMemoryStore } from '../../../../src/infrastructure/storage/SQLiteMemoryStore.js';
@@ -6,6 +6,11 @@ import { SnapshotBackedIndexingMemory } from '../../../../src/infrastructure/sto
 import type { CompositeExtractionRecord, ISchemaCanonicalizer } from '../../../../src/domain/agent/index.js';
 import { createNotImplementedStub } from '../../../setup/testDoubles.js';
 import { StageIICanonicalizer } from '../../../../src/application/indexing/StageIICanonicalizer.js';
+import {
+  SCHEMA_CANONICALIZATION_CONTRACT,
+  type SchemaCanonicalizationProjection,
+} from '../../../../src/domain/storage/schemaCanonicalization.js';
+import type { IIndexingMemory } from '../../../../src/domain/storage/indexingMemory.js';
 
 function createRecord(): CompositeExtractionRecord {
   return {
@@ -61,6 +66,64 @@ function createRecord(): CompositeExtractionRecord {
     },
     rawEntities: ['Alice'],
   };
+}
+
+function candidateSchema(schemaId = 'schema:person::authors::paper', alias = 'authors') {
+  return {
+    schemaId,
+    corpusId: 'corpus-1',
+    headType: 'Person',
+    relation: 'authors',
+    tailType: 'Paper',
+    canonicalKey: 'person::authors::paper',
+    aliases: [{
+      label: alias,
+      language: 'en' as const,
+      source: 'extractor',
+      confidence: 0.8,
+      isCanonical: false,
+    }],
+    frequency: 1,
+    state: 'pending' as const,
+    stabilizationThreshold: 2,
+    factIds: [],
+    sourceDocumentIds: ['doc-1'],
+    version: 1,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  };
+}
+
+function projection(overrides: Partial<SchemaCanonicalizationProjection> = {}): SchemaCanonicalizationProjection {
+  return {
+    schemaId: 'schema:person::authors::paper',
+    corpusId: 'corpus-1',
+    headType: 'Person',
+    relation: 'authors',
+    tailType: 'Paper',
+    canonicalKey: 'person::authors::paper',
+    frequency: 1,
+    state: 'pending',
+    stabilizationThreshold: 2,
+    firstSourceDocumentId: 'doc-old',
+    contributionPresent: false,
+    mergeToken: 'a'.repeat(64),
+    ...overrides,
+  };
+}
+
+function canonicalMemory(projections: readonly SchemaCanonicalizationProjection[]): IIndexingMemory {
+  return {
+    getSchemasByIds: vi.fn().mockResolvedValue([]),
+    getActiveFacts: vi.fn().mockResolvedValue([]),
+    preflightMutation: vi.fn(),
+    activateFactsBySchemaIds: vi.fn().mockResolvedValue(0),
+    upsertDelta: vi.fn().mockResolvedValue({ mutationCount: 1 }),
+    schemaCanonicalizationCapability: SCHEMA_CANONICALIZATION_CONTRACT,
+    preflightSchemaCanonicalizationDelta: vi.fn(),
+    getSchemaCanonicalizationProjection: vi.fn().mockResolvedValue(projections),
+    upsertSchemaCanonicalizationDelta: vi.fn().mockResolvedValue({ mutationCount: 1 }),
+  } as IIndexingMemory;
 }
 
 describe('TASK-MG-031: StageIICanonicalizer', () => {
@@ -161,5 +224,57 @@ describe('TASK-MG-031: StageIICanonicalizer', () => {
     expect(activated).toBe(1);
     expect(snapshot.facts[0]?.state).toBe('active');
     expect(snapshot.facts[0]?.updatedAt).toBe('2026-02-01T00:00:00.000Z');
+  });
+
+  it('aggregates repeated occurrences into one projected CAS delta', async () => {
+    const memory = canonicalMemory([projection()]);
+    const stage = new StageIICanonicalizer('corpus-1', memory);
+    const prepared = await stage.prepareCanonicalSchemas([
+      candidateSchema('schema:person::authors::paper', 'authors'),
+      candidateSchema('schema:person::authors::paper', 'writes'),
+      candidateSchema('schema:person::authors::paper', 'authors'),
+    ], 'doc-1');
+
+    expect(prepared.schemaViews).toMatchObject([{
+      schemaId: 'schema:person::authors::paper',
+      frequency: 4,
+      state: 'stable',
+      firstSourceDocumentId: 'doc-old',
+    }]);
+    expect(prepared.mergeIntents).toMatchObject([{
+      mode: 'merge',
+      frequencyDelta: 3,
+      aliasAdditions: expect.arrayContaining([
+        expect.objectContaining({ label: 'authors' }),
+        expect.objectContaining({ label: 'writes' }),
+      ]),
+    }]);
+  });
+
+  it('keeps same-document changed content idempotent while unioning new aliases', async () => {
+    const memory = canonicalMemory([projection({ contributionPresent: true })]);
+    const stage = new StageIICanonicalizer('corpus-1', memory);
+    const prepared = await stage.prepareCanonicalSchemas([
+      candidateSchema('schema:person::authors::paper', 'new-alias'),
+    ], 'doc-1');
+
+    expect(prepared.mergeIntents[0]).toMatchObject({
+      mode: 'merge',
+      frequencyDelta: 0,
+      aliasAdditions: [expect.objectContaining({ label: 'new-alias' })],
+    });
+    expect(prepared.schemaViews[0]).toMatchObject({
+      frequency: 1,
+      firstSourceDocumentId: 'doc-old',
+      contributionPresent: true,
+    });
+  });
+
+  it('fails closed when stored scalar meaning disagrees with the candidate', async () => {
+    const memory = canonicalMemory([projection({ relation: 'belongsTo' })]);
+    const stage = new StageIICanonicalizer('corpus-1', memory);
+
+    await expect(stage.prepareCanonicalSchemas([candidateSchema()], 'doc-1'))
+      .rejects.toThrow('inconsistent schema meaning');
   });
 });

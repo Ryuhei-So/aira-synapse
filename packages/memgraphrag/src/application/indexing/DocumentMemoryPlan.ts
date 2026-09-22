@@ -7,6 +7,11 @@ import {
   type Schema,
 } from '../../domain/memory/schema.js';
 import type { IndexingMemoryDelta } from '../../domain/storage/indexingMemory.js';
+import type {
+  SchemaCanonicalizationMemoryDelta,
+  SchemaMergeIntent,
+} from '../../domain/storage/schemaCanonicalization.js';
+import type { SchemaPlanningView } from './StageIICanonicalizer.js';
 
 function uniqueStrings(values: readonly string[]): readonly string[] {
   return [...new Set(values)];
@@ -51,10 +56,10 @@ export function buildDocumentFacts(
   corpusId: string,
   documentId: string,
   records: readonly CompositeExtractionRecord[],
-  schemas: readonly Schema[],
+  schemas: readonly SchemaPlanningView[],
   timestamp: string,
 ): readonly Fact[] {
-  const schemaByMeaning = new Map<string, Schema>();
+  const schemaByMeaning = new Map<string, SchemaPlanningView>();
   for (const schema of schemas) {
     const meaning = computeCanonicalKey(schema.headType, schema.relation, schema.tailType);
     const existing = schemaByMeaning.get(meaning);
@@ -120,17 +125,17 @@ export function buildDocumentMemoryDelta(
   const factIdsByPassage = new Map<string, string[]>();
   for (const fact of facts) {
     if (fact.corpusId !== corpusId) {
-      throw new Error(`fact ${fact.factId} belongs to the wrong corpus`);
+      throw new Error('canonicalization fact belongs to the wrong corpus');
     }
     if (!schemaIds.has(fact.schemaId)) {
-      throw new Error(`fact ${fact.factId} references an absent schema`);
+      throw new Error('canonicalization fact references an absent schema');
     }
     const schemaFactIds = factIdsBySchema.get(fact.schemaId) ?? [];
     schemaFactIds.push(fact.factId);
     factIdsBySchema.set(fact.schemaId, schemaFactIds);
     for (const passageId of fact.passageIds) {
       if (!passageIds.has(passageId)) {
-        throw new Error(`fact ${fact.factId} references an absent passage`);
+        throw new Error('canonicalization fact references an absent passage');
       }
       const passageFactIds = factIdsByPassage.get(passageId) ?? [];
       passageFactIds.push(fact.factId);
@@ -155,6 +160,91 @@ export function buildDocumentMemoryDelta(
         ...(factIdsByPassage.get(passage.passageId) ?? []),
       ]),
     })),
+    exportedAt,
+  };
+}
+
+/**
+ * Build the projected C1-S delta.  `schemaMerges` carries either a complete
+ * schema for an expected-absent create or a bounded CAS intent for an existing
+ * schema; the projected path never emits a `schemas` key.
+ */
+export function buildCanonicalizationMemoryDelta(
+  corpusId: string,
+  schemaViews: readonly SchemaPlanningView[],
+  mergeIntents: readonly SchemaMergeIntent[],
+  facts: readonly Fact[],
+  passages: readonly Passage[],
+  exportedAt: string,
+): SchemaCanonicalizationMemoryDelta {
+  const schemaIds = new Set(schemaViews.map((schema) => schema.schemaId));
+  const passageIds = new Set(passages.map((passage) => passage.passageId));
+  const factIdsBySchema = new Map<string, string[]>();
+  const factIdsByPassage = new Map<string, string[]>();
+  for (const fact of facts) {
+    if (fact.corpusId !== corpusId) {
+      throw new Error('canonicalization fact belongs to the wrong corpus');
+    }
+    if (!schemaIds.has(fact.schemaId)) {
+      throw new Error('canonicalization fact references an absent schema');
+    }
+    const schemaFactIds = factIdsBySchema.get(fact.schemaId) ?? [];
+    schemaFactIds.push(fact.factId);
+    factIdsBySchema.set(fact.schemaId, schemaFactIds);
+    for (const passageId of fact.passageIds) {
+      if (!passageIds.has(passageId)) {
+        throw new Error('canonicalization fact references an absent passage');
+      }
+      const passageFactIds = factIdsByPassage.get(passageId) ?? [];
+      passageFactIds.push(fact.factId);
+      factIdsByPassage.set(passageId, passageFactIds);
+    }
+  }
+
+  const intentSchemaIds = new Set<string>();
+  const schemaMerges = mergeIntents.map((intent) => {
+    const schemaId = intent.mode === 'create' ? intent.schema.schemaId : intent.schemaId;
+    if (intentSchemaIds.has(schemaId)) {
+      throw new Error('canonicalization schema merge is duplicated');
+    }
+    intentSchemaIds.add(schemaId);
+    if (!schemaIds.has(schemaId)) {
+      throw new Error('canonicalization schema merge has no planning view');
+    }
+    const linkedFactIds = factIdsBySchema.get(schemaId) ?? [];
+    if (intent.mode === 'create') {
+      return {
+        ...intent,
+        schema: {
+          ...intent.schema,
+          factIds: uniqueStrings([...intent.schema.factIds, ...linkedFactIds]),
+        },
+      };
+    }
+    return {
+      ...intent,
+      factIdAdditions: uniqueStrings([
+        ...intent.factIdAdditions,
+        ...linkedFactIds,
+      ]),
+    };
+  });
+
+  if (schemaMerges.length === 0) {
+    throw new Error('canonicalization delta requires at least one schema merge');
+  }
+
+  return {
+    corpusId,
+    passages: passages.map((passage) => ({
+      ...passage,
+      factIds: uniqueStrings([
+        ...passage.factIds,
+        ...(factIdsByPassage.get(passage.passageId) ?? []),
+      ]),
+    })),
+    facts,
+    schemaMerges,
     exportedAt,
   };
 }

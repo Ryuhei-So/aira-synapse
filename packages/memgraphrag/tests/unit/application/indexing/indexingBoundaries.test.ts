@@ -10,6 +10,7 @@ import { chunkMarkdownDocument, chunkMarkdownDocumentWithGinza, fallbackParagrap
 import { validateDomainObject } from '../../../../src/domain/memory/domainContract.js';
 import type { ILLMProvider } from '../../../../src/domain/provider/llmProvider.js';
 import { computeCanonicalKey, normalizeSchemaTerm } from '../../../../src/domain/memory/schema.js';
+import { SCHEMA_CANONICALIZATION_CONTRACT } from '../../../../src/domain/storage/schemaCanonicalization.js';
 
 function extractionResponse(relation = 'authors'): string {
   return JSON.stringify({
@@ -429,6 +430,78 @@ describe('indexing and provider behavioral boundaries', () => {
     expect(indexingMemory.upsertDelta.mock.invocationCallOrder[0]!)
       .toBeLessThan(indexingMemory.activateFactsBySchemaIds.mock.invocationCallOrder[0]!);
     db.close();
+  });
+
+  it('selects the negotiated projected lane and preserves graph/vector provenance', async () => {
+    const harness = mutationBoundaryHarness(provider(extractionResponse()));
+    const projection = {
+      schemaId: 'schema:person::authors::paper',
+      corpusId: 'c1',
+      headType: 'person',
+      relation: 'authors',
+      tailType: 'paper',
+      canonicalKey: 'person::authors::paper',
+      frequency: 1,
+      state: 'pending' as const,
+      stabilizationThreshold: 2,
+      firstSourceDocumentId: 'doc-historical',
+      contributionPresent: false,
+      mergeToken: 'a'.repeat(64),
+    };
+    const memory = harness.indexingMemory as unknown as Record<string, unknown>;
+    memory.schemaCanonicalizationCapability = SCHEMA_CANONICALIZATION_CONTRACT;
+    const projectionRead = vi.fn().mockResolvedValue([projection]);
+    const canonicalUpsert = vi.fn().mockImplementation(async () => {
+      harness.mutationTrace.push('canonical_memory');
+      return { mutationCount: 1 };
+    });
+    memory.getSchemaCanonicalizationProjection = projectionRead;
+    memory.upsertSchemaCanonicalizationDelta = canonicalUpsert;
+    memory.preflightSchemaCanonicalizationDelta = vi.fn();
+    const graph = harness.graphStore as unknown as Record<string, unknown>;
+    const preflightHydration = vi.fn();
+    const hydratedGraphNodes = vi.fn().mockImplementation(async () => {
+      harness.mutationTrace.push('hydrated_graph_nodes');
+    });
+    graph.preflightSchemaHydration = preflightHydration;
+    graph.upsertNodesWithSchemaHydration = hydratedGraphNodes;
+
+    await expect(harness.run()).resolves.toMatchObject({
+      processedDocumentId: 'doc-boundary',
+      addedNodes: 5,
+      memoryDeltaMutationCount: 1,
+    });
+
+    expect(harness.indexingMemory.getSchemasByIds).not.toHaveBeenCalled();
+    expect(harness.indexingMemory.upsertDelta).not.toHaveBeenCalled();
+    expect(projectionRead).toHaveBeenCalledWith({
+      corpusId: 'c1',
+      schemaIds: ['schema:person::authors::paper'],
+      projection: 'canonicalization@1',
+      contributionDocumentId: 'doc-boundary',
+    });
+    expect(canonicalUpsert).toHaveBeenCalledWith(expect.objectContaining({
+      corpusId: 'c1',
+      schemaMerges: [expect.objectContaining({
+        mode: 'merge',
+        frequencyDelta: 1,
+        factIdAdditions: [expect.stringContaining('fact:doc-boundary:')],
+      })],
+    }));
+    expect(hydratedGraphNodes).toHaveBeenCalledWith(expect.objectContaining({
+      schemaRefHydration: 'memory-schema@1',
+      schemaNodeRefs: [expect.objectContaining({
+        nodeId: 'schema:schema:person::authors::paper',
+      })],
+    }));
+    expect(harness.vectorIndex.upsert).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'schema:schema:person::authors::paper',
+        metadata: expect.objectContaining({ documentId: 'doc-historical' }),
+      }),
+    ]));
+    expect(harness.graphStore.upsertNodes).not.toHaveBeenCalled();
+    harness.db.close();
   });
 
   it.each([

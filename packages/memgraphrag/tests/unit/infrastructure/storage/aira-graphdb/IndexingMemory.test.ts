@@ -4,6 +4,7 @@ import type { Fact } from '../../../../../src/domain/memory/fact.js';
 import type { Passage } from '../../../../../src/domain/memory/passage.js';
 import type { Schema } from '../../../../../src/domain/memory/schema.js';
 import { INDEXING_MEMORY_CONTRACT } from '../../../../../src/domain/storage/indexingMemory.js';
+import { SCHEMA_CANONICALIZATION_CONTRACT } from '../../../../../src/domain/storage/schemaCanonicalization.js';
 import { SnapshotBackedIndexingMemory } from '../../../../../src/infrastructure/storage/SnapshotBackedIndexingMemory.js';
 import { AiraGraphDbIndexingMemory } from '../../../../../src/infrastructure/storage/aira-graphdb/AiraGraphDbIndexingMemory.js';
 import type { AiraGraphDbRpcClient } from '../../../../../src/infrastructure/storage/aira-graphdb/NativeClient.js';
@@ -17,7 +18,10 @@ function protocolInfo(overrides: Record<string, unknown> = {}): Record<string, u
     generation: 0,
     state: 'idle',
     limits: {
-      indexingMemory: { ...INDEXING_MEMORY_CONTRACT },
+      indexingMemory: {
+        ...INDEXING_MEMORY_CONTRACT,
+        schemaCanonicalization: SCHEMA_CANONICALIZATION_CONTRACT,
+      },
       wal: { mutationRequestIdUniqueness: 'activeTransaction' },
     },
     methods: [
@@ -25,6 +29,7 @@ function protocolInfo(overrides: Record<string, unknown> = {}): Record<string, u
       { name: 'memory_get_active_facts', classification: 'read', wal: false },
       { name: 'memory_activate_facts_by_schema_ids', classification: 'mutation', wal: true },
       { name: 'memory_upsert', classification: 'mutation', wal: true },
+      { name: 'upsert_nodes', classification: 'mutation', wal: true },
     ],
     ...overrides,
   };
@@ -104,6 +109,36 @@ function clientWith(
   return { client: { request } as AiraGraphDbRpcClient, request };
 }
 
+function canonicalProtocolInfo(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return protocolInfo({
+    limits: {
+      indexingMemory: {
+        ...INDEXING_MEMORY_CONTRACT,
+        schemaCanonicalization: SCHEMA_CANONICALIZATION_CONTRACT,
+      },
+      wal: { mutationRequestIdUniqueness: 'activeTransaction' },
+    },
+    ...overrides,
+  });
+}
+
+function projection(schemaId = 's1'): Record<string, unknown> {
+  return {
+    schemaId,
+    corpusId: 'c1',
+    headType: 'person',
+    relation: 'authors',
+    tailType: 'paper',
+    canonicalKey: 'person::authors::paper',
+    frequency: 1,
+    state: 'pending',
+    stabilizationThreshold: 2,
+    firstSourceDocumentId: 'd-old',
+    contributionPresent: false,
+    mergeToken: 'a'.repeat(64),
+  };
+}
+
 describe('AiraGraphDbIndexingMemory strict bounded contract', () => {
   it('validates the versioned capability and uses only bounded indexing methods', async () => {
     const { client, request } = clientWith((method) => {
@@ -133,6 +168,82 @@ describe('AiraGraphDbIndexingMemory strict bounded contract', () => {
     ]);
     expect(request.mock.calls.slice(1).every((call) => call[2]?.maxRequestBytes === 64 * 1024 * 1024
       && call[2]?.maxResponseBytes === 8 * 1024 * 1024)).toBe(true);
+  });
+
+  it('uses the negotiated projection and tagged merge without legacy fallback', async () => {
+    const request = vi.fn(async (method: string, _params?: unknown) => {
+      if (method === 'protocol_info') return canonicalProtocolInfo();
+      if (method === 'memory_get_schemas_by_ids') return [projection()];
+      if (method === 'memory_upsert') return null;
+      throw new Error(`unexpected ${method}`);
+    });
+    const memory = await AiraGraphDbIndexingMemory.create({ request } as AiraGraphDbRpcClient);
+
+    await expect(memory.getSchemaCanonicalizationProjection({
+      corpusId: 'c1',
+      schemaIds: ['s1'],
+      projection: 'canonicalization@1',
+      contributionDocumentId: 'd-current',
+    })).resolves.toEqual([projection()]);
+    await expect(memory.upsertSchemaCanonicalizationDelta({
+      corpusId: 'c1',
+      passages: [],
+      facts: [],
+      schemaMerges: [{
+        mode: 'merge',
+        schemaId: 's1',
+        expectedMergeToken: 'a'.repeat(64),
+        contributionDocumentId: 'd-current',
+        frequencyDelta: 1,
+        desiredState: 'stable',
+        stabilizationThreshold: 2,
+        updatedAt: NOW,
+        aliasAdditions: [],
+        factIdAdditions: [],
+      }],
+      exportedAt: NOW,
+    })).resolves.toEqual({ mutationCount: 1 });
+
+    expect(request.mock.calls.map(([method]) => method)).toEqual([
+      'protocol_info',
+      'memory_get_schemas_by_ids',
+      'memory_upsert',
+    ]);
+    expect(request.mock.calls[1]?.[1]).toMatchObject({ projection: 'canonicalization@1' });
+    expect(request.mock.calls[2]?.[1]).toMatchObject({ schemaMerges: expect.any(Array) });
+    expect(request.mock.calls[2]?.[1]).not.toHaveProperty('schemas');
+  });
+
+  it('rejects a partial canonical capability at protocol startup', async () => {
+    const partial = {
+      ...SCHEMA_CANONICALIZATION_CONTRACT,
+      maxGraphHydrations: 31,
+    };
+    const client = {
+      request: vi.fn().mockResolvedValue(canonicalProtocolInfo({
+        limits: {
+          indexingMemory: {
+            ...INDEXING_MEMORY_CONTRACT,
+            schemaCanonicalization: partial,
+          },
+          wal: { mutationRequestIdUniqueness: 'activeTransaction' },
+        },
+      })),
+    } as AiraGraphDbRpcClient;
+    await expect(AiraGraphDbIndexingMemory.create(client)).rejects.toThrow();
+  });
+
+  it('fails closed when the native capability is absent', async () => {
+    const client = {
+      request: vi.fn().mockResolvedValue(protocolInfo({
+        limits: {
+          indexingMemory: { ...INDEXING_MEMORY_CONTRACT },
+          wal: { mutationRequestIdUniqueness: 'activeTransaction' },
+        },
+      })),
+    } as AiraGraphDbRpcClient;
+    await expect(AiraGraphDbIndexingMemory.create(client))
+      .rejects.toThrow('capability is missing');
   });
 
   it.each([
@@ -208,6 +319,9 @@ describe('AiraGraphDbIndexingMemory strict bounded contract', () => {
           { name: 'memory_get_schemas_by_ids', classification: 'read', wal: false },
           { name: 'memory_get_schemas_by_ids', classification: 'read', wal: false },
         ],
+      }),
+      protocolInfo({
+        methods: protocolInfo().methods.filter((method) => method.name !== 'upsert_nodes'),
       }),
     ];
 

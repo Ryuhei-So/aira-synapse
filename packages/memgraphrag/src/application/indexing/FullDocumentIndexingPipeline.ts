@@ -13,8 +13,11 @@ import { StageIExtractor } from './StageIExtractor.js';
 import { StageIICanonicalizer } from './StageIICanonicalizer.js';
 import {
   buildVectorRecords,
+  buildVectorRecordsFromInputs,
+  assertSchemaHydrationGraphStore,
   persistGraphProjection,
   persistVectorRecords,
+  planCanonicalGraphProjection,
   planGraphProjection,
 } from './StageIVGraphProjector.js';
 import { SymbolicCanonicalizer } from './SymbolicCanonicalizer.js';
@@ -22,12 +25,22 @@ import { SymbolicConflictDetector } from './SymbolicConflictDetector.js';
 import { LLMConflictResolver } from './LLMConflictResolver.js';
 import { detectConflicts, resolveConflicts, recordConflictAudit } from './StageIIIConflictPipeline.js';
 import type { ILLMProvider, IEmbeddingProvider, INLPExtractor } from '../../domain/provider/index.js';
-import type { IGraphStore, IIndexingMemory, IVectorIndex } from '../../domain/storage/index.js';
+import {
+  isSchemaCanonicalizationMemory,
+  type IGraphStore,
+  type IIndexingMemory,
+  type IVectorIndex,
+} from '../../domain/storage/index.js';
+import type { ISchemaCanonicalizationMemory } from '../../domain/storage/schemaCanonicalization.js';
 import type { Fact } from '../../domain/memory/fact.js';
 import type { ITermDictionary } from '../../domain/dictionary/termDictionary.js';
 import { LLMExtractionAgent } from './LLMExtractionAgent.js';
 import { LexiconBuilder } from './LexiconBuilder.js';
-import { buildDocumentFacts, buildDocumentMemoryDelta } from './DocumentMemoryPlan.js';
+import {
+  buildCanonicalizationMemoryDelta,
+  buildDocumentFacts,
+  buildDocumentMemoryDelta,
+} from './DocumentMemoryPlan.js';
 
 export interface FullPipelineOptions {
   readonly db: Database.Database;
@@ -85,7 +98,23 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
     // Stage II: Canonicalize schemas and merge into memory
     const stageII = new StageIICanonicalizer(corpusId, this.options.indexingMemory);
     const candidateSchemas = await stageII.canonicalizeSchemas(records, this.canonicalizer);
-    const { finalSchemas: schemas, newlyStableSchemaIds } = await stageII.prepareSchemas(candidateSchemas);
+    // A negotiated native projection is selected only when this document has
+    // schema candidates.  A schema-free document keeps the established empty
+    // legacy delta shape so passages/facts remain a valid no-schema update.
+    const canonicalMemory: ISchemaCanonicalizationMemory | undefined = candidateSchemas.length > 0
+      && isSchemaCanonicalizationMemory(this.options.indexingMemory)
+      ? this.options.indexingMemory
+      : undefined;
+    const canonicalPreparation = canonicalMemory
+      ? await stageII.prepareCanonicalSchemas(candidateSchemas, document.documentId)
+      : undefined;
+    const legacyPreparation = canonicalPreparation === undefined
+      ? await stageII.prepareSchemas(candidateSchemas)
+      : undefined;
+    const schemas = canonicalPreparation?.schemaViews ?? legacyPreparation!.finalSchemas;
+    const newlyStableSchemaIds = canonicalPreparation?.newlyStableSchemaIds
+      ?? legacyPreparation?.newlyStableSchemaIds
+      ?? [];
 
     // Schema candidates retain occurrence pressure, while repeated fact
     // candidates fold to one identity with all supporting passage provenance.
@@ -136,25 +165,77 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
     }
 
     const passages = records.map((r) => r.sourcePassage);
-    const delta = buildDocumentMemoryDelta(corpusId, schemas, allFacts, passages, now);
     const activation = newlyStableSchemaIds.length > 0
       ? { corpusId, schemaIds: newlyStableSchemaIds, updatedAt: now }
       : undefined;
 
-    // Complete deterministic validation and external provider work before the
-    // first mutation. Admission failures after this boundary are uncertain and
-    // must poison the whole owner transaction.
-    this.options.indexingMemory.preflightMutation(
-      activation ? { delta, activation } : { delta },
-    );
-    const graphPlan = planGraphProjection(delta.facts, delta.schemas, delta.passages);
-    const vectorRecords = await buildVectorRecords(
-      this.options.embeddingProvider,
-      graphPlan.nodes,
-    );
+    let delta: ReturnType<typeof buildDocumentMemoryDelta> | ReturnType<typeof buildCanonicalizationMemoryDelta>;
+    let canonicalDelta: ReturnType<typeof buildCanonicalizationMemoryDelta> | undefined;
+    let legacyDelta: ReturnType<typeof buildDocumentMemoryDelta> | undefined;
+    let graphPlan;
+    let vectorRecords;
+    if (canonicalPreparation && canonicalMemory) {
+      canonicalDelta = buildCanonicalizationMemoryDelta(
+        corpusId,
+        canonicalPreparation.schemaViews,
+        canonicalPreparation.mergeIntents,
+        allFacts,
+        passages,
+        now,
+      );
+      delta = canonicalDelta;
+      // Complete deterministic validation, including the graph marker shape,
+      // before embedding or the first mutation.
+      canonicalMemory.preflightSchemaCanonicalizationDelta(canonicalDelta);
+      if (activation) {
+        this.options.indexingMemory.preflightMutation({
+          delta: { corpusId, passages: [], facts: [], schemas: [], exportedAt: now },
+          activation,
+        });
+      }
+      graphPlan = planCanonicalGraphProjection(
+        allFacts,
+        canonicalPreparation.schemaViews,
+        passages,
+        document.documentId,
+      );
+      assertSchemaHydrationGraphStore(this.options.graphStore);
+      const hydrationParams = {
+        nodes: graphPlan.nodes,
+        schemaRefHydration: 'memory-schema@1',
+        schemaNodeRefs: graphPlan.schemaNodeRefs ?? [],
+      } as const;
+      this.options.graphStore.preflightSchemaHydration(hydrationParams);
+      vectorRecords = await buildVectorRecordsFromInputs(
+        this.options.embeddingProvider,
+        graphPlan.vectorInputs ?? [],
+      );
+    } else {
+      legacyDelta = buildDocumentMemoryDelta(
+        corpusId,
+        legacyPreparation!.finalSchemas,
+        allFacts,
+        passages,
+        now,
+      );
+      delta = legacyDelta;
+      // Complete deterministic validation and external provider work before
+      // the first mutation. Admission failures after this boundary are
+      // uncertain and must poison the whole owner transaction.
+      this.options.indexingMemory.preflightMutation(
+        activation ? { delta: legacyDelta, activation } : { delta: legacyDelta },
+      );
+      graphPlan = planGraphProjection(legacyDelta.facts, legacyDelta.schemas, legacyDelta.passages);
+      vectorRecords = await buildVectorRecords(
+        this.options.embeddingProvider,
+        graphPlan.nodes,
+      );
+    }
 
     try {
-      const upsertResult = await this.options.indexingMemory.upsertDelta(delta);
+      const upsertResult = canonicalDelta && canonicalMemory
+        ? await canonicalMemory.upsertSchemaCanonicalizationDelta(canonicalDelta)
+        : await this.options.indexingMemory.upsertDelta(legacyDelta!);
       if (activation) {
         await this.options.indexingMemory.activateFactsBySchemaIds(activation);
       }
@@ -189,13 +270,14 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
         );
       }
 
+      const addedNodeCount = graphPlan.nodes.length + (graphPlan.schemaNodeRefs?.length ?? 0);
       console.log(
-        `  [${document.title}] chunks=${records.length} schemas=${schemas.length} facts=${allFacts.length} nodes=${graphPlan.nodes.length} edges=${graphPlan.edges.length} conflicts=${conflictCount}`,
+        `  [${document.title}] chunks=${records.length} schemas=${schemas.length} facts=${allFacts.length} nodes=${addedNodeCount} edges=${graphPlan.edges.length} conflicts=${conflictCount}`,
       );
 
       return {
         processedDocumentId: document.documentId,
-        addedNodes: graphPlan.nodes.length,
+        addedNodes: addedNodeCount,
         addedEdges: graphPlan.edges.length,
         conflicts: conflictCount,
         memoryDeltaMutationCount: upsertResult?.mutationCount ?? 1,

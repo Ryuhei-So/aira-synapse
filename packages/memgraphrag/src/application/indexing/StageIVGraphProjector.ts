@@ -6,9 +6,14 @@ import type {
   IVectorIndex,
   VectorRecord,
 } from '../../domain/storage/index.js';
+import type {
+  ISchemaHydratingGraphStore,
+  SchemaNodeReference,
+} from '../../domain/storage/schemaCanonicalization.js';
 import type { Fact } from '../../domain/memory/fact.js';
 import type { Passage } from '../../domain/memory/passage.js';
 import type { Schema } from '../../domain/memory/schema.js';
+import type { PreparedSchemaView } from './StageIICanonicalizer.js';
 
 function cosineSimilarity(a: readonly number[], b: readonly number[]): number {
   if (a.length !== b.length || a.length === 0) {
@@ -60,6 +65,18 @@ function namespaceForNode(layer: GraphNode['layer']): VectorRecord<Readonly<Reco
 export interface GraphProjectionPlan {
   readonly nodes: readonly GraphNode[];
   readonly edges: readonly GraphEdge[];
+  /** Native schema markers that request full refs at graph persistence time. */
+  readonly schemaNodeRefs?: readonly SchemaNodeReference[];
+  /** Explicit vector inputs for projected schema markers. */
+  readonly vectorInputs?: readonly VectorEmbeddingInput[];
+}
+
+export interface VectorEmbeddingInput {
+  readonly id: string;
+  readonly corpusId: string;
+  readonly layer: GraphNode['layer'];
+  readonly label: string;
+  readonly documentId?: string;
 }
 
 /** Pure derivation so all fallible preparation can finish before persistence. */
@@ -176,11 +193,65 @@ export function planGraphProjection(
   return { nodes, edges };
 }
 
+/**
+ * Plan the C1-S graph lane.  Schema nodes are represented by native hydration
+ * markers so the consumer never fabricates a partial Schema ref.  Facts,
+ * passages, entities, and their edges retain the established graph shape.
+ */
+export function planCanonicalGraphProjection(
+  facts: readonly Fact[],
+  schemaViews: readonly PreparedSchemaView[],
+  passages: readonly Passage[],
+  contributionDocumentId: string,
+): GraphProjectionPlan {
+  const base = planGraphProjection(facts, [], passages);
+  const schemaNodeRefs: SchemaNodeReference[] = schemaViews.map((schema) => ({
+    nodeId: schemaNodeId(schema.schemaId),
+    corpusId: schema.corpusId,
+    schemaId: schema.schemaId,
+    label: `${schema.headType} ${schema.relation} ${schema.tailType}`,
+  }));
+  const schemaInputs: VectorEmbeddingInput[] = schemaViews.map((schema) => ({
+    id: schemaNodeId(schema.schemaId),
+    corpusId: schema.corpusId,
+    layer: 'ontology',
+    label: `${schema.headType} ${schema.relation} ${schema.tailType}`,
+    documentId: schema.firstSourceDocumentId ?? contributionDocumentId,
+  }));
+  return {
+    ...base,
+    schemaNodeRefs,
+    vectorInputs: [
+      ...schemaInputs,
+      ...base.nodes.map(graphNodeToVectorInput),
+    ],
+  };
+}
+
+export function assertSchemaHydrationGraphStore(
+  graphStore: IGraphStore,
+): asserts graphStore is IGraphStore & ISchemaHydratingGraphStore {
+  const candidate = graphStore as Partial<ISchemaHydratingGraphStore>;
+  if (typeof candidate.preflightSchemaHydration !== 'function'
+    || typeof candidate.upsertNodesWithSchemaHydration !== 'function') {
+    throw new Error('schema graph hydration capability is unavailable');
+  }
+}
+
 export async function persistGraphProjection(
   graphStore: IGraphStore,
   plan: GraphProjectionPlan,
 ): Promise<void> {
-  await graphStore.upsertNodes(plan.nodes);
+  if (plan.schemaNodeRefs !== undefined) {
+    assertSchemaHydrationGraphStore(graphStore);
+    await graphStore.upsertNodesWithSchemaHydration({
+      nodes: plan.nodes,
+      schemaRefHydration: 'memory-schema@1',
+      schemaNodeRefs: plan.schemaNodeRefs,
+    });
+  } else {
+    await graphStore.upsertNodes(plan.nodes);
+  }
   await graphStore.upsertEdges(plan.edges);
 }
 
@@ -277,6 +348,40 @@ export async function buildVectorRecords(
   embeddingProvider: IEmbeddingProvider,
   items: readonly GraphNode[],
 ): Promise<readonly VectorRecord<Readonly<Record<string, unknown>>>[]> {
+  return buildVectorRecordsFromInputs(
+    embeddingProvider,
+    items.map(graphNodeToVectorInput),
+  );
+}
+
+function graphNodeToVectorInput(item: GraphNode): VectorEmbeddingInput {
+  const ref = item.ref as unknown as Record<string, unknown>;
+  let documentId: string | undefined;
+  if (typeof ref.metadata === 'object' && ref.metadata !== null) {
+    const metadata = ref.metadata as Record<string, unknown>;
+    if (typeof metadata.documentId === 'string') {
+      documentId = metadata.documentId;
+    }
+  }
+  if (documentId === undefined && Array.isArray(ref.sourceDocumentIds)) {
+    const firstSourceDocumentId = ref.sourceDocumentIds[0];
+    if (typeof firstSourceDocumentId === 'string') {
+      documentId = firstSourceDocumentId;
+    }
+  }
+  return {
+    id: item.nodeId,
+    corpusId: item.corpusId,
+    layer: item.layer,
+    label: item.label,
+    documentId,
+  };
+}
+
+export async function buildVectorRecordsFromInputs(
+  embeddingProvider: IEmbeddingProvider,
+  items: readonly VectorEmbeddingInput[],
+): Promise<readonly VectorRecord<Readonly<Record<string, unknown>>>[]> {
   if (items.length === 0) {
     return [];
   }
@@ -297,17 +402,13 @@ export async function buildVectorRecords(
     }
   }
   const records = items.map((item, index) => ({
-    id: item.nodeId,
+    id: item.id,
     corpusId: item.corpusId,
     namespace: namespaceForNode(item.layer),
     values: embeddings.vectors[index]!,
     metadata: {
-      nodeId: item.nodeId,
-      documentId: 'metadata' in item.ref && typeof item.ref.metadata === 'object' && item.ref.metadata !== null
-        ? (item.ref.metadata as Record<string, unknown>).documentId
-        : 'sourceDocumentIds' in item.ref && Array.isArray((item.ref as Schema | Fact).sourceDocumentIds)
-          ? (item.ref as Schema | Fact).sourceDocumentIds[0]
-          : undefined,
+      nodeId: item.id,
+      documentId: item.documentId,
       layer: item.layer,
     },
   }));
