@@ -31,6 +31,16 @@ export { StructuredLogger, type LogLevel, type LogContext, type StructuredLogEnt
 export { AuditLogger, type AuditRecord } from './logging/AuditLogger.js';
 export { SecretMasker, redactSecrets } from './security/SecretMasker.js';
 export { SchemaVersionManager } from './storage/SchemaVersionManager.js';
+export {
+  validateGraphUpsertWireParams,
+  validateIndexingMemoryWireDelta,
+  validateSchemaCanonicalizationCapability,
+  validateSchemaCanonicalizationMemoryDelta,
+  validateSchemaCanonicalizationProjectionRequest,
+  validateSchemaCanonicalizationProjectionResponse,
+  validateSchemaMergeAgainstProjection,
+  validateSchemaMergeIntents,
+} from './storage/schemaCanonicalizationContract.js';
 // Neo4j adapters
 export { Neo4jConnectionPool, type Neo4jConnectionOptions, type INeo4jConnectionPool } from './storage/neo4j/Neo4jConnection.js';
 export { Neo4jGraphStore } from './storage/neo4j/Neo4jGraphStore.js';

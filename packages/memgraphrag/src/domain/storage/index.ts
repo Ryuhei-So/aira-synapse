@@ -19,6 +19,22 @@ export {
   type IndexingSchemaRequest,
 } from './indexingMemory.js';
 export {
+  SCHEMA_CANONICALIZATION_CONTRACT,
+  type GraphUpsertWireParams,
+  type IndexingMemoryWireDelta,
+  type LegacyGraphUpsertWireParams,
+  type LegacyIndexingMemoryWireDelta,
+  type SchemaCanonicalizationCapability,
+  type SchemaCanonicalizationMemoryDelta,
+  type SchemaCanonicalizationMergeCreate,
+  type SchemaCanonicalizationMergeExisting,
+  type SchemaCanonicalizationProjection,
+  type SchemaCanonicalizationProjectionRequest,
+  type SchemaHydrationWireParams,
+  type SchemaMergeIntent,
+  type SchemaNodeReference,
+} from './schemaCanonicalization.js';
+export {
   MEMORY_READ_CONTRACT,
   SNAPSHOT_MEMORY_READ_BOUNDS,
   type FactsByEntitiesRequest,
