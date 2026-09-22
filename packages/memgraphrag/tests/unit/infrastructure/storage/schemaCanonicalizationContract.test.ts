@@ -249,6 +249,29 @@ describe('schema canonicalization wire contract', () => {
       ...hydrated,
       nodes: [{ nodeId: marker.nodeId, corpusId: marker.corpusId }],
     })).toThrow('layer');
+    const validNode = {
+      nodeId: 'fact:fact-a',
+      corpusId: 'corpus-a',
+      layer: 'fact',
+      ref: { factId: 'fact-a' },
+      label: 'Fact A',
+    };
+    expect(() => validateGraphUpsertWireParams({ nodes: [{ ...validNode, layer: 'nonsense' }] }))
+      .toThrow('layer');
+    expect(() => validateGraphUpsertWireParams({ nodes: [{ ...validNode, ref: null }] }))
+      .toThrow('ref');
+    expect(() => validateGraphUpsertWireParams({ nodes: [{ ...validNode, ref: 42 }] }))
+      .toThrow('ref');
+    const longPassageId = 'p'.repeat(4096);
+    expect(() => validateGraphUpsertWireParams({
+      nodes: [{
+        nodeId: `passage:${longPassageId}`,
+        corpusId: 'corpus-a',
+        layer: 'passage',
+        ref: { passageId: longPassageId },
+        label: 'Passage',
+      }],
+    })).not.toThrow();
     expect(() => validateGraphUpsertWireParams({
       ...hydrated,
       schemaNodeRefs: [{ ...marker, label: `${marker.label}x` }],

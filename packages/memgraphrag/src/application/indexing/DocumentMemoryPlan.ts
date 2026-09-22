@@ -183,17 +183,17 @@ export function buildCanonicalizationMemoryDelta(
   const factIdsByPassage = new Map<string, string[]>();
   for (const fact of facts) {
     if (fact.corpusId !== corpusId) {
-      throw new Error(`fact ${fact.factId} belongs to the wrong corpus`);
+      throw new Error('canonicalization fact belongs to the wrong corpus');
     }
     if (!schemaIds.has(fact.schemaId)) {
-      throw new Error(`fact ${fact.factId} references an absent schema`);
+      throw new Error('canonicalization fact references an absent schema');
     }
     const schemaFactIds = factIdsBySchema.get(fact.schemaId) ?? [];
     schemaFactIds.push(fact.factId);
     factIdsBySchema.set(fact.schemaId, schemaFactIds);
     for (const passageId of fact.passageIds) {
       if (!passageIds.has(passageId)) {
-        throw new Error(`fact ${fact.factId} references an absent passage`);
+        throw new Error('canonicalization fact references an absent passage');
       }
       const passageFactIds = factIdsByPassage.get(passageId) ?? [];
       passageFactIds.push(fact.factId);

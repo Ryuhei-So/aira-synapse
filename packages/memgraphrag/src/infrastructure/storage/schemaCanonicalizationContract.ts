@@ -5,6 +5,7 @@ import {
   LANGUAGE_CODE_VALUES,
   PROVENANCE_SOURCE_VALUES,
   SCHEMA_STATE_VALUES,
+  isMemoryLayer,
   type SchemaState,
 } from '../../domain/memory/types.js';
 import type {
@@ -66,6 +67,14 @@ function assertDomainId(value: unknown, name: string): asserts value is string {
 
 function assertCorpusId(value: unknown, name = 'corpusId'): asserts value is string {
   assertBoundedString(value, name, INDEXING_MEMORY_CONTRACT.maxCorpusIdBytes);
+}
+
+/** Generic GraphNode IDs use the native graph request-frame bound, not the
+ * narrower schema-marker composite bound negotiated for schemaNodeRefs. */
+function assertGraphNodeId(value: unknown, name: string): asserts value is string {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new Error(`${name} must be a non-empty string`);
+  }
 }
 
 function assertUpdatedAt(value: unknown, name: string): asserts value is string {
@@ -526,22 +535,20 @@ export function validateIndexingMemoryWireDelta(
 
 function assertNodeArray(
   value: unknown,
-  capability: SchemaCanonicalizationCapability,
 ): void {
   if (!Array.isArray(value)) throw new Error('upsert_nodes.nodes must be an array');
   for (const [index, node] of value.entries()) {
     assertObject(node, `upsert_nodes.nodes[${index}]`);
-    assertBoundedString(
+    assertGraphNodeId(
       node.nodeId,
       `upsert_nodes.nodes[${index}].nodeId`,
-      capability.maxSchemaNodeIdBytes,
     );
     assertCorpusId(node.corpusId, `upsert_nodes.nodes[${index}].corpusId`);
-    if (typeof node.layer !== 'string') {
-      throw new Error(`upsert_nodes.nodes[${index}].layer must be a string`);
+    if (!isMemoryLayer(node.layer)) {
+      throw new Error(`upsert_nodes.nodes[${index}].layer must be a supported memory layer`);
     }
-    if (!hasOwn(node, 'ref') || node.ref === undefined) {
-      throw new Error(`upsert_nodes.nodes[${index}].ref is required`);
+    if (!isObject(node.ref)) {
+      throw new Error(`upsert_nodes.nodes[${index}].ref must be an object`);
     }
     if (typeof node.label !== 'string') {
       throw new Error(`upsert_nodes.nodes[${index}].label must be a string`);
@@ -576,7 +583,7 @@ export function validateGraphUpsertWireParams(
   if (!hasVersion && !hasMarkers) {
     assertOnlyKeys(value, ['nodes'], 'upsert_nodes request');
     const nodes = value.nodes;
-    assertNodeArray(nodes, capability);
+    assertNodeArray(nodes);
     return;
   }
   if (!hasVersion || !hasMarkers) {
@@ -584,7 +591,7 @@ export function validateGraphUpsertWireParams(
   }
   assertOnlyKeys(value, ['nodes', 'schemaRefHydration', 'schemaNodeRefs'], 'upsert_nodes request');
   const nodes = value.nodes;
-  assertNodeArray(nodes, capability);
+  assertNodeArray(nodes);
   if (value.schemaRefHydration !== capability.graphHydration) {
     throw new Error('schemaRefHydration is unsupported');
   }

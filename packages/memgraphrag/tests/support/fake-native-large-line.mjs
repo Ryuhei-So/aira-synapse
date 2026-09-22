@@ -69,6 +69,7 @@ input.on('line', (line) => {
         { name: 'memory_get_active_facts', classification: 'read', wal: false },
         { name: 'memory_activate_facts_by_schema_ids', classification: 'mutation', wal: true },
         { name: 'memory_upsert', classification: 'mutation', wal: true },
+        { name: 'upsert_nodes', classification: 'mutation', wal: true },
         { name: 'memory_get_passages_by_ids', classification: 'read', wal: false },
         { name: 'memory_get_facts_by_ids', classification: 'read', wal: false },
         { name: 'memory_find_facts_by_entities', classification: 'read', wal: false },

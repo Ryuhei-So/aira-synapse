@@ -195,6 +195,7 @@ describe('TASK-MG-035: AsyncJobRunner and DefaultIndexingService', () => {
                 { name: 'memory_get_active_facts', classification: 'read', wal: false },
                 { name: 'memory_activate_facts_by_schema_ids', classification: 'mutation', wal: true },
                 { name: 'memory_upsert', classification: 'mutation', wal: true },
+                { name: 'upsert_nodes', classification: 'mutation', wal: true },
               ],
             };
           }

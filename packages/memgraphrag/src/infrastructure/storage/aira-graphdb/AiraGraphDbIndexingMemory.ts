@@ -55,6 +55,7 @@ const REQUIRED_METHODS = new Map([
   ['memory_get_active_facts', { classification: 'read', wal: false }],
   ['memory_activate_facts_by_schema_ids', { classification: 'mutation', wal: true }],
   ['memory_upsert', { classification: 'mutation', wal: true }],
+  ['upsert_nodes', { classification: 'mutation', wal: true }],
 ] as const);
 
 function isObject(value: unknown): value is JsonObject {

@@ -468,6 +468,7 @@ describe('indexing and provider behavioral boundaries', () => {
 
     await expect(harness.run()).resolves.toMatchObject({
       processedDocumentId: 'doc-boundary',
+      addedNodes: 5,
       memoryDeltaMutationCount: 1,
     });
 

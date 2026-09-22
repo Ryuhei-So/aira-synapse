@@ -29,6 +29,7 @@ function protocolInfo(overrides: Record<string, unknown> = {}): Record<string, u
       { name: 'memory_get_active_facts', classification: 'read', wal: false },
       { name: 'memory_activate_facts_by_schema_ids', classification: 'mutation', wal: true },
       { name: 'memory_upsert', classification: 'mutation', wal: true },
+      { name: 'upsert_nodes', classification: 'mutation', wal: true },
     ],
     ...overrides,
   };
@@ -318,6 +319,9 @@ describe('AiraGraphDbIndexingMemory strict bounded contract', () => {
           { name: 'memory_get_schemas_by_ids', classification: 'read', wal: false },
           { name: 'memory_get_schemas_by_ids', classification: 'read', wal: false },
         ],
+      }),
+      protocolInfo({
+        methods: protocolInfo().methods.filter((method) => method.name !== 'upsert_nodes'),
       }),
     ];
 

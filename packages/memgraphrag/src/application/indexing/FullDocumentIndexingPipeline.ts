@@ -270,13 +270,14 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
         );
       }
 
+      const addedNodeCount = graphPlan.nodes.length + (graphPlan.schemaNodeRefs?.length ?? 0);
       console.log(
-        `  [${document.title}] chunks=${records.length} schemas=${schemas.length} facts=${allFacts.length} nodes=${graphPlan.nodes.length} edges=${graphPlan.edges.length} conflicts=${conflictCount}`,
+        `  [${document.title}] chunks=${records.length} schemas=${schemas.length} facts=${allFacts.length} nodes=${addedNodeCount} edges=${graphPlan.edges.length} conflicts=${conflictCount}`,
       );
 
       return {
         processedDocumentId: document.documentId,
-        addedNodes: graphPlan.nodes.length,
+        addedNodes: addedNodeCount,
         addedEdges: graphPlan.edges.length,
         conflicts: conflictCount,
         memoryDeltaMutationCount: upsertResult?.mutationCount ?? 1,

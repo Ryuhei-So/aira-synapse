@@ -252,6 +252,59 @@ describe('document memory mutation plan', () => {
     )).toThrow('belongs to the wrong corpus');
   });
 
+  it('keeps canonical link-validation errors free of fact and passage IDs', () => {
+    const sourcePassage = passage('p0');
+    const facts = buildDocumentFacts(
+      CORPUS_ID,
+      DOCUMENT_ID,
+      [record(sourcePassage, candidate(0.9))],
+      [schema()],
+      TS,
+    );
+    const factWithSecretPassage = {
+      ...facts[0]!,
+      factId: 'fact-secret-payload',
+      passageIds: ['passage-secret-payload'],
+    };
+    const cases = [
+      {
+        secret: factWithSecretPassage.factId,
+        passages: [sourcePassage],
+        schemas: [],
+        facts: [factWithSecretPassage],
+      },
+      {
+        secret: factWithSecretPassage.factId,
+        passages: [],
+        schemas: [schema()],
+        facts: [factWithSecretPassage],
+      },
+      {
+        secret: factWithSecretPassage.factId,
+        passages: [sourcePassage],
+        schemas: [schema()],
+        facts: [{ ...factWithSecretPassage, corpusId: 'other-corpus' }],
+      },
+    ];
+    for (const testCase of cases) {
+      let error: unknown;
+      try {
+        buildCanonicalizationMemoryDelta(
+          CORPUS_ID,
+          testCase.schemas,
+          testCase.facts,
+          testCase.passages,
+          TS,
+        );
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error).toBeInstanceOf(Error);
+      expect(String(error)).not.toContain(testCase.secret);
+      expect(String(error)).not.toContain('passage-secret-payload');
+    }
+  });
+
   it('keeps same-document new aliases and fact links with a zero-frequency merge', () => {
     const sourcePassage = passage('p0');
     const facts = buildDocumentFacts(

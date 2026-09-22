@@ -68,6 +68,7 @@ const INVENTORY = [
   { name: 'memory_get_active_facts', classification: 'read', wal: false },
   { name: 'memory_activate_facts_by_schema_ids', classification: 'mutation', wal: true },
   { name: 'memory_upsert', classification: 'mutation', wal: true },
+  { name: 'upsert_nodes', classification: 'mutation', wal: true },
   { name: 'vector_search', classification: 'read', wal: false },
   { name: 'projection_get_transitions', classification: 'read', wal: false },
   { name: 'projection_get_node_count', classification: 'read', wal: false },
