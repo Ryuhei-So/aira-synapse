@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import Database from 'better-sqlite3';
 import type { GraphNode, IEmbeddingProvider, IGraphStore, IVectorIndex } from '../../../../src/domain/index.js';
+import { SCHEMA_CANONICALIZATION_CONTRACT } from '../../../../src/domain/storage/schemaCanonicalization.js';
 import { SQLiteGraphStore } from '../../../../src/infrastructure/storage/SQLiteGraphStore.js';
 import { runMigrations } from '../../../../src/infrastructure/storage/migrate.js';
 import { createNotImplementedStub } from '../../../setup/testDoubles.js';
@@ -11,6 +12,7 @@ import {
   buildVectorRecordsFromInputs,
   persistGraphProjection,
   planCanonicalGraphProjection,
+  planCanonicalGraphHydrationRequests,
   upsertVectors,
 } from '../../../../src/application/indexing/StageIVGraphProjector.js';
 import { DeleteDocumentService } from '../../../../src/application/indexing/DeleteDocumentService.js';
@@ -224,8 +226,9 @@ describe('TASK-MG-033: StageIVGraphProjector', () => {
       [],
       'doc-current',
     );
+    const requests = planCanonicalGraphHydrationRequests(plan, SCHEMA_CANONICALIZATION_CONTRACT);
 
-    await persistGraphProjection(graph as unknown as IGraphStore, plan);
+    await persistGraphProjection(graph as unknown as IGraphStore, plan, requests);
     expect(graph.preflightSchemaHydration).not.toHaveBeenCalled();
     expect(graph.upsertNodesWithSchemaHydration).toHaveBeenCalledWith({
       nodes: [],
@@ -238,6 +241,139 @@ describe('TASK-MG-033: StageIVGraphProjector', () => {
       }],
     });
     expect(graph.upsertEdges).toHaveBeenCalledWith([]);
+  });
+
+  it('plans immutable ordered hydration requests for 65 schemas and sends ordinary nodes once', async () => {
+    const schemaViews = Array.from({ length: 65 }, (_, index) => ({
+      ...createSchema(`schema-${index + 1}`),
+      firstSourceDocumentId: 'doc-old',
+      contributionPresent: false,
+      isNew: false,
+      mergeToken: 'a'.repeat(64),
+    }));
+    const plan = planCanonicalGraphProjection(
+      [createFact('fact-1', 'schema-1')],
+      schemaViews,
+      [createPassage('passage-1')],
+      'doc-current',
+    );
+    const requests = planCanonicalGraphHydrationRequests(plan, SCHEMA_CANONICALIZATION_CONTRACT);
+    const originalFirstNodeLabel = plan.nodes[0]?.label;
+    if (plan.nodes[0]) Object.assign(plan.nodes[0], { label: 'mutated after planning' });
+
+    expect(requests.map((request) => request.schemaNodeRefs.length)).toEqual([32, 32, 1]);
+    expect(requests.flatMap((request) => request.schemaNodeRefs.map((marker) => marker.schemaId)))
+      .toEqual(schemaViews.map((schema) => schema.schemaId));
+    expect(requests[0]?.nodes).toHaveLength(plan.nodes.length);
+    expect(requests[1]?.nodes).toEqual([]);
+    expect(requests[2]?.nodes).toEqual([]);
+    expect(requests[0]?.nodes[0]?.label).toBe(originalFirstNodeLabel);
+    expect(Object.isFrozen(requests)).toBe(true);
+    expect(Object.isFrozen(requests[0])).toBe(true);
+    expect(Object.isFrozen(requests[0]?.nodes)).toBe(true);
+  });
+
+  it('plans 33 hydration markers as consecutive 32/1 requests', () => {
+    const schemaViews = Array.from({ length: 33 }, (_, index) => ({
+      ...createSchema(`schema-${index + 1}`),
+      firstSourceDocumentId: 'doc-old',
+      contributionPresent: false,
+      isNew: false,
+      mergeToken: 'a'.repeat(64),
+    }));
+    const plan = planCanonicalGraphProjection(
+      [createFact('fact-1', 'schema-1')],
+      schemaViews,
+      [createPassage('passage-1')],
+      'doc-current',
+    );
+    const requests = planCanonicalGraphHydrationRequests(plan, SCHEMA_CANONICALIZATION_CONTRACT);
+
+    expect(requests.map((request) => request.schemaNodeRefs.length)).toEqual([32, 1]);
+    expect(requests.flatMap((request) => request.schemaNodeRefs.map((marker) => marker.schemaId)))
+      .toEqual(schemaViews.map((schema) => schema.schemaId));
+    expect(requests[0]?.nodes.length).toBeGreaterThan(0);
+    expect(requests[1]?.nodes).toEqual([]);
+  });
+
+  it('rejects hydration marker aggregates above 4096 before returning a plan', () => {
+    const plan = planCanonicalGraphProjection(
+      [],
+      [{
+        ...createSchema('schema-1'),
+        firstSourceDocumentId: null,
+        contributionPresent: false,
+        isNew: true,
+      }],
+      [],
+      'doc-current',
+    );
+    const first = plan.schemaNodeRefs?.[0];
+    if (!first) throw new Error('test requires one schema marker');
+    const oversized = {
+      ...plan,
+      schemaNodeRefs: Array.from({ length: 4097 }, (_, index) => ({
+        ...first,
+        nodeId: `schema:schema-${index + 1}`,
+        schemaId: `schema-${index + 1}`,
+      })),
+    };
+
+    expect(() => planCanonicalGraphHydrationRequests(oversized, SCHEMA_CANONICALIZATION_CONTRACT))
+      .toThrow('canonical graph schema markers exceed the indexing bound');
+  });
+
+  it('rejects a duplicate schema marker crossing a hydration batch boundary', () => {
+    const plan = planCanonicalGraphProjection(
+      [],
+      [{
+        ...createSchema('schema-1'),
+        firstSourceDocumentId: null,
+        contributionPresent: false,
+        isNew: true,
+      }],
+      [],
+      'doc-current',
+    );
+    const first = plan.schemaNodeRefs?.[0];
+    if (!first) throw new Error('test requires one schema marker');
+    const markers = Array.from({ length: 32 }, (_, index) => ({
+      ...first,
+      nodeId: `schema:schema-${index + 1}`,
+      schemaId: `schema-${index + 1}`,
+    }));
+    const duplicate = { ...first, nodeId: 'schema:schema-1', schemaId: 'schema-1' };
+
+    expect(() => planCanonicalGraphHydrationRequests({
+      ...plan,
+      schemaNodeRefs: [...markers, duplicate],
+    }, SCHEMA_CANONICALIZATION_CONTRACT)).toThrow('canonical graph schema markers must be unique');
+  });
+
+  it('stops after a later hydration batch failure before edges', async () => {
+    const schemaViews = Array.from({ length: 65 }, (_, index) => ({
+      ...createSchema(`schema-${index + 1}`),
+      firstSourceDocumentId: 'doc-old',
+      contributionPresent: false,
+      isNew: false,
+      mergeToken: 'a'.repeat(64),
+    }));
+    const plan = planCanonicalGraphProjection([], schemaViews, [], 'doc-current');
+    const requests = planCanonicalGraphHydrationRequests(plan, SCHEMA_CANONICALIZATION_CONTRACT);
+    const hydratedNodes = vi.fn<IGraphStore['upsertNodes']>()
+      .mockResolvedValueOnce()
+      .mockRejectedValueOnce(new Error('hydration batch 2 failed'));
+    const graph = {
+      ...createNotImplementedStub<IGraphStore>('IGraphStore'),
+      preflightSchemaHydration: vi.fn(),
+      upsertNodesWithSchemaHydration: hydratedNodes,
+      upsertEdges: vi.fn<IGraphStore['upsertEdges']>().mockResolvedValue(),
+    };
+
+    await expect(persistGraphProjection(graph as unknown as IGraphStore, plan, requests))
+      .rejects.toThrow('hydration batch 2 failed');
+    expect(hydratedNodes).toHaveBeenCalledTimes(2);
+    expect(graph.upsertEdges).not.toHaveBeenCalled();
   });
 
   it('deletes a document and adjusts linked schema frequency', async () => {

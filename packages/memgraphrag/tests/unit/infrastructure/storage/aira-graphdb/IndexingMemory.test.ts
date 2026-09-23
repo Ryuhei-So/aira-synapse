@@ -1,13 +1,21 @@
+import { Buffer } from 'node:buffer';
+
 import { describe, expect, it, vi } from 'vitest';
 
 import type { Fact } from '../../../../../src/domain/memory/fact.js';
 import type { Passage } from '../../../../../src/domain/memory/passage.js';
 import type { Schema } from '../../../../../src/domain/memory/schema.js';
 import { INDEXING_MEMORY_CONTRACT } from '../../../../../src/domain/storage/indexingMemory.js';
-import { SCHEMA_CANONICALIZATION_CONTRACT } from '../../../../../src/domain/storage/schemaCanonicalization.js';
+import {
+  SCHEMA_CANONICALIZATION_CONTRACT,
+  type SchemaCanonicalizationMemoryDelta,
+  type SchemaCanonicalizationMergeCreate,
+  type SchemaCanonicalizationMergeExisting,
+} from '../../../../../src/domain/storage/schemaCanonicalization.js';
 import { SnapshotBackedIndexingMemory } from '../../../../../src/infrastructure/storage/SnapshotBackedIndexingMemory.js';
 import { AiraGraphDbIndexingMemory } from '../../../../../src/infrastructure/storage/aira-graphdb/AiraGraphDbIndexingMemory.js';
 import type { AiraGraphDbRpcClient } from '../../../../../src/infrastructure/storage/aira-graphdb/NativeClient.js';
+import { planSchemaCanonicalizationMemoryBatches } from '../../../../../src/infrastructure/storage/aira-graphdb/schemaCanonicalizationMemoryPlanner.js';
 import { planMutationChunks } from '../../../../../src/infrastructure/storage/indexingMemoryContract.js';
 
 const NOW = '2026-08-25T00:00:00.000Z';
@@ -139,6 +147,64 @@ function projection(schemaId = 's1'): Record<string, unknown> {
   };
 }
 
+function createIntent(schemaId: string): SchemaCanonicalizationMergeCreate {
+  return { mode: 'create', expectedAbsent: true, schema: schema(schemaId) };
+}
+
+function mergeIntent(
+  schemaId: string,
+  additionKind: 'aliases' | 'factIds' | undefined,
+  additionCount: number,
+): SchemaCanonicalizationMergeExisting {
+  return {
+    mode: 'merge',
+    schemaId,
+    expectedMergeToken: 'a'.repeat(64),
+    contributionDocumentId: 'd-current',
+    frequencyDelta: 1,
+    desiredState: 'pending',
+    stabilizationThreshold: 2,
+    updatedAt: NOW,
+    aliasAdditions: additionKind === 'aliases'
+      ? Array.from({ length: additionCount }, (_, index) => ({
+        label: `${schemaId}-alias-${index}`,
+        language: 'en',
+        source: 'llm',
+        confidence: 0.8,
+        isCanonical: false,
+      }))
+      : [],
+    factIdAdditions: additionKind === 'factIds'
+      ? Array.from({ length: additionCount }, (_, index) => `${schemaId}-fact-${index}`)
+      : [],
+  };
+}
+
+function maxLengthIds(prefix: string, count: number): string[] {
+  return Array.from({ length: count }, (_, index) => {
+    const suffix = String(index).padStart(4, '0');
+    return `${prefix}${suffix}${'x'.repeat(4096 - prefix.length - suffix.length)}`;
+  });
+}
+
+function encodedMemoryRequestBytes(params: SchemaCanonicalizationMemoryDelta): number {
+  return Buffer.byteLength(JSON.stringify({
+    id: Number.MAX_SAFE_INTEGER,
+    method: 'memory_upsert',
+    params,
+  }), 'utf8');
+}
+
+function createCanonicalDelta(schemaCount: number): SchemaCanonicalizationMemoryDelta {
+  return {
+    corpusId: 'c1',
+    passages: [passage('p1')],
+    facts: [fact('f1')],
+    schemaMerges: Array.from({ length: schemaCount }, (_, index) => createIntent(`s${index + 1}`)),
+    exportedAt: NOW,
+  };
+}
+
 describe('AiraGraphDbIndexingMemory strict bounded contract', () => {
   it('validates the versioned capability and uses only bounded indexing methods', async () => {
     const { client, request } = clientWith((method) => {
@@ -212,6 +278,199 @@ describe('AiraGraphDbIndexingMemory strict bounded contract', () => {
     expect(request.mock.calls[1]?.[1]).toMatchObject({ projection: 'canonicalization@1' });
     expect(request.mock.calls[2]?.[1]).toMatchObject({ schemaMerges: expect.any(Array) });
     expect(request.mock.calls[2]?.[1]).not.toHaveProperty('schemas');
+  });
+
+  it('plans and writes a 65-schema document as immutable 32/32/1 memory requests', async () => {
+    const delta = createCanonicalDelta(65);
+    let upsertCalls = 0;
+    const { client, request } = clientWith(async (method) => {
+      if (method !== 'memory_upsert') throw new Error(`unexpected ${method}`);
+      upsertCalls += 1;
+      if (upsertCalls === 1) {
+        const lateIntent = delta.schemaMerges[32];
+        if (lateIntent?.mode === 'create') Object.assign(lateIntent.schema, { schemaId: 'mutated-after-plan' });
+      }
+      return null;
+    });
+    const memory = await AiraGraphDbIndexingMemory.create(client);
+    memory.preflightSchemaCanonicalizationDelta(delta);
+    expect(request.mock.calls.filter(([method]) => method === 'memory_upsert')).toHaveLength(0);
+
+    await expect(memory.upsertSchemaCanonicalizationDelta(delta))
+      .resolves.toEqual({ mutationCount: 3 });
+
+    const batches = request.mock.calls
+      .filter(([method]) => method === 'memory_upsert')
+      .map(([, params]) => params as SchemaCanonicalizationMemoryDelta);
+    expect(batches.map((batch) => batch.schemaMerges.length)).toEqual([32, 32, 1]);
+    expect(batches.map((batch) => batch.passages.length)).toEqual([1, 0, 0]);
+    expect(batches.map((batch) => batch.facts.length)).toEqual([1, 0, 0]);
+    expect(batches.flatMap((batch) => batch.schemaMerges.map((intent) => (
+      intent.mode === 'create' ? intent.schema.schemaId : intent.schemaId
+    )))).toEqual(Array.from({ length: 65 }, (_, index) => `s${index + 1}`));
+    expect(Object.isFrozen(batches[0])).toBe(true);
+    expect(Object.isFrozen(batches[0]?.schemaMerges)).toBe(true);
+  });
+
+  it('splits exactly 33 schema merges into ordered 32/1 requests', async () => {
+    const { client, request } = clientWith((method) => {
+      if (method !== 'memory_upsert') throw new Error(`unexpected ${method}`);
+      return null;
+    });
+    const memory = await AiraGraphDbIndexingMemory.create(client);
+
+    await expect(memory.upsertSchemaCanonicalizationDelta(createCanonicalDelta(33)))
+      .resolves.toEqual({ mutationCount: 2 });
+
+    const batches = request.mock.calls
+      .filter(([method]) => method === 'memory_upsert')
+      .map(([, params]) => params as SchemaCanonicalizationMemoryDelta);
+    expect(batches.map((batch) => batch.schemaMerges.length)).toEqual([32, 1]);
+    expect(batches.map((batch) => batch.passages.length)).toEqual([1, 0]);
+    expect(batches.map((batch) => batch.facts.length)).toEqual([1, 0]);
+  });
+
+  it('rejects an aggregate 4097-schema memory plan before exposing chunks', () => {
+    expect(() => planSchemaCanonicalizationMemoryBatches(
+      createCanonicalDelta(INDEXING_MEMORY_CONTRACT.maxSchemaIds + 1),
+      SCHEMA_CANONICALIZATION_CONTRACT,
+    )).toThrow('schemaMerges exceed the document schema bound');
+  });
+
+  it.each([
+    ['create', createIntent('s1')],
+    ['merge', mergeIntent('s1', undefined, 0)],
+  ] as const)('rejects a cross-batch duplicate schema ID in the final %s intent', (_mode, duplicate) => {
+    const base = createCanonicalDelta(32);
+    const delta: SchemaCanonicalizationMemoryDelta = {
+      ...base,
+      schemaMerges: [...base.schemaMerges, duplicate],
+    };
+
+    expect(() => planSchemaCanonicalizationMemoryBatches(delta, SCHEMA_CANONICALIZATION_CONTRACT))
+      .toThrow('schemaMerges must not contain duplicate schemaId values');
+  });
+
+  it.each(['aliases', 'factIds'] as const)(
+    'splits aggregate %s additions at the negotiated per-request bound',
+    async (additionKind) => {
+      const { client, request } = clientWith((method) => {
+        if (method !== 'memory_upsert') throw new Error(`unexpected ${method}`);
+        return null;
+      });
+      const memory = await AiraGraphDbIndexingMemory.create(client);
+      const delta: SchemaCanonicalizationMemoryDelta = {
+        corpusId: 'c1',
+        passages: [],
+        facts: [],
+        schemaMerges: [
+          mergeIntent('s1', additionKind, 3000),
+          mergeIntent('s2', additionKind, 3000),
+        ],
+        exportedAt: NOW,
+      };
+
+      await expect(memory.upsertSchemaCanonicalizationDelta(delta))
+        .resolves.toEqual({ mutationCount: 2 });
+
+      const batches = request.mock.calls
+        .filter(([method]) => method === 'memory_upsert')
+        .map(([, params]) => params as SchemaCanonicalizationMemoryDelta);
+      expect(batches.map((batch) => batch.schemaMerges.length)).toEqual([1, 1]);
+      const additionCounts = batches.map((batch) => {
+        const intent = batch.schemaMerges[0];
+        return intent?.mode === 'merge'
+          ? additionKind === 'aliases'
+            ? intent.aliasAdditions.length
+            : intent.factIdAdditions.length
+          : -1;
+      });
+      expect(additionCounts).toEqual([3000, 3000]);
+    },
+  );
+
+  it('splits just over 64 MiB of schema payload into two individually bounded requests', () => {
+    const count = 4074;
+    const firstSchema: Schema = {
+      ...schema('s1'),
+      aliases: maxLengthIds('alias-', count).map((label, index) => ({
+        label,
+        language: 'en',
+        source: 'manual',
+        confidence: 0.8,
+        isCanonical: index === 0,
+      })),
+      factIds: maxLengthIds('fact-a-', count),
+      sourceDocumentIds: maxLengthIds('document-a-', count),
+    };
+    const secondSchema: Schema = {
+      ...schema('s2'),
+      factIds: maxLengthIds('fact-b-', count),
+    };
+    const source = createCanonicalDelta(0);
+    const delta: SchemaCanonicalizationMemoryDelta = {
+      ...source,
+      schemaMerges: [
+        { mode: 'create', expectedAbsent: true, schema: firstSchema },
+        { mode: 'create', expectedAbsent: true, schema: secondSchema },
+      ],
+    };
+    const firstOnly: SchemaCanonicalizationMemoryDelta = {
+      ...delta,
+      schemaMerges: [delta.schemaMerges[0]!],
+    };
+    const secondOnly: SchemaCanonicalizationMemoryDelta = {
+      ...delta,
+      passages: [],
+      facts: [],
+      schemaMerges: [delta.schemaMerges[1]!],
+    };
+
+    const firstBytes = encodedMemoryRequestBytes(firstOnly);
+    const secondBytes = encodedMemoryRequestBytes(secondOnly);
+    const combinedBytes = encodedMemoryRequestBytes(delta);
+    expect(firstBytes).toBeLessThan(INDEXING_MEMORY_CONTRACT.maxRequestBytes);
+    expect(secondBytes).toBeLessThan(INDEXING_MEMORY_CONTRACT.maxRequestBytes);
+    expect(combinedBytes).toBeGreaterThan(INDEXING_MEMORY_CONTRACT.maxRequestBytes);
+    expect(combinedBytes).toBeLessThan(65 * 1024 * 1024);
+
+    const planned = planSchemaCanonicalizationMemoryBatches(delta, SCHEMA_CANONICALIZATION_CONTRACT);
+    const plannedBytes = planned.map(encodedMemoryRequestBytes);
+    expect(planned).toHaveLength(2);
+    expect(planned.map((batch) => batch.schemaMerges.length)).toEqual([1, 1]);
+    expect(plannedBytes.every((bytes) => bytes <= INDEXING_MEMORY_CONTRACT.maxRequestBytes)).toBe(true);
+  }, 30_000);
+
+  it('rejects a malformed later merge before sending any memory batch', async () => {
+    const valid = createCanonicalDelta(33);
+    const malformed = createIntent('') as unknown as SchemaCanonicalizationMergeCreate;
+    const delta: SchemaCanonicalizationMemoryDelta = {
+      ...valid,
+      schemaMerges: [...valid.schemaMerges.slice(0, 32), malformed],
+    };
+    const { client, request } = clientWith((method) => {
+      if (method === 'memory_upsert') return null;
+      throw new Error(`unexpected ${method}`);
+    });
+    const memory = await AiraGraphDbIndexingMemory.create(client);
+
+    await expect(memory.upsertSchemaCanonicalizationDelta(delta)).rejects.toThrow();
+    expect(request.mock.calls.filter(([method]) => method === 'memory_upsert')).toHaveLength(0);
+  });
+
+  it('stops after a later memory batch fails without inline retry', async () => {
+    let upsertCalls = 0;
+    const { client, request } = clientWith((method) => {
+      if (method !== 'memory_upsert') throw new Error(`unexpected ${method}`);
+      upsertCalls += 1;
+      if (upsertCalls === 2) throw new Error('batch 2 failed');
+      return null;
+    });
+    const memory = await AiraGraphDbIndexingMemory.create(client);
+
+    await expect(memory.upsertSchemaCanonicalizationDelta(createCanonicalDelta(65)))
+      .rejects.toThrow('batch 2 failed');
+    expect(request.mock.calls.filter(([method]) => method === 'memory_upsert')).toHaveLength(2);
   });
 
   it('rejects a partial canonical capability at protocol startup', async () => {

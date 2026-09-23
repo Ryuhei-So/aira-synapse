@@ -7,9 +7,12 @@ import type {
   VectorRecord,
 } from '../../domain/storage/index.js';
 import type {
+  SchemaCanonicalizationCapability,
   ISchemaHydratingGraphStore,
   SchemaNodeReference,
+  SchemaHydrationWireParams,
 } from '../../domain/storage/schemaCanonicalization.js';
+import { INDEXING_MEMORY_CONTRACT } from '../../domain/storage/indexingMemory.js';
 import type { Fact } from '../../domain/memory/fact.js';
 import type { Passage } from '../../domain/memory/passage.js';
 import type { Schema } from '../../domain/memory/schema.js';
@@ -228,6 +231,67 @@ export function planCanonicalGraphProjection(
   };
 }
 
+function freezeTree<T>(value: T): T {
+  if (typeof value !== 'object' || value === null || Object.isFrozen(value)) return value;
+  Object.freeze(value);
+  for (const child of Object.values(value as Record<string, unknown>)) freezeTree(child);
+  return value;
+}
+
+function immutableGraphNodes(nodes: readonly GraphNode[]): readonly GraphNode[] {
+  const snapshot = JSON.parse(JSON.stringify(nodes)) as GraphNode[];
+  return freezeTree(snapshot);
+}
+
+function immutableSchemaNodeRefs(refs: readonly SchemaNodeReference[]): readonly SchemaNodeReference[] {
+  const snapshot = JSON.parse(JSON.stringify(refs)) as SchemaNodeReference[];
+  return freezeTree(snapshot);
+}
+
+/**
+ * Prepare stable native hydration requests before the document's mutation
+ * boundary. The first request carries ordinary graph nodes; later requests
+ * carry only their consecutive schema marker slice.
+ */
+export function planCanonicalGraphHydrationRequests(
+  graphPlan: GraphProjectionPlan,
+  capability: SchemaCanonicalizationCapability,
+): readonly SchemaHydrationWireParams[] {
+  const schemaNodeRefs = graphPlan.schemaNodeRefs;
+  if (!schemaNodeRefs || schemaNodeRefs.length === 0) {
+    throw new Error('canonical graph hydration requires schema markers');
+  }
+  if (schemaNodeRefs.length > INDEXING_MEMORY_CONTRACT.maxSchemaIds) {
+    throw new Error('canonical graph schema markers exceed the indexing bound');
+  }
+  const maxGraphHydrations = capability.maxGraphHydrations;
+  if (!Number.isSafeInteger(maxGraphHydrations) || maxGraphHydrations <= 0) {
+    throw new Error('schema graph hydration bound is invalid');
+  }
+
+  const seenSchemaIds = new Set<string>();
+  for (const marker of schemaNodeRefs) {
+    if (seenSchemaIds.has(marker.schemaId)) {
+      throw new Error('canonical graph schema markers must be unique');
+    }
+    seenSchemaIds.add(marker.schemaId);
+  }
+
+  const requests: SchemaHydrationWireParams[] = [];
+  const nodes = immutableGraphNodes(graphPlan.nodes);
+  for (let offset = 0; offset < schemaNodeRefs.length; offset += maxGraphHydrations) {
+    const markerBatch = immutableSchemaNodeRefs(
+      schemaNodeRefs.slice(offset, offset + maxGraphHydrations),
+    );
+    requests.push(freezeTree({
+      nodes: offset === 0 ? nodes : Object.freeze([]),
+      schemaRefHydration: 'memory-schema@1',
+      schemaNodeRefs: markerBatch,
+    }));
+  }
+  return Object.freeze(requests);
+}
+
 export function assertSchemaHydrationGraphStore(
   graphStore: IGraphStore,
 ): asserts graphStore is IGraphStore & ISchemaHydratingGraphStore {
@@ -241,14 +305,16 @@ export function assertSchemaHydrationGraphStore(
 export async function persistGraphProjection(
   graphStore: IGraphStore,
   plan: GraphProjectionPlan,
+  hydrationRequests?: readonly SchemaHydrationWireParams[],
 ): Promise<void> {
   if (plan.schemaNodeRefs !== undefined) {
     assertSchemaHydrationGraphStore(graphStore);
-    await graphStore.upsertNodesWithSchemaHydration({
-      nodes: plan.nodes,
-      schemaRefHydration: 'memory-schema@1',
-      schemaNodeRefs: plan.schemaNodeRefs,
-    });
+    if (!hydrationRequests || hydrationRequests.length === 0) {
+      throw new Error('prepared schema hydration requests are required');
+    }
+    for (const request of hydrationRequests) {
+      await graphStore.upsertNodesWithSchemaHydration(request);
+    }
   } else {
     await graphStore.upsertNodes(plan.nodes);
   }

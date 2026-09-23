@@ -22,6 +22,20 @@ function extractionResponse(relation = 'authors'): string {
   });
 }
 
+function extractionResponseWithRelations(count: number): string {
+  return JSON.stringify({
+    entities: [{ name: 'Alice', type: 'Person' }, { name: 'Paper A', type: 'Paper' }],
+    relations: Array.from({ length: count }, (_, index) => ({
+      head: 'Alice',
+      headType: 'Person',
+      relation: `authored ${index + 1}`,
+      tail: 'Paper A',
+      tailType: 'Paper',
+      confidence: 0.9,
+    })),
+  });
+}
+
 function provider(text: string | readonly string[]): ILLMProvider {
   const responses = typeof text === 'string' ? [text] : [...text];
   let index = 0;
@@ -42,6 +56,7 @@ function mutationBoundaryHarness(
     readonly storedFrequency?: number;
     readonly storedState?: 'pending' | 'stable';
     readonly trapStageVAccess?: boolean;
+    readonly enableConflictResolution?: boolean;
   } = {},
 ) {
   const mutationTrace: string[] = [];
@@ -108,6 +123,7 @@ function mutationBoundaryHarness(
       healthCheck: vi.fn(),
     } as never,
     enableDictionaryIndexing: false,
+    enableConflictResolution: options.enableConflictResolution,
   };
   if (options.trapStageVAccess) {
     Object.setPrototypeOf(pipelineOptions, Object.create(Object.prototype, {
@@ -132,6 +148,48 @@ function mutationBoundaryHarness(
     dictionaryRead,
     dictionaryFactoryRead,
   };
+}
+
+function configureCanonicalBoundary(
+  harness: ReturnType<typeof mutationBoundaryHarness>,
+  options: {
+    readonly readProjection?: (request: { readonly schemaIds: readonly string[] }) => readonly unknown[] | Promise<readonly unknown[]>;
+    readonly preflightMemory?: (delta: unknown) => void;
+    readonly canonicalUpsert?: (delta: unknown) => unknown | Promise<unknown>;
+    readonly preflightGraph?: (request: unknown) => void;
+    readonly hydrateGraph?: (request: unknown) => void | Promise<void>;
+  } = {},
+) {
+  const memory = harness.indexingMemory as unknown as Record<string, unknown>;
+  memory.schemaCanonicalizationCapability = SCHEMA_CANONICALIZATION_CONTRACT;
+  const projectionRead = vi.fn(async (request: { readonly schemaIds: readonly string[] }) => {
+    harness.mutationTrace.push(`projection:${request.schemaIds.length}`);
+    return options.readProjection ? options.readProjection(request) : [];
+  });
+  const preflightMemory = vi.fn((delta: unknown) => {
+    harness.mutationTrace.push('memory_preflight');
+    options.preflightMemory?.(delta);
+  });
+  const canonicalUpsert = vi.fn(async (delta: unknown) => {
+    harness.mutationTrace.push('canonical_memory');
+    return options.canonicalUpsert ? options.canonicalUpsert(delta) : { mutationCount: 3 };
+  });
+  memory.getSchemaCanonicalizationProjection = projectionRead;
+  memory.preflightSchemaCanonicalizationDelta = preflightMemory;
+  memory.upsertSchemaCanonicalizationDelta = canonicalUpsert;
+
+  const graph = harness.graphStore as unknown as Record<string, unknown>;
+  const preflightHydration = vi.fn((request: unknown) => {
+    harness.mutationTrace.push('graph_preflight');
+    options.preflightGraph?.(request);
+  });
+  const hydratedGraphNodes = vi.fn(async (request: unknown) => {
+    harness.mutationTrace.push('graph_nodes');
+    await options.hydrateGraph?.(request);
+  });
+  graph.preflightSchemaHydration = preflightHydration;
+  graph.upsertNodesWithSchemaHydration = hydratedGraphNodes;
+  return { projectionRead, preflightMemory, canonicalUpsert, preflightHydration, hydratedGraphNodes };
 }
 
 describe('indexing and provider behavioral boundaries', () => {
@@ -502,6 +560,171 @@ describe('indexing and provider behavioral boundaries', () => {
     ]));
     expect(harness.graphStore.upsertNodes).not.toHaveBeenCalled();
     harness.db.close();
+  });
+
+  it('preflights and persists the same ordered hydration plan before canonical memory mutation', async () => {
+    const harness = mutationBoundaryHarness(
+      provider(extractionResponseWithRelations(65)),
+      'authors',
+      { enableConflictResolution: false },
+    );
+    const preflightRequests: unknown[] = [];
+    const persistedRequests: unknown[] = [];
+    const configured = configureCanonicalBoundary(harness, {
+      preflightGraph: (request) => preflightRequests.push(request),
+      hydrateGraph: (request) => persistedRequests.push(request),
+    });
+    harness.embeddingProvider.embed.mockImplementation(async ({ texts }: { readonly texts: readonly string[] }) => {
+      harness.mutationTrace.push('embed');
+      return { vectors: texts.map(() => [1]), model: 'test', cached: false };
+    });
+
+    try {
+      await expect(harness.run()).resolves.toMatchObject({
+        processedDocumentId: 'doc-boundary',
+        memoryDeltaMutationCount: 3,
+      });
+
+      expect(configured.projectionRead.mock.calls.map(([request]) => request.schemaIds.length))
+        .toEqual([32, 32, 1]);
+      expect(configured.preflightMemory).toHaveBeenCalledOnce();
+      expect(configured.canonicalUpsert).toHaveBeenCalledOnce();
+      expect(configured.preflightMemory.mock.calls[0]?.[0])
+        .toBe(configured.canonicalUpsert.mock.calls[0]?.[0]);
+      expect(preflightRequests).toHaveLength(3);
+      expect(persistedRequests).toHaveLength(3);
+      expect(persistedRequests[0]).toBe(preflightRequests[0]);
+      expect(persistedRequests[1]).toBe(preflightRequests[1]);
+      expect(persistedRequests[2]).toBe(preflightRequests[2]);
+      const requests = preflightRequests as readonly {
+        readonly nodes: readonly unknown[];
+        readonly schemaNodeRefs: readonly { readonly schemaId: string }[];
+      }[];
+      expect(requests.map((request) => request.schemaNodeRefs.length)).toEqual([32, 32, 1]);
+      expect(requests[0]?.nodes.length).toBeGreaterThan(0);
+      expect(requests[1]?.nodes).toEqual([]);
+      expect(requests[2]?.nodes).toEqual([]);
+      const lastPreflight = harness.mutationTrace.lastIndexOf('graph_preflight');
+      expect(lastPreflight).toBeGreaterThanOrEqual(0);
+      expect(lastPreflight).toBeLessThan(harness.mutationTrace.indexOf('embed'));
+      expect(harness.mutationTrace.indexOf('embed'))
+        .toBeLessThan(harness.mutationTrace.indexOf('canonical_memory'));
+      expect(harness.graphStore.upsertEdges).toHaveBeenCalledOnce();
+      expect(harness.vectorIndex.upsert).toHaveBeenCalledOnce();
+    } finally {
+      harness.db.close();
+    }
+  });
+
+  it('stops before provider or mutation work when the final projection batch is rejected', async () => {
+    const harness = mutationBoundaryHarness(
+      provider(extractionResponseWithRelations(65)),
+      'authors',
+      { enableConflictResolution: false },
+    );
+    let projectionCalls = 0;
+    const projectionError = new Error('final projection batch rejected');
+    const configured = configureCanonicalBoundary(harness, {
+      readProjection: () => {
+        projectionCalls += 1;
+        if (projectionCalls === 3) throw projectionError;
+        return [];
+      },
+    });
+
+    try {
+      await expect(harness.run()).rejects.toBe(projectionError);
+      expect(configured.projectionRead.mock.calls.map(([request]) => request.schemaIds.length))
+        .toEqual([32, 32, 1]);
+      expect(harness.embeddingProvider.embed).not.toHaveBeenCalled();
+      expect(configured.preflightMemory).not.toHaveBeenCalled();
+      expect(configured.canonicalUpsert).not.toHaveBeenCalled();
+      expect(configured.preflightHydration).not.toHaveBeenCalled();
+      expect(configured.hydratedGraphNodes).not.toHaveBeenCalled();
+      expect(harness.graphStore.upsertEdges).not.toHaveBeenCalled();
+      expect(harness.vectorIndex.upsert).not.toHaveBeenCalled();
+    } finally {
+      harness.db.close();
+    }
+  });
+
+  it('rejects a final hydration preflight before embeddings and the first mutation', async () => {
+    const harness = mutationBoundaryHarness(
+      provider(extractionResponseWithRelations(65)),
+      'authors',
+      { enableConflictResolution: false },
+    );
+    let preflightCalls = 0;
+    const hydrationError = new Error('final hydration preflight rejected');
+    const configured = configureCanonicalBoundary(harness, {
+      preflightGraph: () => {
+        preflightCalls += 1;
+        if (preflightCalls === 3) throw hydrationError;
+      },
+    });
+
+    try {
+      await expect(harness.run()).rejects.toBe(hydrationError);
+      expect(configured.projectionRead.mock.calls.map(([request]) => request.schemaIds.length))
+        .toEqual([32, 32, 1]);
+      expect(configured.preflightMemory).toHaveBeenCalledOnce();
+      expect(configured.preflightHydration).toHaveBeenCalledTimes(3);
+      expect(harness.embeddingProvider.embed).not.toHaveBeenCalled();
+      expect(configured.canonicalUpsert).not.toHaveBeenCalled();
+      expect(configured.hydratedGraphNodes).not.toHaveBeenCalled();
+      expect(harness.graphStore.upsertEdges).not.toHaveBeenCalled();
+      expect(harness.vectorIndex.upsert).not.toHaveBeenCalled();
+    } finally {
+      harness.db.close();
+    }
+  });
+
+  it('stops graph and vector persistence when a later canonical memory batch fails', async () => {
+    const harness = mutationBoundaryHarness(
+      provider(extractionResponseWithRelations(65)),
+      'authors',
+      { enableConflictResolution: false },
+    );
+    const configured = configureCanonicalBoundary(harness, {
+      canonicalUpsert: () => { throw new Error('memory batch 2 failed'); },
+    });
+
+    try {
+      await expect(harness.run()).rejects.toBeInstanceOf(DocumentMutationError);
+      expect(configured.preflightHydration).toHaveBeenCalledTimes(3);
+      expect(configured.canonicalUpsert).toHaveBeenCalledOnce();
+      expect(configured.hydratedGraphNodes).not.toHaveBeenCalled();
+      expect(harness.graphStore.upsertEdges).not.toHaveBeenCalled();
+      expect(harness.vectorIndex.upsert).not.toHaveBeenCalled();
+    } finally {
+      harness.db.close();
+    }
+  });
+
+  it('stops before graph edges and vectors when a later hydration batch fails', async () => {
+    const harness = mutationBoundaryHarness(
+      provider(extractionResponseWithRelations(65)),
+      'authors',
+      { enableConflictResolution: false },
+    );
+    let hydrationCalls = 0;
+    const configured = configureCanonicalBoundary(harness, {
+      hydrateGraph: () => {
+        hydrationCalls += 1;
+        if (hydrationCalls === 2) throw new Error('hydration batch 2 failed');
+      },
+    });
+
+    try {
+      await expect(harness.run()).rejects.toBeInstanceOf(DocumentMutationError);
+      expect(configured.preflightHydration).toHaveBeenCalledTimes(3);
+      expect(configured.canonicalUpsert).toHaveBeenCalledOnce();
+      expect(configured.hydratedGraphNodes).toHaveBeenCalledTimes(2);
+      expect(harness.graphStore.upsertEdges).not.toHaveBeenCalled();
+      expect(harness.vectorIndex.upsert).not.toHaveBeenCalled();
+    } finally {
+      harness.db.close();
+    }
   });
 
   it.each([
