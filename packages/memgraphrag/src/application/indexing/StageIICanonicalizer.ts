@@ -3,6 +3,7 @@ import { computeCanonicalKey, type Schema } from '../../domain/memory/schema.js'
 import type { SchemaState } from '../../domain/memory/types.js';
 import type { MemorySnapshot } from '../../domain/memory/globalMemory.js';
 import {
+  INDEXING_MEMORY_CONTRACT,
   type IIndexingMemory,
   type ISchemaCanonicalizationMemory,
   type SchemaCanonicalizationMergeExisting,
@@ -268,12 +269,31 @@ export class StageIICanonicalizer {
     const memory = requireCanonicalMemory(this.indexingMemory);
     const groups = groupCandidateSchemas(schemas);
     const schemaIds = groups.map((group) => group.schema.schemaId);
-    const projections = await memory.getSchemaCanonicalizationProjection({
-      corpusId: this.corpusId,
-      schemaIds,
-      projection: 'canonicalization@1',
-      contributionDocumentId,
-    });
+    if (schemaIds.length !== new Set(schemaIds).size) {
+      throw new Error('canonical schema IDs must be unique');
+    }
+    if (schemaIds.length > INDEXING_MEMORY_CONTRACT.maxSchemaIds) {
+      throw new Error('canonical schema count exceeds the indexing bound');
+    }
+    const capability = memory.schemaCanonicalizationCapability;
+    if (!capability) {
+      throw new Error('schema canonicalization projection capability is unavailable');
+    }
+    const maxProjectedSchemas = capability.maxProjectedSchemas;
+    if (!Number.isSafeInteger(maxProjectedSchemas) || maxProjectedSchemas <= 0) {
+      throw new Error('schema canonicalization projection bound is invalid');
+    }
+    const projections: SchemaCanonicalizationProjection[] = [];
+    for (let offset = 0; offset < schemaIds.length; offset += maxProjectedSchemas) {
+      const batchSchemaIds = schemaIds.slice(offset, offset + maxProjectedSchemas);
+      const batchProjections = await memory.getSchemaCanonicalizationProjection({
+        corpusId: this.corpusId,
+        schemaIds: batchSchemaIds,
+        projection: capability.projection,
+        contributionDocumentId,
+      });
+      projections.push(...batchProjections);
+    }
     const bySchemaId = new Map(projections.map((projection) => [projection.schemaId, projection]));
     const schemaViews: PreparedSchemaView[] = [];
     const mergeIntents: SchemaMergeIntent[] = [];

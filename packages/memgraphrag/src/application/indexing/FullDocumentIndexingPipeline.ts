@@ -18,6 +18,7 @@ import {
   persistGraphProjection,
   persistVectorRecords,
   planCanonicalGraphProjection,
+  planCanonicalGraphHydrationRequests,
   planGraphProjection,
 } from './StageIVGraphProjector.js';
 import { SymbolicCanonicalizer } from './SymbolicCanonicalizer.js';
@@ -32,6 +33,7 @@ import {
   type IVectorIndex,
 } from '../../domain/storage/index.js';
 import type { ISchemaCanonicalizationMemory } from '../../domain/storage/schemaCanonicalization.js';
+import type { SchemaHydrationWireParams } from '../../domain/storage/schemaCanonicalization.js';
 import type { Fact } from '../../domain/memory/fact.js';
 import type { ITermDictionary } from '../../domain/dictionary/termDictionary.js';
 import { LLMExtractionAgent } from './LLMExtractionAgent.js';
@@ -41,6 +43,13 @@ import {
   buildDocumentFacts,
   buildDocumentMemoryDelta,
 } from './DocumentMemoryPlan.js';
+
+function freezeTree<T>(value: T): T {
+  if (typeof value !== 'object' || value === null || Object.isFrozen(value)) return value;
+  Object.freeze(value);
+  for (const child of Object.values(value as Record<string, unknown>)) freezeTree(child);
+  return value;
+}
 
 export interface FullPipelineOptions {
   readonly db: Database.Database;
@@ -173,16 +182,17 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
     let canonicalDelta: ReturnType<typeof buildCanonicalizationMemoryDelta> | undefined;
     let legacyDelta: ReturnType<typeof buildDocumentMemoryDelta> | undefined;
     let graphPlan;
+    let hydrationRequests: readonly SchemaHydrationWireParams[] | undefined;
     let vectorRecords;
     if (canonicalPreparation && canonicalMemory) {
-      canonicalDelta = buildCanonicalizationMemoryDelta(
+      canonicalDelta = freezeTree(buildCanonicalizationMemoryDelta(
         corpusId,
         canonicalPreparation.schemaViews,
         canonicalPreparation.mergeIntents,
         allFacts,
         passages,
         now,
-      );
+      ));
       delta = canonicalDelta;
       // Complete deterministic validation, including the graph marker shape,
       // before embedding or the first mutation.
@@ -200,12 +210,14 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
         document.documentId,
       );
       assertSchemaHydrationGraphStore(this.options.graphStore);
-      const hydrationParams = {
-        nodes: graphPlan.nodes,
-        schemaRefHydration: 'memory-schema@1',
-        schemaNodeRefs: graphPlan.schemaNodeRefs ?? [],
-      } as const;
-      this.options.graphStore.preflightSchemaHydration(hydrationParams);
+      const schemaCapability = canonicalMemory.schemaCanonicalizationCapability;
+      if (!schemaCapability) {
+        throw new Error('schema canonicalization capability is unavailable');
+      }
+      hydrationRequests = planCanonicalGraphHydrationRequests(graphPlan, schemaCapability);
+      for (const request of hydrationRequests) {
+        this.options.graphStore.preflightSchemaHydration(request);
+      }
       vectorRecords = await buildVectorRecordsFromInputs(
         this.options.embeddingProvider,
         graphPlan.vectorInputs ?? [],
@@ -243,7 +255,7 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
       const tMemSave = Date.now();
       // Stage IV persistence is write-only; graph derivation and embeddings
       // were completed before the mutation boundary above.
-      await persistGraphProjection(this.options.graphStore, graphPlan);
+      await persistGraphProjection(this.options.graphStore, graphPlan, hydrationRequests);
       await persistVectorRecords(this.options.vectorIndex, vectorRecords);
 
       // Stage V: Lexicon construction (dictionary + thesaurus from extracted facts)

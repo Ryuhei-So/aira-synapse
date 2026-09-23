@@ -8,9 +8,13 @@ import { createNotImplementedStub } from '../../../setup/testDoubles.js';
 import { StageIICanonicalizer } from '../../../../src/application/indexing/StageIICanonicalizer.js';
 import {
   SCHEMA_CANONICALIZATION_CONTRACT,
+  type ISchemaCanonicalizationMemory,
   type SchemaCanonicalizationProjection,
+  type SchemaCanonicalizationProjectionRequest,
 } from '../../../../src/domain/storage/schemaCanonicalization.js';
+import { computeCanonicalKey } from '../../../../src/domain/memory/schema.js';
 import type { IIndexingMemory } from '../../../../src/domain/storage/indexingMemory.js';
+import { validateSchemaCanonicalizationProjectionRequest } from '../../../../src/infrastructure/storage/schemaCanonicalizationContract.js';
 
 function createRecord(): CompositeExtractionRecord {
   return {
@@ -94,6 +98,22 @@ function candidateSchema(schemaId = 'schema:person::authors::paper', alias = 'au
   };
 }
 
+function candidateSchemas(count: number): ReturnType<typeof candidateSchema>[] {
+  return Array.from({ length: count }, (_, index) => {
+    const ordinal = index + 1;
+    const headType = `Person ${ordinal}`;
+    const relation = `authored ${ordinal}`;
+    const tailType = `Paper ${ordinal}`;
+    return {
+      ...candidateSchema(`schema:${ordinal}`, `alias-${ordinal}`),
+      headType,
+      relation,
+      tailType,
+      canonicalKey: computeCanonicalKey(headType, relation, tailType),
+    };
+  });
+}
+
 function projection(overrides: Partial<SchemaCanonicalizationProjection> = {}): SchemaCanonicalizationProjection {
   return {
     schemaId: 'schema:person::authors::paper',
@@ -112,7 +132,26 @@ function projection(overrides: Partial<SchemaCanonicalizationProjection> = {}): 
   };
 }
 
-function canonicalMemory(projections: readonly SchemaCanonicalizationProjection[]): IIndexingMemory {
+function projectionForCandidate(schema: ReturnType<typeof candidateSchema>): SchemaCanonicalizationProjection {
+  return projection({
+    schemaId: schema.schemaId,
+    corpusId: schema.corpusId,
+    headType: schema.headType,
+    relation: schema.relation,
+    tailType: schema.tailType,
+    canonicalKey: schema.canonicalKey,
+  });
+}
+
+function canonicalMemory(
+  projections: readonly SchemaCanonicalizationProjection[],
+): IIndexingMemory & ISchemaCanonicalizationMemory {
+  const getSchemaCanonicalizationProjection = vi.fn(async (request: SchemaCanonicalizationProjectionRequest) => {
+    validateSchemaCanonicalizationProjectionRequest(request, SCHEMA_CANONICALIZATION_CONTRACT);
+    const requestedIds = new Set(request.schemaIds);
+    return projections.filter((item) => requestedIds.has(item.schemaId));
+  });
+
   return {
     getSchemasByIds: vi.fn().mockResolvedValue([]),
     getActiveFacts: vi.fn().mockResolvedValue([]),
@@ -121,9 +160,9 @@ function canonicalMemory(projections: readonly SchemaCanonicalizationProjection[
     upsertDelta: vi.fn().mockResolvedValue({ mutationCount: 1 }),
     schemaCanonicalizationCapability: SCHEMA_CANONICALIZATION_CONTRACT,
     preflightSchemaCanonicalizationDelta: vi.fn(),
-    getSchemaCanonicalizationProjection: vi.fn().mockResolvedValue(projections),
+    getSchemaCanonicalizationProjection,
     upsertSchemaCanonicalizationDelta: vi.fn().mockResolvedValue({ mutationCount: 1 }),
-  } as IIndexingMemory;
+  } as IIndexingMemory & ISchemaCanonicalizationMemory;
 }
 
 describe('TASK-MG-031: StageIICanonicalizer', () => {
@@ -249,6 +288,88 @@ describe('TASK-MG-031: StageIICanonicalizer', () => {
         expect.objectContaining({ label: 'writes' }),
       ]),
     }]);
+  });
+
+  it('projects 33 unique schemas as consecutive capability-sized reads', async () => {
+    const schemas = candidateSchemas(33);
+    const ids = schemas.map((schema) => schema.schemaId);
+    const memory = canonicalMemory([]);
+    const stage = new StageIICanonicalizer('corpus-1', memory);
+    const outcome = await stage.prepareCanonicalSchemas(schemas, 'doc-1').then(
+      (prepared) => ({ ok: true as const, prepared }),
+      (error: unknown) => ({ ok: false as const, error }),
+    );
+    const calls = vi.mocked(memory.getSchemaCanonicalizationProjection).mock.calls
+      .map(([request]) => request.schemaIds);
+    const observedError = outcome.ok
+      ? null
+      : outcome.error instanceof Error ? outcome.error.message : String(outcome.error);
+
+    expect({
+      batchSizes: calls.map((schemaIds) => schemaIds.length),
+      error: observedError,
+    }).toEqual({ batchSizes: [32, 1], error: null });
+    expect(calls).toEqual([ids.slice(0, 32), ids.slice(32)]);
+    if (!outcome.ok) return;
+    expect(outcome.prepared.schemaViews.map((view) => view.schemaId)).toEqual(ids);
+    expect(outcome.prepared.mergeIntents.map((intent) => (
+      intent.mode === 'create' ? intent.schema.schemaId : intent.schemaId
+    ))).toEqual(ids);
+  });
+
+  it('keeps an exact 32-schema projection in one request', async () => {
+    const schemas = candidateSchemas(32);
+    const memory = canonicalMemory([]);
+    const stage = new StageIICanonicalizer('corpus-1', memory);
+
+    const prepared = await stage.prepareCanonicalSchemas(schemas, 'doc-1');
+
+    expect(vi.mocked(memory.getSchemaCanonicalizationProjection).mock.calls
+      .map(([request]) => request.schemaIds)).toEqual([schemas.map((schema) => schema.schemaId)]);
+    expect(prepared.schemaViews).toHaveLength(32);
+  });
+
+  it('projects 65 mixed existing and absent schemas as ordered 32/32/1 reads', async () => {
+    const schemas = candidateSchemas(65);
+    const ids = schemas.map((schema) => schema.schemaId);
+    const existingSchemas = schemas.filter((_, index) => index % 2 === 0);
+    const existingIds = existingSchemas.map((schema) => schema.schemaId);
+    const memory = canonicalMemory(existingSchemas.map(projectionForCandidate));
+    const stage = new StageIICanonicalizer('corpus-1', memory);
+    const outcome = await stage.prepareCanonicalSchemas(schemas, 'doc-1').then(
+      (prepared) => ({ ok: true as const, prepared }),
+      (error: unknown) => ({ ok: false as const, error }),
+    );
+    const calls = vi.mocked(memory.getSchemaCanonicalizationProjection).mock.calls
+      .map(([request]) => request.schemaIds);
+    const observedError = outcome.ok
+      ? null
+      : outcome.error instanceof Error ? outcome.error.message : String(outcome.error);
+
+    expect({
+      batchSizes: calls.map((schemaIds) => schemaIds.length),
+      error: observedError,
+    }).toEqual({ batchSizes: [32, 32, 1], error: null });
+    expect(calls).toEqual([ids.slice(0, 32), ids.slice(32, 64), ids.slice(64)]);
+    if (!outcome.ok) return;
+    expect(outcome.prepared.schemaViews.map((view) => view.schemaId)).toEqual(ids);
+    expect(outcome.prepared.mergeIntents.map((intent) => (
+      intent.mode === 'create' ? intent.schema.schemaId : intent.schemaId
+    ))).toEqual(ids);
+    expect(outcome.prepared.mergeIntents
+      .filter((intent) => intent.mode === 'merge')
+      .map((intent) => intent.mode === 'merge' ? intent.schemaId : ''))
+      .toEqual(existingIds);
+  });
+
+  it('rejects more than 4096 distinct schemas before the first projection RPC', async () => {
+    const schemas = candidateSchemas(4097);
+    const memory = canonicalMemory([]);
+    const stage = new StageIICanonicalizer('corpus-1', memory);
+
+    await expect(stage.prepareCanonicalSchemas(schemas, 'doc-1'))
+      .rejects.toThrow('canonical schema count exceeds the indexing bound');
+    expect(vi.mocked(memory.getSchemaCanonicalizationProjection)).not.toHaveBeenCalled();
   });
 
   it('keeps same-document changed content idempotent while unioning new aliases', async () => {

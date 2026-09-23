@@ -1,3 +1,5 @@
+import { Buffer } from 'node:buffer';
+
 import type { Passage } from '../../../domain/memory/passage.js';
 import type { IGraphProjection, ILexicalRetriever, TransitionEntry } from '../../../domain/retrieval/ppr.js';
 import type {
@@ -14,7 +16,7 @@ import type { MemorySnapshot } from '../../../domain/memory/globalMemory.js';
 import type { IGraphStore } from '../../../domain/storage/graphStore.js';
 import type { SchemaHydrationWireParams } from '../../../domain/storage/schemaCanonicalization.js';
 import { validateGraphUpsertWireParams } from '../schemaCanonicalizationContract.js';
-import type { AiraGraphDbNativeClient } from './NativeClient.js';
+import { AIRA_GRAPHDB_MAX_REQUEST_BYTES, type AiraGraphDbNativeClient } from './NativeClient.js';
 
 export class AiraGraphDbGraphStore implements IGraphStore {
   public constructor(private readonly client: AiraGraphDbNativeClient) {}
@@ -25,6 +27,14 @@ export class AiraGraphDbGraphStore implements IGraphStore {
 
   public preflightSchemaHydration(params: SchemaHydrationWireParams): void {
     validateGraphUpsertWireParams(params);
+    const encoded = Buffer.from(JSON.stringify({
+      id: Number.MAX_SAFE_INTEGER,
+      method: 'upsert_nodes',
+      params,
+    }), 'utf8');
+    if (encoded.byteLength > AIRA_GRAPHDB_MAX_REQUEST_BYTES) {
+      throw new Error(`upsert_nodes request exceeds ${AIRA_GRAPHDB_MAX_REQUEST_BYTES} bytes`);
+    }
   }
 
   public async upsertNodesWithSchemaHydration(params: SchemaHydrationWireParams): Promise<void> {

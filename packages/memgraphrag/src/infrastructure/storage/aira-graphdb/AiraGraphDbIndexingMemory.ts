@@ -25,10 +25,10 @@ import {
 } from '../indexingMemoryContract.js';
 import {
   validateSchemaCanonicalizationCapability,
-  validateSchemaCanonicalizationMemoryDelta,
   validateSchemaCanonicalizationProjectionRequest,
   validateSchemaCanonicalizationProjectionResponse,
 } from '../schemaCanonicalizationContract.js';
+import { planSchemaCanonicalizationMemoryBatches } from './schemaCanonicalizationMemoryPlanner.js';
 import type {
   AiraGraphDbRpcClient,
   NativeRequestLimits,
@@ -193,7 +193,7 @@ export class AiraGraphDbIndexingMemory implements IIndexingMemory, ISchemaCanoni
     delta: SchemaCanonicalizationMemoryDelta,
   ): void {
     const capability = this.requireSchemaCanonicalizationCapability();
-    validateSchemaCanonicalizationMemoryDelta(delta, capability);
+    planSchemaCanonicalizationMemoryBatches(delta, capability);
   }
 
   public async activateFactsBySchemaIds(request: ActivateFactsRequest): Promise<number> {
@@ -227,15 +227,18 @@ export class AiraGraphDbIndexingMemory implements IIndexingMemory, ISchemaCanoni
   public async upsertSchemaCanonicalizationDelta(
     delta: SchemaCanonicalizationMemoryDelta,
   ): Promise<{ readonly mutationCount: number }> {
-    this.preflightSchemaCanonicalizationDelta(delta);
-    const response = await this.client.request<unknown>(
-      'memory_upsert',
-      delta,
-      INDEXING_LIMITS,
-    );
-    if (response !== null) {
-      throw new Error('memory_upsert response must be null');
+    const capability = this.requireSchemaCanonicalizationCapability();
+    const batches = planSchemaCanonicalizationMemoryBatches(delta, capability);
+    for (const batch of batches) {
+      const response = await this.client.request<unknown>(
+        'memory_upsert',
+        batch,
+        INDEXING_LIMITS,
+      );
+      if (response !== null) {
+        throw new Error('memory_upsert response must be null');
+      }
     }
-    return { mutationCount: 1 };
+    return { mutationCount: batches.length };
   }
 }

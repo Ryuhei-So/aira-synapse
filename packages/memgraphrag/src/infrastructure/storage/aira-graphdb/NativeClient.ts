@@ -407,7 +407,8 @@ interface QueuedRequest {
   readonly reject: (reason?: unknown) => void;
 }
 
-const MAX_COMPATIBILITY_FRAME_BYTES = 512 * 1024 * 1024;
+export const AIRA_GRAPHDB_MAX_REQUEST_BYTES = 512 * 1024 * 1024;
+const MAX_COMPATIBILITY_FRAME_BYTES = AIRA_GRAPHDB_MAX_REQUEST_BYTES;
 const MAX_QUEUED_REQUESTS = 4096;
 const DEFAULT_LIMITS: NativeRequestLimits = {
   maxRequestBytes: MAX_COMPATIBILITY_FRAME_BYTES,
