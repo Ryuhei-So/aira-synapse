@@ -7,6 +7,7 @@ const state = vi.hoisted(() => ({
   }>,
   indexingCreate: vi.fn(),
   readerCreate: vi.fn(),
+  projectionDetect: vi.fn(),
   termination: Object.freeze({ kind: 'graceful_reaped' }) as Readonly<Record<string, unknown>>,
 }));
 
@@ -49,6 +50,10 @@ vi.mock('../../../../../src/infrastructure/storage/aira-graphdb/AiraGraphDbMemor
   AiraGraphDbMemoryReader: { create: state.readerCreate },
 }));
 
+vi.mock('../../../../../src/infrastructure/storage/aira-graphdb/AiraGraphDbProjectionRead.js', () => ({
+  detectProjectionRead: state.projectionDetect,
+}));
+
 vi.mock('../../../../../src/infrastructure/storage/aira-graphdb/AiraGraphDbAdapters.js', () => ({
   AiraGraphDbGraphStore: class {},
   AiraGraphDbVectorIndex: class {},
@@ -86,6 +91,8 @@ beforeEach(() => {
   state.indexingCreate.mockResolvedValue({ indexing: true });
   state.readerCreate.mockReset();
   state.readerCreate.mockResolvedValue({ reader: true });
+  state.projectionDetect.mockReset();
+  state.projectionDetect.mockResolvedValue(null);
   state.termination = frozenTermination({ kind: 'graceful_reaped' });
 });
 
@@ -172,6 +179,18 @@ describe.sequential('Aira GraphDB storage factory termination propagation', () =
 
     expect(thrown).toBe(primary);
     expect(state.indexingCreate).toHaveBeenCalledTimes(1);
+    expect(state.clients[0]!.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails closed with the exact projection-read contract error before any query (literature-hub #594)', async () => {
+    const primary = new Error('aira-graphdb advertises projection_get_transitions_page without protocol_info.limits.projectionRead');
+    state.projectionDetect.mockRejectedValueOnce(primary);
+
+    const thrown = await createAiraGraphDbAdapters({ dbPath: '/private/graphdb.agdb' })
+      .catch((error: unknown) => error);
+
+    expect(thrown).toBe(primary);
+    expect(state.readerCreate).toHaveBeenCalledTimes(1);
     expect(state.clients[0]!.close).toHaveBeenCalledTimes(1);
   });
 
