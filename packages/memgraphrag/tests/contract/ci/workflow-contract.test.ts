@@ -141,7 +141,7 @@ describe('TASK-MG-004: CI workflow contract', () => {
       const job = jobs[jobName]!;
       expect(job.env).toEqual(expect.objectContaining({
         AIRA_GRAPHDB_REPO_PATH: '${{ github.workspace }}/aira-graphdb',
-        AIRA_GRAPHDB_EXPECTED_SHA: 'a3419493b86a438c2edd266a620e5f64dd3537d5',
+        AIRA_GRAPHDB_EXPECTED_SHA: '416cb517a2ef0da3c61a5ec54581e29da1c7c59a',
         AIRA_GRAPHDB_NATIVE_CMD: 'node ${{ github.workspace }}/packages/memgraphrag/scripts/native-transaction-owner.test-fixture.mjs ${{ github.workspace }}/aira-graphdb/target/release/aira-graphdb-native',
       }));
       const graphDbCheckout = job.steps.find(
@@ -150,7 +150,7 @@ describe('TASK-MG-004: CI workflow contract', () => {
       );
       expect(graphDbCheckout).toBeDefined();
       expect(graphDbCheckout?.with).toEqual(expect.objectContaining({
-        ref: 'a3419493b86a438c2edd266a620e5f64dd3537d5',
+        ref: '416cb517a2ef0da3c61a5ec54581e29da1c7c59a',
         path: 'aira-graphdb',
       }));
       const nativeBuild = job.steps.find((step) => step.run?.includes('cargo build'));
