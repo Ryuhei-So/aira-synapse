@@ -94,6 +94,12 @@ export interface StorageConfig {
   readonly walMode: boolean;
   readonly autoMigrate: boolean;
   readonly neo4j?: Neo4jConfig;
+  /**
+   * aira-graphdb: keep ranking on a graph loaded less than this long ago
+   * after a store generation change instead of reloading it (YAML
+   * `projection_min_reload_interval_ms`, literature-hub #594). Default 0.
+   */
+  readonly projectionMinReloadIntervalMs?: number;
 }
 
 /** Security */
@@ -329,6 +335,17 @@ export function validateMemGraphRagConfig(
     assertString(storage, 'vectorIndexDir', 'storage', errors);
     assertBoolean(storage, 'walMode', 'storage', errors);
     assertBoolean(storage, 'autoMigrate', 'storage', errors);
+    if (storage['projectionMinReloadIntervalMs'] !== undefined) {
+      assertNumber(storage, 'projectionMinReloadIntervalMs', 'storage', errors, { min: 0 });
+      if (typeof storage['projectionMinReloadIntervalMs'] === 'number'
+        && !Number.isSafeInteger(storage['projectionMinReloadIntervalMs'])) {
+        errors.push({
+          path: 'storage.projectionMinReloadIntervalMs',
+          message: 'must be a safe integer',
+          actual: storage['projectionMinReloadIntervalMs'],
+        });
+      }
+    }
   }
 
   // Security

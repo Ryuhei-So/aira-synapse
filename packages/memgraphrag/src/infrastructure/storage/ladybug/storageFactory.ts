@@ -60,6 +60,8 @@ export interface Neo4jStorageOptions {
 export interface AiraGraphDbStorageOptions {
   readonly dbPath: string;
   readonly onTraffic?: AiraGraphDbTrafficObserver;
+  /** See CachedGraphProjectionOptions.minReloadIntervalMs; default 0. */
+  readonly projectionMinReloadIntervalMs?: number;
 }
 
 export interface StorageOptions {
@@ -274,6 +276,7 @@ export async function createAiraGraphDbAdapters(
   } = await import('../aira-graphdb/NativeClient.js');
   const { AiraGraphDbIndexingMemory } = await import('../aira-graphdb/AiraGraphDbIndexingMemory.js');
   const { AiraGraphDbMemoryReader } = await import('../aira-graphdb/AiraGraphDbMemoryReader.js');
+  const { detectProjectionRead } = await import('../aira-graphdb/AiraGraphDbProjectionRead.js');
   const {
     AiraGraphDbGraphStore,
     AiraGraphDbVectorIndex,
@@ -287,11 +290,15 @@ export async function createAiraGraphDbAdapters(
   const close = client.close.bind(client);
   let indexingMemory: IIndexingMemory;
   let memoryReader: IMemoryReader;
+  let projectionRead: Awaited<ReturnType<typeof detectProjectionRead>>;
   try {
     indexingMemory = await AiraGraphDbIndexingMemory.create(client);
     // Fail closed here, before any query, when the native lacks the
     // bounded memory reads; the query path has no memory_load fallback.
     memoryReader = await AiraGraphDbMemoryReader.create(client);
+    // Page the ranking graph when the native offers it (literature-hub #594);
+    // an advertised but malformed contract fails closed here.
+    projectionRead = await detectProjectionRead(client);
   } catch (error) {
     const closeSettlement = Promise.resolve().then(close);
     const [terminationResult] = await Promise.all([
@@ -316,11 +323,13 @@ export async function createAiraGraphDbAdapters(
   const vectorIndex = new AiraGraphDbVectorIndex(client);
   const memoryStore = new AiraGraphDbMemoryStore(client);
   // One full-corpus transition pull per process (and per observed store
-  // version), not per query: the aira-graphdb reply is the whole edge list.
-  const graphProjection = new CachedGraphProjection(new AiraGraphDbGraphProjection(client), {
+  // version), not per query: the result is the whole edge list, read in
+  // bounded pages when the native offers them.
+  const graphProjection = new CachedGraphProjection(new AiraGraphDbGraphProjection(client, projectionRead), {
     // Size is unbounded by design (it is the corpus graph); make growth
     // toward the host's heap visible in the process log.
     onEvent: (event) => { process.stderr.write(`${JSON.stringify(event)}\n`); },
+    minReloadIntervalMs: opts.projectionMinReloadIntervalMs,
   });
   const lexicalRetriever = new AiraGraphDbLexicalRetriever(client);
 

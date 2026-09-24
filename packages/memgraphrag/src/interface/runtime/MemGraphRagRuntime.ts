@@ -366,6 +366,9 @@ class RuntimeImpl implements MemGraphRagRuntime {
     if (graphDbRuntime) {
       const storageAdapters: StorageAdapters = await createAiraGraphDbAdapters({
         dbPath: `${sqlitePath}.aira-graphdb.json`,
+        ...(this.config.storage.projectionMinReloadIntervalMs === undefined
+          ? {}
+          : { projectionMinReloadIntervalMs: this.config.storage.projectionMinReloadIntervalMs }),
       });
       graphStore = storageAdapters.graphStore;
       vectorIndex = storageAdapters.vectorIndex;

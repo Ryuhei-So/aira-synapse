@@ -155,6 +155,8 @@ const ENV_KEYS = [
   'FAKE_OWNER_OMIT_METHODS',
   'FAKE_OWNER_MISCLASSIFY_METHOD',
   'FAKE_OWNER_GENERATION_CHANGE_AFTER',
+  'FAKE_OWNER_PROJECTION_PAGE_ENTRIES',
+  'FAKE_OWNER_PROJECTION_READ_LIMITS',
 ] as const;
 const previousEnv = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
 const directories: string[] = [];
@@ -316,7 +318,7 @@ describe('aira-graphdb memory reader against the fake owner native', () => {
       .rejects.toMatchObject({ code: 'GENERATION_MISMATCH' });
     const events = await fakeEvents(adapters);
     expect(events.map((event) => event.method)).toEqual([
-      'protocol_info', 'protocol_info',
+      'protocol_info', 'protocol_info', 'protocol_info',
       'memory_get_passages_by_ids', 'memory_get_facts_by_ids', 'memory_get_facts_by_ids', 'memory_find_facts_by_entities',
     ]);
   });
@@ -428,6 +430,7 @@ describe('aira-graphdb memory reader against the fake owner native', () => {
         currentVersion: 8,
         failureClass: 'NATIVE_LINE_OVERFLOW',
         reloadAttempted: true,
+        reason: 'reload_failed',
         consecutiveFailures: 1,
         nextRetryInMs: 60_000,
       });
@@ -457,8 +460,116 @@ describe('aira-graphdb memory reader against the fake owner native', () => {
       await syncProjectionVersion(adapters.graphProjection, adapters.readGeneration);
       await expect(service.retrieve(BRIDGE)).rejects.toMatchObject({ code: 'NATIVE_LINE_OVERFLOW' });
       expect(logged.filter((event) => event.event === 'projection_stale')).toEqual([]);
+      expect(logged.filter((event) => event.event === 'projection_unavailable')).toHaveLength(1);
+      // Review M1: inside the backoff window the next query fails fast
+      // (the bridge answers from FTS) instead of re-pulling the corpus.
+      await expect(service.retrieve(BRIDGE)).rejects.toMatchObject({ code: 'PROJECTION_UNAVAILABLE' });
+      const pulls = (await fakeEvents(adapters)).filter((event) => event.method === 'projection_get_transitions');
+      expect(pulls).toHaveLength(1);
       // The owner rejected only that read; the connection keeps serving.
       await expect(adapters.memoryReader.sectionCounts({ corpusId: CORPUS })).resolves.toMatchObject({ passages: 5 });
+    });
+
+    describe('paged ranking graph read (literature-hub #594 durable fix)', () => {
+      const PAGED = { FAKE_OWNER_PROJECTION_PAGE_ENTRIES: '2' };
+      const pageRequests = async (current: StorageAdapters) => (await fakeEvents(current))
+        .filter((event) => event.method === 'projection_get_transitions_page')
+        .map((event) => [event.params.generation, event.params.offset]);
+      afterEach(() => {
+        vi.restoreAllMocks();
+      });
+
+      it('loads an over-bound corpus through pages and ranks byte-identically to the single-reply path', async () => {
+        const legacyAdapters = await createAiraGraphDbAdapters({ dbPath: useFake() });
+        let legacyAnswer: string;
+        try {
+          expect((legacyAdapters.graphProjection as CachedGraphProjection)).toBeInstanceOf(CachedGraphProjection);
+          legacyAnswer = stable(await queryService(legacyAdapters, legacyAdapters.memoryReader).retrieve(BRIDGE));
+        } finally {
+          await legacyAdapters.close();
+        }
+
+        adapters = await createAiraGraphDbAdapters({ dbPath: useFake(PAGED) });
+        // The single reply is withheld the way the owner withholds an over-bound line.
+        await fakeClient(adapters).request('fake_set_projection', { overflow: true });
+        const request = vi.spyOn(fakeClient(adapters), 'request');
+        await syncProjectionVersion(adapters.graphProjection, adapters.readGeneration);
+        const paged = await queryService(adapters, adapters.memoryReader).retrieve(BRIDGE);
+        expect(stable(paged)).toBe(legacyAnswer);
+
+        expect(await pageRequests(adapters)).toEqual([[null, 0], [7, 2], [7, 4], [7, 6]]);
+        const methods = (await fakeEvents(adapters)).map((event) => event.method);
+        expect(methods).not.toContain('projection_get_transitions');
+        expect(methods).not.toContain('memory_load');
+        // Every page is framed against the advertised caps, not the 512 MiB default.
+        const pageCalls = request.mock.calls.filter(([method]) => method === 'projection_get_transitions_page');
+        expect(pageCalls).toHaveLength(4);
+        for (const call of pageCalls) {
+          expect(call[2]).toEqual({ maxRequestBytes: 64 * 1024 * 1024, maxResponseBytes: 8 * 1024 * 1024 });
+        }
+        const snapshot = await (adapters.graphProjection as CachedGraphProjection).getTransitionSnapshot(CORPUS);
+        expect([...snapshot].sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))))
+          .toEqual([...STORE.transitions].sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))));
+      });
+
+      it('keeps the single-reply read when the native does not advertise pages', async () => {
+        adapters = await createAiraGraphDbAdapters({ dbPath: useFake() });
+        await syncProjectionVersion(adapters.graphProjection, adapters.readGeneration);
+        await queryService(adapters, adapters.memoryReader).retrieve(BRIDGE);
+        const methods = (await fakeEvents(adapters)).map((event) => event.method);
+        expect(methods.filter((method) => method === 'projection_get_transitions')).toHaveLength(1);
+        expect(methods).not.toContain('projection_get_transitions_page');
+      });
+
+      it.each([
+        ['limits.projectionRead absent', { FAKE_OWNER_PROJECTION_READ_LIMITS: 'absent' }, /without protocol_info\.limits\.projectionRead/],
+        ['an unknown schema', { FAKE_OWNER_PROJECTION_READ_LIMITS: JSON.stringify({ schema: 'native-projection-read@2' }) }, /projectionRead\.schema/],
+        ['an unknown order', { FAKE_OWNER_PROJECTION_READ_LIMITS: JSON.stringify({ order: 'source@1' }) }, /projectionRead\.order/],
+        ['a zero byte cap', { FAKE_OWNER_PROJECTION_READ_LIMITS: JSON.stringify({ maxResponseBytes: 0 }) }, /maxResponseBytes must be a positive safe integer/],
+        ['a mutation classification', { FAKE_OWNER_MISCLASSIFY_METHOD: 'projection_get_transitions_page' }, /contract mismatch for projection_get_transitions_page/],
+      ])('fails closed at startup when the page method is advertised with %s', async (_label, env, message) => {
+        const dbPath = useFake({ ...PAGED, ...env });
+        await expect(createAiraGraphDbAdapters({ dbPath })).rejects.toThrow(message);
+      });
+
+      it.each(['repeat', 'skip', 'offset', 'total', 'empty', 'short', 'generation', 'badEntry'])(
+        'a %s page fault fails the load closed (nothing partial is published)',
+        async (fault) => {
+          captureStderr();
+          adapters = await createAiraGraphDbAdapters({ dbPath: useFake(PAGED) });
+          await fakeClient(adapters).request('fake_set_projection', { pageFault: fault });
+          const projection = adapters.graphProjection as CachedGraphProjection;
+          await syncProjectionVersion(projection, adapters.readGeneration);
+          await expect(projection.getTransitionSnapshot(CORPUS)).rejects.toMatchObject({ code: 'PROJECTION_PAGE_INVALID' });
+          expect(projection.servedProjection).toBeNull();
+          expect(logged.find((event) => event.event === 'projection_unavailable'))
+            .toMatchObject({ failureClass: 'PROJECTION_PAGE_INVALID', loadAttempted: true });
+        },
+      );
+
+      it('a commit between pages fails the reload closed and the warm graph keeps serving', async () => {
+        captureStderr();
+        adapters = await createAiraGraphDbAdapters({ dbPath: useFake(PAGED) });
+        const projection = adapters.graphProjection as CachedGraphProjection;
+        const service = queryService(adapters, adapters.memoryReader);
+        await syncProjectionVersion(projection, adapters.readGeneration);
+        const before = stable(await service.retrieve(BRIDGE));
+        const loaded = await projection.getTransitionSnapshot(CORPUS);
+
+        // Generation 8 is committed, and the index worker commits 9 after the first page of the reload.
+        await fakeClient(adapters).request('fake_set_generation', { generation: 8 });
+        await fakeClient(adapters).request('fake_set_projection', { commitAfterPages: 1 });
+        await expect(syncProjectionVersion(projection, adapters.readGeneration)).resolves.toBe(true);
+        expect(stable(await service.retrieve(BRIDGE))).toBe(before);
+        expect(await projection.getTransitionSnapshot(CORPUS)).toBe(loaded);
+        expect(logged.find((event) => event.event === 'projection_stale')).toMatchObject({
+          servedVersion: 7,
+          currentVersion: 8,
+          failureClass: 'PROJECTION_GENERATION_CHANGED',
+          reason: 'reload_failed',
+        });
+        expect((await pageRequests(adapters)).slice(4)).toEqual([[null, 0], [8, 2]]);
+      });
     });
   });
 
