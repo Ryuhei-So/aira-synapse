@@ -16,7 +16,13 @@ import type { MemorySnapshot } from '../../../domain/memory/globalMemory.js';
 import type { IGraphStore } from '../../../domain/storage/graphStore.js';
 import type { SchemaHydrationWireParams } from '../../../domain/storage/schemaCanonicalization.js';
 import { validateGraphUpsertWireParams } from '../schemaCanonicalizationContract.js';
-import { AIRA_GRAPHDB_MAX_REQUEST_BYTES, type AiraGraphDbNativeClient } from './NativeClient.js';
+import {
+  AIRA_GRAPHDB_MAX_REQUEST_BYTES,
+  readAiraGraphDbGeneration,
+  type AiraGraphDbNativeClient,
+  type AiraGraphDbRpcClient,
+} from './NativeClient.js';
+import { readProjectionPages, type ProjectionReadCapabilities } from './AiraGraphDbProjectionRead.js';
 
 export class AiraGraphDbGraphStore implements IGraphStore {
   public constructor(private readonly client: AiraGraphDbNativeClient) {}
@@ -184,9 +190,25 @@ export class AiraGraphDbMemoryStore implements IMemoryStore {
 }
 
 export class AiraGraphDbGraphProjection implements IGraphProjection {
-  public constructor(private readonly client: AiraGraphDbNativeClient) {}
+  /**
+   * With `paging` (a native that advertises projection_get_transitions_page,
+   * literature-hub #594) the corpus graph is read page by page under the
+   * advertised byte cap; without it, as one projection_get_transitions reply.
+   */
+  public constructor(
+    private readonly client: AiraGraphDbRpcClient,
+    private readonly paging: ProjectionReadCapabilities | null = null,
+  ) {}
+
+  public get paged(): boolean {
+    return this.paging !== null;
+  }
 
   public async *getTransitions(corpusId: string): AsyncIterable<TransitionEntry> {
+    if (this.paging) {
+      yield* readProjectionPages(this.client, this.paging, corpusId, () => readAiraGraphDbGeneration(this.client));
+      return;
+    }
     const transitions = await this.client.request<TransitionEntry[]>('projection_get_transitions', { corpusId });
     for (const item of transitions) {
       yield item;

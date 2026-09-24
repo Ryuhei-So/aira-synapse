@@ -28,13 +28,13 @@ jobs:
     runs-on: ubuntu-latest
     env:
       AIRA_GRAPHDB_REPO_PATH: ${{ github.workspace }}/aira-graphdb
-      AIRA_GRAPHDB_EXPECTED_SHA: 50627895354cf4dbf30f4f0185f7f9719dd4c3f0
+      AIRA_GRAPHDB_EXPECTED_SHA: 416cb517a2ef0da3c61a5ec54581e29da1c7c59a
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
         with:
           repository: Ryuhei-So/aira-graphdb
-          ref: 50627895354cf4dbf30f4f0185f7f9719dd4c3f0
+          ref: 416cb517a2ef0da3c61a5ec54581e29da1c7c59a
           path: aira-graphdb
       - uses: actions/setup-node@v4
         with:
@@ -49,14 +49,14 @@ jobs:
     needs: storage-port-contract
     env:
       AIRA_GRAPHDB_REPO_PATH: ${{ github.workspace }}/aira-graphdb
-      AIRA_GRAPHDB_EXPECTED_SHA: 50627895354cf4dbf30f4f0185f7f9719dd4c3f0
+      AIRA_GRAPHDB_EXPECTED_SHA: 416cb517a2ef0da3c61a5ec54581e29da1c7c59a
       AIRA_GRAPHDB_NATIVE_CMD: node ${{ github.workspace }}/packages/memgraphrag/scripts/native-transaction-owner.test-fixture.mjs ${{ github.workspace }}/aira-graphdb/target/release/aira-graphdb-native
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
         with:
           repository: Ryuhei-So/aira-graphdb
-          ref: 50627895354cf4dbf30f4f0185f7f9719dd4c3f0
+          ref: 416cb517a2ef0da3c61a5ec54581e29da1c7c59a
           path: aira-graphdb
       - uses: actions/setup-node@v4
         with:
@@ -73,14 +73,14 @@ jobs:
     needs: storage-port-compat
     env:
       AIRA_GRAPHDB_REPO_PATH: ${{ github.workspace }}/aira-graphdb
-      AIRA_GRAPHDB_EXPECTED_SHA: 50627895354cf4dbf30f4f0185f7f9719dd4c3f0
+      AIRA_GRAPHDB_EXPECTED_SHA: 416cb517a2ef0da3c61a5ec54581e29da1c7c59a
       AIRA_GRAPHDB_NATIVE_CMD: node ${{ github.workspace }}/packages/memgraphrag/scripts/native-transaction-owner.test-fixture.mjs ${{ github.workspace }}/aira-graphdb/target/release/aira-graphdb-native
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
         with:
           repository: Ryuhei-So/aira-graphdb
-          ref: 50627895354cf4dbf30f4f0185f7f9719dd4c3f0
+          ref: 416cb517a2ef0da3c61a5ec54581e29da1c7c59a
           path: aira-graphdb
       - uses: actions/setup-node@v4
         with:
@@ -120,14 +120,14 @@ jobs:
     if: github.event_name == 'merge_group'
     env:
       AIRA_GRAPHDB_REPO_PATH: ${{ github.workspace }}/aira-graphdb
-      AIRA_GRAPHDB_EXPECTED_SHA: 50627895354cf4dbf30f4f0185f7f9719dd4c3f0
+      AIRA_GRAPHDB_EXPECTED_SHA: 416cb517a2ef0da3c61a5ec54581e29da1c7c59a
       AIRA_GRAPHDB_NATIVE_CMD: node ${{ github.workspace }}/packages/memgraphrag/scripts/native-transaction-owner.test-fixture.mjs ${{ github.workspace }}/aira-graphdb/target/release/aira-graphdb-native
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
         with:
           repository: Ryuhei-So/aira-graphdb
-          ref: 50627895354cf4dbf30f4f0185f7f9719dd4c3f0
+          ref: 416cb517a2ef0da3c61a5ec54581e29da1c7c59a
           path: aira-graphdb
       - uses: actions/setup-node@v4
         with:
@@ -161,13 +161,13 @@ jobs:
     needs: backend-compat
     env:
       AIRA_GRAPHDB_REPO_PATH: ${{ github.workspace }}/aira-graphdb
-      AIRA_GRAPHDB_EXPECTED_SHA: 50627895354cf4dbf30f4f0185f7f9719dd4c3f0
+      AIRA_GRAPHDB_EXPECTED_SHA: 416cb517a2ef0da3c61a5ec54581e29da1c7c59a
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
         with:
           repository: Ryuhei-So/aira-graphdb
-          ref: 50627895354cf4dbf30f4f0185f7f9719dd4c3f0
+          ref: 416cb517a2ef0da3c61a5ec54581e29da1c7c59a
           path: aira-graphdb
       - uses: actions/setup-node@v4
         with:
@@ -187,13 +187,13 @@ jobs:
     if: github.event_name == 'merge_group'
     env:
       AIRA_GRAPHDB_REPO_PATH: ${{ github.workspace }}/aira-graphdb
-      AIRA_GRAPHDB_EXPECTED_SHA: 50627895354cf4dbf30f4f0185f7f9719dd4c3f0
+      AIRA_GRAPHDB_EXPECTED_SHA: 416cb517a2ef0da3c61a5ec54581e29da1c7c59a
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
         with:
           repository: Ryuhei-So/aira-graphdb
-          ref: 50627895354cf4dbf30f4f0185f7f9719dd4c3f0
+          ref: 416cb517a2ef0da3c61a5ec54581e29da1c7c59a
           path: aira-graphdb
       - uses: actions/setup-node@v4
         with:

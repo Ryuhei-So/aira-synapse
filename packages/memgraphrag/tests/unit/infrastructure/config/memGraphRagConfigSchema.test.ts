@@ -124,6 +124,23 @@ describe('TASK-MG-005: YAML config schema and validation', () => {
       const result = validateMemGraphRagConfig(config);
       expect(result.errors.some((e) => e.path === 'security.corpusIsolation')).toBe(true);
     });
+
+    it.each(['projectionMinReloadIntervalMs', 'projectionColdRetryMaxMs'])(
+      'accepts an optional nonnegative integer storage.%s (literature-hub #594)',
+      (key) => {
+        for (const value of [0, 300_000]) {
+          const config = makeMinimalConfig();
+          (config.storage as Record<string, unknown>)[key] = value;
+          expect(validateMemGraphRagConfig(config).valid).toBe(true);
+        }
+        for (const value of [-1, 1.5, '60000', Number.MAX_SAFE_INTEGER + 1]) {
+          const config = makeMinimalConfig();
+          (config.storage as Record<string, unknown>)[key] = value;
+          const result = validateMemGraphRagConfig(config);
+          expect(result.errors.some((e) => e.path === `storage.${key}`), String(value)).toBe(true);
+        }
+      },
+    );
   });
 
   describe('loadMemGraphRagConfig', () => {

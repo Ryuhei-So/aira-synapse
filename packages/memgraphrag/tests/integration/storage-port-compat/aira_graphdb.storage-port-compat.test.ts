@@ -215,11 +215,13 @@ describe('TASK-AGDB-037 storage-port-compat', () => {
 
   it('storage-port-compat:projection', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'aira-graphdb-compat-proj-'));
+    const traffic: AiraGraphDbTrafficEvent[] = [];
     try {
       const adapters = await createStorageAdapters({
         backend: 'aira-graphdb',
         airaGraphDb: {
           dbPath: join(dir, 'graphdb-native.json'),
+          onTraffic: (event) => traffic.push(event),
         },
       });
 
@@ -241,14 +243,18 @@ describe('TASK-AGDB-037 storage-port-compat', () => {
 
       const count = await adapters.graphProjection.getNodeCount(CORPUS_ID);
       expect(count).toBe(2);
+      await adapters.batch.commit();
 
+      // The ranking graph is a committed-generation read: a native with
+      // paged projection reads (literature-hub #594) rejects pages while a
+      // batch is open, so it is read after the commit.
       const transitions: Array<{ sourceNodeId: string; targetNodeId: string; weight: number }> = [];
       for await (const t of adapters.graphProjection.getTransitions(CORPUS_ID)) {
         transitions.push(t);
       }
-      expect(transitions).toHaveLength(1);
-      expect(transitions[0]?.sourceNodeId).toBe('a');
-      await adapters.batch.commit();
+      expect(transitions).toEqual([{ sourceNodeId: 'a', targetNodeId: 'b', weight: 1 }]);
+      const projectionReads = traffic.map((event) => event.method).filter((method) => method.startsWith('projection_get_transitions'));
+      expect(projectionReads).toEqual(['projection_get_transitions_page']);
       await adapters.close();
     } finally {
       rmSync(dir, { recursive: true, force: true });

@@ -19,6 +19,15 @@
 // `fake_set_projection {overflow?, transitions?}` makes projection_get_transitions
 // fail the way the owner does once the corpus reply outgrows its line bound
 // (literature-hub #594), or replaces the transitions it returns.
+//
+//   FAKE_OWNER_PROJECTION_PAGE_ENTRIES  advertise projection_get_transitions_page
+//                                     (aira-graphdb #594) with this many entries per page
+//   FAKE_OWNER_PROJECTION_READ_LIMITS   JSON merged over the advertised limits.projectionRead,
+//                                     or "absent" to advertise the method without it
+//
+// `fake_set_projection {pageFault?, commitAfterPages?}` corrupts later pages
+// (repeat, skip, offset, total, empty, short, generation, badEntry) or bumps
+// the generation after that many pages, standing in for a commit mid-read.
 import { readFileSync } from 'node:fs';
 import readline from 'node:readline';
 
@@ -58,6 +67,17 @@ const MISCLASSIFIED = process.env.FAKE_OWNER_MISCLASSIFY_METHOD;
 const GENERATION_CHANGE_AFTER = process.env.FAKE_OWNER_GENERATION_CHANGE_AFTER
   ? Number(process.env.FAKE_OWNER_GENERATION_CHANGE_AFTER)
   : undefined;
+const PAGE_ENTRIES = process.env.FAKE_OWNER_PROJECTION_PAGE_ENTRIES
+  ? Number(process.env.FAKE_OWNER_PROJECTION_PAGE_ENTRIES)
+  : undefined;
+const PROJECTION_READ = process.env.FAKE_OWNER_PROJECTION_READ_LIMITS === 'absent'
+  ? undefined
+  : {
+    schema: 'native-projection-read@1',
+    maxResponseBytes: 8 * 1024 * 1024,
+    order: 'source-target-key@1',
+    ...(process.env.FAKE_OWNER_PROJECTION_READ_LIMITS ? JSON.parse(process.env.FAKE_OWNER_PROJECTION_READ_LIMITS) : {}),
+  };
 const MEMORY_READ_METHODS = [
   'memory_get_passages_by_ids',
   'memory_get_facts_by_ids',
@@ -74,6 +94,7 @@ const INVENTORY = [
   { name: 'upsert_nodes', classification: 'mutation', wal: true },
   { name: 'vector_search', classification: 'read', wal: false },
   { name: 'projection_get_transitions', classification: 'read', wal: false },
+  ...(PAGE_ENTRIES === undefined ? [] : [{ name: 'projection_get_transitions_page', classification: 'read', wal: false }]),
   { name: 'projection_get_node_count', classification: 'read', wal: false },
   { name: 'projection_get_dangling_nodes', classification: 'read', wal: false },
   ...MEMORY_READ_METHODS.map((name) => ({ name, classification: 'read', wal: false })),
@@ -88,12 +109,75 @@ const events = [];
 let admittedMemoryReads = 0;
 let generation = 7;
 let projectionOverflow = false;
+let pageFault = null;
+let commitAfterPages = null;
+let pagesServed = 0;
 
 class ClientError extends Error {
-  constructor(code, message) {
+  constructor(code, message, failureClass) {
     super(message);
     this.code = code;
+    this.failureClass = failureClass;
   }
+}
+
+function pageRejection(message) {
+  // The native's shape for a rejected page (REQUEST_EXECUTION_FAILED / CLIENT_INPUT).
+  return new ClientError('REQUEST_EXECUTION_FAILED', message, 'CLIENT_INPUT');
+}
+
+function compareBytes(left, right) {
+  return Buffer.compare(Buffer.from(left), Buffer.from(right));
+}
+
+/** The native's total order; the store has no edge keys, so the stored index breaks ties. */
+function pageOrder(transitions) {
+  return transitions
+    .map((entry, index) => ({ entry, index }))
+    .sort((a, b) => compareBytes(a.entry.sourceNodeId, b.entry.sourceNodeId)
+      || compareBytes(a.entry.targetNodeId, b.entry.targetNodeId)
+      || a.index - b.index)
+    .map(({ entry }) => entry);
+}
+
+function transitionsPage(params) {
+  exactParams(params, ['corpusId', 'generation', 'offset']);
+  const corpus = boundedCorpus(params);
+  const { offset } = params;
+  if (!Number.isSafeInteger(offset) || offset < 0) throw pageRejection('offset must be a nonnegative integer');
+  if (params.generation === null) {
+    if (offset !== 0) throw pageRejection('generation may be null only at offset 0');
+  } else if (!Number.isSafeInteger(params.generation) || params.generation < 0) {
+    throw pageRejection('generation must be null or a nonnegative integer');
+  } else if (params.generation !== generation) {
+    throw pageRejection(`projection page generation ${params.generation} does not match committed generation ${generation}`);
+  }
+  const ordered = pageOrder(corpus ? (corpus.transitions ?? []) : []);
+  const total = ordered.length;
+  if (offset > total || (offset === total && total > 0)) throw pageRejection('offset is outside the projection');
+  let entries = ordered.slice(offset, offset + PAGE_ENTRIES);
+  let end = offset + entries.length;
+  let reply = {
+    generation, offset, nextOffset: end < total ? end : null, totalEntries: total, entries,
+  };
+  const later = offset > 0;
+  switch (pageFault) {
+    case 'repeat': if (later) reply.nextOffset = offset; break;
+    case 'skip': if (reply.nextOffset !== null) reply.nextOffset += 1; break;
+    case 'offset': if (later) reply.offset = offset + 1; break;
+    case 'total': if (later) reply.totalEntries = total + 1; break;
+    case 'empty': reply.entries = []; break;
+    case 'short': if (reply.nextOffset === null && later) reply.entries = entries.slice(0, -1); break;
+    case 'generation': if (later) reply.generation = generation + 1; break;
+    case 'badEntry': if (later) reply.entries = [{ ...entries[0], weight: 'x' }, ...entries.slice(1)]; break;
+    default: break;
+  }
+  pagesServed += 1;
+  if (commitAfterPages !== null && pagesServed >= commitAfterPages) {
+    generation += 1;
+    commitAfterPages = null;
+  }
+  return reply;
 }
 
 function fold(value) {
@@ -187,6 +271,7 @@ function handle(method, params) {
         limits: {
           indexingMemory: INDEXING,
           memoryRead: MEMORY_READ,
+          ...(PAGE_ENTRIES === undefined || PROJECTION_READ === undefined ? {} : { projectionRead: PROJECTION_READ }),
           wal: { mutationRequestIdUniqueness: 'activeTransaction' },
         },
         methods: INVENTORY,
@@ -255,6 +340,8 @@ function handle(method, params) {
         throw new ClientError('NATIVE_LINE_OVERFLOW', 'native graphdb reply exceeds the owner line bound');
       }
       return params.corpusId === store.corpusId ? (store.transitions ?? []) : [];
+    case 'projection_get_transitions_page':
+      return transitionsPage(params);
     case 'projection_get_node_count': {
       const nodes = new Set();
       for (const t of store.transitions ?? []) {
@@ -273,6 +360,11 @@ function handle(method, params) {
     case 'fake_set_projection':
       if (params.overflow !== undefined) projectionOverflow = params.overflow === true;
       if (params.transitions !== undefined) store.transitions = params.transitions;
+      if (params.pageFault !== undefined) pageFault = params.pageFault;
+      if (params.commitAfterPages !== undefined) {
+        commitAfterPages = params.commitAfterPages;
+        pagesServed = 0;
+      }
       return null;
     default:
       throw new ClientError('UNSUPPORTED_METHOD', `unsupported method ${method}`);
@@ -283,7 +375,9 @@ function summarize(params) {
   if (!params || typeof params !== 'object') return {};
   const summary = {};
   for (const [key, value] of Object.entries(params)) {
-    summary[key] = Array.isArray(value) ? value.length : (typeof value === 'string' ? value : typeof value);
+    summary[key] = Array.isArray(value)
+      ? value.length
+      : (typeof value === 'string' || typeof value === 'number' || value === null ? value : typeof value);
   }
   return summary;
 }
@@ -301,7 +395,11 @@ input.on('line', (line) => {
     reply = {
       id: request.id,
       ok: false,
-      error: { code: error.code ?? 'INTERNAL', message: error.message },
+      error: {
+        code: error.code ?? 'INTERNAL',
+        message: error.message,
+        ...(error.failureClass ? { failureClass: error.failureClass } : {}),
+      },
     };
   }
   process.stdout.write(`${JSON.stringify(reply)}\n`);

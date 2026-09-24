@@ -94,6 +94,17 @@ export interface StorageConfig {
   readonly walMode: boolean;
   readonly autoMigrate: boolean;
   readonly neo4j?: Neo4jConfig;
+  /**
+   * aira-graphdb: keep ranking on a graph loaded less than this long ago
+   * after a store generation change instead of reloading it (YAML
+   * `projection_min_reload_interval_ms`, literature-hub #594). Default 0.
+   */
+  readonly projectionMinReloadIntervalMs?: number;
+  /**
+   * aira-graphdb: cap of the retry backoff while no ranking graph is loaded
+   * (YAML `projection_cold_retry_max_ms`, literature-hub #594). Default 120000.
+   */
+  readonly projectionColdRetryMaxMs?: number;
 }
 
 /** Security */
@@ -329,6 +340,13 @@ export function validateMemGraphRagConfig(
     assertString(storage, 'vectorIndexDir', 'storage', errors);
     assertBoolean(storage, 'walMode', 'storage', errors);
     assertBoolean(storage, 'autoMigrate', 'storage', errors);
+    for (const key of ['projectionMinReloadIntervalMs', 'projectionColdRetryMaxMs']) {
+      if (storage[key] === undefined) continue;
+      assertNumber(storage, key, 'storage', errors, { min: 0 });
+      if (typeof storage[key] === 'number' && !Number.isSafeInteger(storage[key])) {
+        errors.push({ path: `storage.${key}`, message: 'must be a safe integer', actual: storage[key] });
+      }
+    }
   }
 
   // Security
