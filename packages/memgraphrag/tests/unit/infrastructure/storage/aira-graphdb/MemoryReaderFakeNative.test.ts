@@ -24,7 +24,7 @@ import type { IEmbeddingProvider, ILLMProvider } from '../../../../../src/domain
 import type { QueryRequest } from '../../../../../src/domain/retrieval/memoryFilter.js';
 import type { IMemoryReader, IMemoryStore } from '../../../../../src/domain/storage/index.js';
 import { SnapshotBackedMemoryReader } from '../../../../../src/infrastructure/storage/SnapshotBackedMemoryReader.js';
-import { CachedGraphProjection } from '../../../../../src/infrastructure/storage/cached/CachedGraphProjection.js';
+import { CachedGraphProjection, type ProjectionCacheEvent } from '../../../../../src/infrastructure/storage/cached/CachedGraphProjection.js';
 import { syncProjectionVersion } from '../../../../../src/infrastructure/storage/cached/projectionVersionGate.js';
 import { createAiraGraphDbAdapters, type StorageAdapters } from '../../../../../src/infrastructure/storage/ladybug/storageFactory.js';
 
@@ -370,6 +370,96 @@ describe('aira-graphdb memory reader against the fake owner native', () => {
     await service.retrieve(BRIDGE);
     expect(await transitionsPulled()).toBe(2);
     expect((adapters.graphProjection as CachedGraphProjection).observedVersion).toBe(8);
+  });
+
+  describe('ranking graph reload failure after a generation change (literature-hub #594)', () => {
+    const logged: ProjectionCacheEvent[] = [];
+    const captureStderr = () => {
+      logged.length = 0;
+      const original = process.stderr.write.bind(process.stderr);
+      return vi.spyOn(process.stderr, 'write').mockImplementation(((chunk: unknown, ...rest: unknown[]) => {
+        if (typeof chunk === 'string' && chunk.startsWith('{"event":')) {
+          logged.push(JSON.parse(chunk) as ProjectionCacheEvent);
+          return true;
+        }
+        return (original as (...args: unknown[]) => boolean)(chunk, ...rest);
+      }) as typeof process.stderr.write);
+    };
+    afterEach(() => {
+      vi.restoreAllMocks();
+      vi.useRealTimers();
+    });
+
+    const NEW_TRANSITIONS = [
+      { sourceNodeId: 'fact:f-seed1', targetNodeId: 'passage:p2', weight: 1 },
+      { sourceNodeId: 'passage:p2', targetNodeId: 'fact:f-seed1', weight: 1 },
+    ];
+
+    it('answers from the stale projection, logs projection_stale, and swaps once a reload succeeds', async () => {
+      vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-09-25T00:00:00.000Z') });
+      captureStderr();
+      adapters = await createAiraGraphDbAdapters({ dbPath: useFake() });
+      const projection = adapters.graphProjection as CachedGraphProjection;
+      const service = queryService(adapters, adapters.memoryReader);
+      const transitionsPulled = async () => (await fakeEvents(adapters!))
+        .filter((event) => event.method === 'projection_get_transitions').length;
+
+      await syncProjectionVersion(projection, adapters.readGeneration);
+      const before = await service.retrieve(BRIDGE);
+      const loaded = await projection.getTransitionSnapshot(CORPUS);
+      expect(loaded).toEqual(STORE.transitions);
+
+      // The index worker commits generation 8 and the corpus graph no longer fits one owner line.
+      await fakeClient(adapters).request('fake_set_projection', { overflow: true, transitions: NEW_TRANSITIONS });
+      await fakeClient(adapters).request('fake_set_generation', { generation: 8 });
+      await expect(syncProjectionVersion(projection, adapters.readGeneration)).resolves.toBe(true);
+      const stale = await service.retrieve(BRIDGE);
+      expect(stable(stale)).toBe(stable(before));
+      expect(await transitionsPulled()).toBe(2);
+      expect(await projection.getTransitionSnapshot(CORPUS)).toBe(loaded);
+      // The query's reload attempt; the snapshot read above served stale inside the window.
+      expect(logged.filter((event) => event.event === 'projection_stale').map((event) => 'reloadAttempted' in event && event.reloadAttempted))
+        .toEqual([true, false]);
+      expect(logged.find((event) => event.event === 'projection_stale')).toEqual({
+        event: 'projection_stale',
+        corpusId: CORPUS,
+        entries: STORE.transitions.length,
+        servedVersion: 7,
+        currentVersion: 8,
+        failureClass: 'NATIVE_LINE_OVERFLOW',
+        reloadAttempted: true,
+        consecutiveFailures: 1,
+        nextRetryInMs: 60_000,
+      });
+
+      // Inside the backoff window the next query does not re-pull the corpus graph.
+      await service.retrieve(BRIDGE);
+      expect(await transitionsPulled()).toBe(2);
+
+      // The native can serve again; after the window the reload succeeds and the graph swaps.
+      await fakeClient(adapters).request('fake_set_projection', { overflow: false });
+      vi.advanceTimersByTime(60_000);
+      await syncProjectionVersion(projection, adapters.readGeneration);
+      await service.retrieve(BRIDGE);
+      expect(await transitionsPulled()).toBe(3);
+      expect(await projection.getTransitionSnapshot(CORPUS)).toEqual(NEW_TRANSITIONS);
+      expect(projection.servedProjection).toEqual({ corpusId: CORPUS, version: 8, stale: false });
+      expect(logged.at(-1)).toMatchObject({ event: 'graph_projection_cache_loaded', version: 8, entries: NEW_TRANSITIONS.length });
+      // The #545 query path stays on the bounded reads throughout.
+      expect((await fakeEvents(adapters)).map((event) => event.method)).not.toContain('memory_load');
+    });
+
+    it('fails the query closed when the first projection load fails', async () => {
+      captureStderr();
+      adapters = await createAiraGraphDbAdapters({ dbPath: useFake() });
+      await fakeClient(adapters).request('fake_set_projection', { overflow: true });
+      const service = queryService(adapters, adapters.memoryReader);
+      await syncProjectionVersion(adapters.graphProjection, adapters.readGeneration);
+      await expect(service.retrieve(BRIDGE)).rejects.toMatchObject({ code: 'NATIVE_LINE_OVERFLOW' });
+      expect(logged.filter((event) => event.event === 'projection_stale')).toEqual([]);
+      // The owner rejected only that read; the connection keeps serving.
+      await expect(adapters.memoryReader.sectionCounts({ corpusId: CORPUS })).resolves.toMatchObject({ passages: 5 });
+    });
   });
 
   it('expands comparison seeds through findFactsByEntities with the same scores as the snapshot scan', async () => {

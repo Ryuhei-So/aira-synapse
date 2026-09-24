@@ -261,11 +261,16 @@ describe('CachedGraphProjection observability and in-flight invalidation', () =>
     expect(events).toEqual([
       { event: 'graph_projection_cache_loaded', corpusId: 'c', entries: 2, estimatedBytes: 2 * 56 + chars * 2, version: 302 },
     ]);
+    // A version change only marks the cache stale; the swap is logged when the reload lands.
     cached.invalidateIfVersionChanged(303);
-    expect(events[1]).toEqual({ event: 'graph_projection_cache_invalidated', corpusId: 'c', entries: 2, estimatedBytes: 2 * 56 + chars * 2, version: 303 });
+    expect(events).toHaveLength(1);
+    await drain(cached);
+    expect(events[1]).toEqual({ event: 'graph_projection_cache_loaded', corpusId: 'c', entries: 2, estimatedBytes: 2 * 56 + chars * 2, version: 303 });
+    cached.invalidate();
+    expect(events[2]).toEqual({ event: 'graph_projection_cache_invalidated', corpusId: 'c', entries: 2, estimatedBytes: 2 * 56 + chars * 2, version: 303 });
   });
 
-  it('an invalidation during an in-flight load wins: the stale result is never published', async () => {
+  it('a version change during an in-flight load wins: the raced result stays stale and the next call reloads', async () => {
     let release!: () => void;
     const gate = new Promise<void>((resolve) => { release = resolve; });
     let loads = 0;
@@ -286,7 +291,7 @@ describe('CachedGraphProjection observability and in-flight invalidation', () =>
     expect(cached.invalidateIfVersionChanged(2)).toBe(true);
     release();
     expect((await first)[0]!.sourceNodeId).toBe('load1');
-    // The load that raced the invalidation was not published: the next call reloads.
+    // The load that raced the version change is not current: the next call reloads.
     expect((await drain(cached))[0]!.sourceNodeId).toBe('load2');
     expect(loads).toBe(2);
   });

@@ -16,6 +16,9 @@
 // The `fake_events` method returns the request log (method and param sizes);
 // `fake_set_generation {generation}` changes the generation protocol_info
 // reports, standing in for a commit by the index worker.
+// `fake_set_projection {overflow?, transitions?}` makes projection_get_transitions
+// fail the way the owner does once the corpus reply outgrows its line bound
+// (literature-hub #594), or replaces the transitions it returns.
 import { readFileSync } from 'node:fs';
 import readline from 'node:readline';
 
@@ -84,6 +87,7 @@ const store = process.env.FAKE_OWNER_STORE
 const events = [];
 let admittedMemoryReads = 0;
 let generation = 7;
+let projectionOverflow = false;
 
 class ClientError extends Error {
   constructor(code, message) {
@@ -247,6 +251,9 @@ function handle(method, params) {
         .slice(0, topK);
     }
     case 'projection_get_transitions':
+      if (projectionOverflow) {
+        throw new ClientError('NATIVE_LINE_OVERFLOW', 'native graphdb reply exceeds the owner line bound');
+      }
       return params.corpusId === store.corpusId ? (store.transitions ?? []) : [];
     case 'projection_get_node_count': {
       const nodes = new Set();
@@ -262,6 +269,10 @@ function handle(method, params) {
       return events;
     case 'fake_set_generation':
       generation = params.generation;
+      return null;
+    case 'fake_set_projection':
+      if (params.overflow !== undefined) projectionOverflow = params.overflow === true;
+      if (params.transitions !== undefined) store.transitions = params.transitions;
       return null;
     default:
       throw new ClientError('UNSUPPORTED_METHOD', `unsupported method ${method}`);
@@ -280,7 +291,7 @@ function summarize(params) {
 const input = readline.createInterface({ input: process.stdin });
 input.on('line', (line) => {
   const request = JSON.parse(line);
-  if (request.method !== 'fake_events' && request.method !== 'fake_set_generation') {
+  if (!['fake_events', 'fake_set_generation', 'fake_set_projection'].includes(request.method)) {
     events.push({ method: request.method, params: summarize(request.params) });
   }
   let reply;
