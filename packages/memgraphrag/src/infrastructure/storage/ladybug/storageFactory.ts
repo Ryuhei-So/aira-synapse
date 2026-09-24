@@ -6,7 +6,7 @@
 import type { IGraphStore, IVectorIndex, IMemoryStore } from '../../../domain/storage/graphStore.js';
 import type { IIndexingMemory } from '../../../domain/storage/indexingMemory.js';
 import type { IMemoryReader } from '../../../domain/storage/memoryReader.js';
-import { CachedGraphProjection } from '../cached/CachedGraphProjection.js';
+import { CachedGraphProjection, DEFAULT_PROJECTION_COLD_BACKOFF } from '../cached/CachedGraphProjection.js';
 import type { StoreGenerationSource } from '../cached/projectionVersionGate.js';
 import type { IGraphProjection, ILexicalRetriever } from '../../../domain/retrieval/ppr.js';
 import type {
@@ -62,6 +62,8 @@ export interface AiraGraphDbStorageOptions {
   readonly onTraffic?: AiraGraphDbTrafficObserver;
   /** See CachedGraphProjectionOptions.minReloadIntervalMs; default 0. */
   readonly projectionMinReloadIntervalMs?: number;
+  /** Cap of the cold-start retry backoff (CachedGraphProjectionOptions.coldBackoff); default 120000. */
+  readonly projectionColdRetryMaxMs?: number;
 }
 
 export interface StorageOptions {
@@ -330,6 +332,12 @@ export async function createAiraGraphDbAdapters(
     // toward the host's heap visible in the process log.
     onEvent: (event) => { process.stderr.write(`${JSON.stringify(event)}\n`); },
     minReloadIntervalMs: opts.projectionMinReloadIntervalMs,
+    ...(opts.projectionColdRetryMaxMs === undefined ? {} : {
+      coldBackoff: {
+        initialMs: Math.min(DEFAULT_PROJECTION_COLD_BACKOFF.initialMs, opts.projectionColdRetryMaxMs),
+        maxMs: opts.projectionColdRetryMaxMs,
+      },
+    }),
   });
   const lexicalRetriever = new AiraGraphDbLexicalRetriever(client);
 

@@ -19,7 +19,9 @@
  * loaded projection for the corpus, a failed load fails the call and logs
  * `projection_unavailable`; inside the backoff window later calls fail fast
  * with PROJECTION_UNAVAILABLE instead of re-issuing the corpus-sized read,
- * so the host serves its fallback meanwhile.
+ * so the host serves its fallback meanwhile. That cold window has its own,
+ * shorter cap (there is nothing to rank on while it is open), and its
+ * fast-fail event is logged once per window.
  */
 import type { IGraphProjection, TransitionEntry } from '../../../domain/retrieval/ppr.js';
 
@@ -57,8 +59,13 @@ export type ProjectionCacheEvent =
     readonly currentVersion: unknown;
     /** Error code of the last failed load (never its message). */
     readonly failureClass: string;
-    /** False when this call failed fast inside the backoff window. */
+    /**
+     * False when this call failed fast inside the backoff window. Only the
+     * first fast-fail of a window is logged; the next attempted load reports
+     * how many calls failed fast since the previous event.
+     */
     readonly loadAttempted: boolean;
+    readonly fastFailedCalls: number;
     readonly consecutiveFailures: number;
     readonly nextRetryInMs: number;
   };
@@ -74,6 +81,11 @@ export interface CachedGraphProjectionOptions {
   readonly onEvent?: (event: ProjectionCacheEvent) => void;
   readonly reloadBackoff?: ProjectionReloadBackoff;
   /**
+   * Backoff after a failed load when there is no projection to serve (cold
+   * start). Kept short: every call fails while this window is open.
+   */
+  readonly coldBackoff?: ProjectionReloadBackoff;
+  /**
    * After a version change, keep serving a projection loaded less than this
    * long ago instead of reloading it. 0 (the default) reloads on the first
    * call after every change.
@@ -88,6 +100,20 @@ export interface CachedGraphProjectionOptions {
  * half a gigabyte for the production corpus, so retries are spaced out.
  */
 export const DEFAULT_PROJECTION_RELOAD_BACKOFF: ProjectionReloadBackoff = { initialMs: 60_000, maxMs: 15 * 60_000 };
+
+/**
+ * Cold (no projection loaded) failures retry sooner: a transient native
+ * restart must not leave ranking unavailable for the warm cap's 15 minutes.
+ */
+export const DEFAULT_PROJECTION_COLD_BACKOFF: ProjectionReloadBackoff = { initialMs: 60_000, maxMs: 2 * 60_000 };
+
+function assertBackoff(backoff: ProjectionReloadBackoff, name: string): ProjectionReloadBackoff {
+  if (!Number.isSafeInteger(backoff.initialMs) || backoff.initialMs < 0
+    || !Number.isSafeInteger(backoff.maxMs) || backoff.maxMs < backoff.initialMs) {
+    throw new Error(`${name} must have nonnegative safe integer initialMs <= maxMs`);
+  }
+  return backoff;
+}
 
 /** Thrown inside the backoff window after a failed load when there is no projection to serve. */
 export class ProjectionUnavailableError extends Error {
@@ -137,12 +163,16 @@ interface LoadFailures {
   readonly count: number;
   readonly retryAt: number;
   readonly failureClass: string;
+  /** Cold-window fast-fails so far, and whether the first one was logged. */
+  fastFails: number;
+  fastFailLogged: boolean;
 }
 
 export class CachedGraphProjection implements IGraphProjection {
   private readonly inner: IGraphProjection;
   private readonly onEvent: (event: ProjectionCacheEvent) => void;
   private readonly backoff: ProjectionReloadBackoff;
+  private readonly coldBackoff: ProjectionReloadBackoff;
   private readonly minReloadIntervalMs: number;
   private readonly now: () => number;
   private cache: CacheSlot | null = null;
@@ -162,7 +192,8 @@ export class CachedGraphProjection implements IGraphProjection {
     }
     this.inner = inner;
     this.onEvent = options.onEvent ?? (() => undefined);
-    this.backoff = options.reloadBackoff ?? DEFAULT_PROJECTION_RELOAD_BACKOFF;
+    this.backoff = assertBackoff(options.reloadBackoff ?? DEFAULT_PROJECTION_RELOAD_BACKOFF, 'reloadBackoff');
+    this.coldBackoff = assertBackoff(options.coldBackoff ?? DEFAULT_PROJECTION_COLD_BACKOFF, 'coldBackoff');
     this.minReloadIntervalMs = minReloadIntervalMs;
     this.now = options.now ?? Date.now;
   }
@@ -195,7 +226,11 @@ export class CachedGraphProjection implements IGraphProjection {
             this.reportStale(slot, 'backoff');
             return slot.entries;
           }
-          this.reportUnavailable(corpusId, failures, false);
+          failures.fastFails += 1;
+          if (!failures.fastFailLogged) {
+            failures.fastFailLogged = true;
+            this.reportUnavailable(corpusId, failures, false, failures.fastFails);
+          }
           throw new ProjectionUnavailableError(corpusId, failures.failureClass, this.retryInMs(failures));
         }
         if (slot && this.now() - slot.loadedAt < this.minReloadIntervalMs) {
@@ -245,13 +280,18 @@ export class CachedGraphProjection implements IGraphProjection {
       return entries;
     } catch (error) {
       if (clears === this.clears) {
-        const count = this.failures?.corpusId === corpusId ? this.failures.count + 1 : 1;
-        const delay = Math.min(this.backoff.maxMs, this.backoff.initialMs * 2 ** Math.min(count - 1, 30));
-        const failures = { corpusId, count, retryAt: this.now() + delay, failureClass: failureClassOf(error) };
-        this.failures = failures;
+        const previous = this.failures?.corpusId === corpusId ? this.failures : null;
+        const count = (previous?.count ?? 0) + 1;
         const stale = this.cache?.corpusId === corpusId ? this.cache : null;
+        const backoff = stale ? this.backoff : this.coldBackoff;
+        const delay = Math.min(backoff.maxMs, backoff.initialMs * 2 ** Math.min(count - 1, 30));
+        const failures: LoadFailures = {
+          corpusId, count, retryAt: this.now() + delay, failureClass: failureClassOf(error),
+          fastFails: 0, fastFailLogged: false,
+        };
+        this.failures = failures;
         if (stale) this.reportStale(stale, 'reload_failed');
-        else this.reportUnavailable(corpusId, failures, true);
+        else this.reportUnavailable(corpusId, failures, true, previous?.fastFails ?? 0);
       }
       throw error;
     }
@@ -277,13 +317,19 @@ export class CachedGraphProjection implements IGraphProjection {
     });
   }
 
-  private reportUnavailable(corpusId: string, failures: LoadFailures, loadAttempted: boolean): void {
+  private reportUnavailable(
+    corpusId: string,
+    failures: LoadFailures,
+    loadAttempted: boolean,
+    fastFailedCalls: number,
+  ): void {
     this.onEvent({
       event: 'projection_unavailable',
       corpusId,
       currentVersion: this.version,
       failureClass: failures.failureClass,
       loadAttempted,
+      fastFailedCalls,
       consecutiveFailures: failures.count,
       nextRetryInMs: this.retryInMs(failures),
     });

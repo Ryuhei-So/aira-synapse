@@ -369,6 +369,9 @@ class RuntimeImpl implements MemGraphRagRuntime {
         ...(this.config.storage.projectionMinReloadIntervalMs === undefined
           ? {}
           : { projectionMinReloadIntervalMs: this.config.storage.projectionMinReloadIntervalMs }),
+        ...(this.config.storage.projectionColdRetryMaxMs === undefined
+          ? {}
+          : { projectionColdRetryMaxMs: this.config.storage.projectionColdRetryMaxMs }),
       });
       graphStore = storageAdapters.graphStore;
       vectorIndex = storageAdapters.vectorIndex;

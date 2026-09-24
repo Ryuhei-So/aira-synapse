@@ -470,6 +470,17 @@ describe('aira-graphdb memory reader against the fake owner native', () => {
       await expect(adapters.memoryReader.sectionCounts({ corpusId: CORPUS })).resolves.toMatchObject({ passages: 5 });
     });
 
+    it('applies storage.projectionColdRetryMaxMs to the cold window (#28 M1)', async () => {
+      captureStderr();
+      adapters = await createAiraGraphDbAdapters({ dbPath: useFake(), projectionColdRetryMaxMs: 5_000 });
+      await fakeClient(adapters).request('fake_set_projection', { overflow: true });
+      await syncProjectionVersion(adapters.graphProjection, adapters.readGeneration);
+      await expect(queryService(adapters, adapters.memoryReader).retrieve(BRIDGE)).rejects.toMatchObject({ code: 'NATIVE_LINE_OVERFLOW' });
+      const event = logged.find((item) => item.event === 'projection_unavailable');
+      expect(event).toMatchObject({ loadAttempted: true, consecutiveFailures: 1 });
+      expect(event && 'nextRetryInMs' in event ? event.nextRetryInMs : Infinity).toBeLessThanOrEqual(5_000);
+    });
+
     describe('paged ranking graph read (literature-hub #594 durable fix)', () => {
       const PAGED = { FAKE_OWNER_PROJECTION_PAGE_ENTRIES: '2' };
       const pageRequests = async (current: StorageAdapters) => (await fakeEvents(current))

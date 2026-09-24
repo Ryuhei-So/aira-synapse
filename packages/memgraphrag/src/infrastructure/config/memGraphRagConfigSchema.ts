@@ -100,6 +100,11 @@ export interface StorageConfig {
    * `projection_min_reload_interval_ms`, literature-hub #594). Default 0.
    */
   readonly projectionMinReloadIntervalMs?: number;
+  /**
+   * aira-graphdb: cap of the retry backoff while no ranking graph is loaded
+   * (YAML `projection_cold_retry_max_ms`, literature-hub #594). Default 120000.
+   */
+  readonly projectionColdRetryMaxMs?: number;
 }
 
 /** Security */
@@ -335,15 +340,11 @@ export function validateMemGraphRagConfig(
     assertString(storage, 'vectorIndexDir', 'storage', errors);
     assertBoolean(storage, 'walMode', 'storage', errors);
     assertBoolean(storage, 'autoMigrate', 'storage', errors);
-    if (storage['projectionMinReloadIntervalMs'] !== undefined) {
-      assertNumber(storage, 'projectionMinReloadIntervalMs', 'storage', errors, { min: 0 });
-      if (typeof storage['projectionMinReloadIntervalMs'] === 'number'
-        && !Number.isSafeInteger(storage['projectionMinReloadIntervalMs'])) {
-        errors.push({
-          path: 'storage.projectionMinReloadIntervalMs',
-          message: 'must be a safe integer',
-          actual: storage['projectionMinReloadIntervalMs'],
-        });
+    for (const key of ['projectionMinReloadIntervalMs', 'projectionColdRetryMaxMs']) {
+      if (storage[key] === undefined) continue;
+      assertNumber(storage, key, 'storage', errors, { min: 0 });
+      if (typeof storage[key] === 'number' && !Number.isSafeInteger(storage[key])) {
+        errors.push({ path: `storage.${key}`, message: 'must be a safe integer', actual: storage[key] });
       }
     }
   }

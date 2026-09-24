@@ -53,6 +53,7 @@ function harness(initial = 'g1') {
   const cached = new CachedGraphProjection(projection, {
     onEvent: (event) => events.push(event),
     reloadBackoff: { initialMs: 1_000, maxMs: 4_000 },
+    coldBackoff: { initialMs: 500, maxMs: 1_000 },
     now: () => clock,
   });
   return {
@@ -164,7 +165,7 @@ describe('CachedGraphProjection swap-on-success (literature-hub #594)', () => {
     expect(h.stale().at(-1)).toMatchObject({ consecutiveFailures: 1, nextRetryInMs: 1_000, servedVersion: 3, currentVersion: 4 });
   });
 
-  it('fails closed when the first load fails, then fails fast inside the backoff window (review M1)', async () => {
+  it('fails closed when the first load fails, then fails fast inside the shorter cold window (#27 M1, #28 M1/M2)', async () => {
     const h = harness();
     const unavailable = () => h.events.filter((event) => event.event === 'projection_unavailable');
     h.state.fail = () => new OverflowError();
@@ -176,36 +177,61 @@ describe('CachedGraphProjection swap-on-success (literature-hub #594)', () => {
       currentVersion: 1279,
       failureClass: 'NATIVE_LINE_OVERFLOW',
       loadAttempted: true,
+      fastFailedCalls: 0,
       consecutiveFailures: 1,
-      nextRetryInMs: 1_000,
+      nextRetryInMs: 500,
     }]);
 
-    // Inside the window: no corpus-sized read, a fast PROJECTION_UNAVAILABLE instead.
-    h.advance(999);
+    // Inside the cold window: no corpus-sized read, a fast PROJECTION_UNAVAILABLE instead,
+    // and only the first fast-fail of the window is logged.
+    h.advance(499);
     await expect(label(h.cached)).rejects.toBeInstanceOf(ProjectionUnavailableError);
     await expect(label(h.cached)).rejects.toMatchObject({
       code: 'PROJECTION_UNAVAILABLE', failureClass: 'NATIVE_LINE_OVERFLOW', nextRetryInMs: 1,
     });
-    expect(h.state.loads).toBe(1);
-    expect(unavailable().at(-1)).toMatchObject({ loadAttempted: false, consecutiveFailures: 1 });
-
-    // A generation bump does not reopen the window early.
     h.cached.invalidateIfVersionChanged(1280);
     await expect(label(h.cached)).rejects.toMatchObject({ code: 'PROJECTION_UNAVAILABLE' });
     expect(h.state.loads).toBe(1);
+    expect(unavailable()).toHaveLength(2);
+    expect(unavailable()[1]).toMatchObject({ loadAttempted: false, fastFailedCalls: 1, consecutiveFailures: 1 });
 
-    // After the window the load is retried; the next failure doubles the delay.
+    // After the window the load is retried; its event carries the suppressed fast-fails.
     h.advance(1);
     await expect(label(h.cached)).rejects.toMatchObject({ code: 'NATIVE_LINE_OVERFLOW' });
     expect(h.state.loads).toBe(2);
-    expect(unavailable().at(-1)).toMatchObject({ loadAttempted: true, consecutiveFailures: 2, nextRetryInMs: 2_000 });
+    expect(unavailable().at(-1)).toMatchObject({ loadAttempted: true, fastFailedCalls: 3, consecutiveFailures: 2, nextRetryInMs: 1_000 });
+
+    // The cold cap holds however many loads fail (the warm cap would reach 4 s here).
+    for (let attempt = 3; attempt <= 5; attempt += 1) {
+      h.advance(1_000);
+      await expect(label(h.cached)).rejects.toMatchObject({ code: 'NATIVE_LINE_OVERFLOW' });
+      expect(unavailable().at(-1)).toMatchObject({ loadAttempted: true, consecutiveFailures: attempt, nextRetryInMs: 1_000 });
+    }
 
     // Once the native can serve, the first load after the window succeeds and clears the failures.
     h.state.fail = null;
-    h.advance(2_000);
+    h.advance(1_000);
     expect(await label(h.cached)).toBe('g1');
     expect(h.cached.servedProjection).toEqual({ corpusId: 'c', version: 1280, stale: false });
     expect(h.stale()).toEqual([]);
+  });
+
+  it('defaults the cold window to 60 s capped at 2 min, and validates backoff options', async () => {
+    const { state, projection } = scripted('g1');
+    const events: ProjectionCacheEvent[] = [];
+    let clock = 0;
+    const cached = new CachedGraphProjection(projection, { onEvent: (event) => events.push(event), now: () => clock });
+    state.fail = () => new OverflowError();
+    const delays: number[] = [];
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      await expect(label(cached)).rejects.toMatchObject({ code: 'NATIVE_LINE_OVERFLOW' });
+      const last = events.at(-1)!;
+      delays.push(last.event === 'projection_unavailable' ? last.nextRetryInMs : -1);
+      clock += delays.at(-1)!;
+    }
+    expect(delays).toEqual([60_000, 120_000, 120_000, 120_000]);
+    expect(() => new CachedGraphProjection(projection, { coldBackoff: { initialMs: 10, maxMs: 5 } })).toThrow('coldBackoff');
+    expect(() => new CachedGraphProjection(projection, { reloadBackoff: { initialMs: -1, maxMs: 5 } })).toThrow('reloadBackoff');
   });
 
   it('a cold failure of one corpus does not back off another corpus', async () => {
@@ -293,7 +319,10 @@ describe('CachedGraphProjection swap-on-success (literature-hub #594)', () => {
       getDanglingNodes: vi.fn().mockResolvedValue([]),
       getNodeCount: vi.fn().mockResolvedValue(0),
     };
-    const cached = new CachedGraphProjection(inner, { reloadBackoff: { initialMs: 0, maxMs: 0 } });
+    const cached = new CachedGraphProjection(inner, {
+      reloadBackoff: { initialMs: 0, maxMs: 0 },
+      coldBackoff: { initialMs: 0, maxMs: 0 },
+    });
     await expect(label(cached)).rejects.toMatchObject({ code: 'NATIVE_LINE_OVERFLOW' });
     await expect(label(cached)).rejects.toMatchObject({ code: 'NATIVE_LINE_OVERFLOW' });
     expect(calls).toBe(2);
