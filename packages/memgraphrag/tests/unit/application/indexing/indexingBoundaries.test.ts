@@ -4,7 +4,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FullDocumentIndexingPipeline } from '../../../../src/application/indexing/FullDocumentIndexingPipeline.js';
 import { predictPostDeleteProjection } from '../../../../src/application/indexing/StageIICanonicalizer.js';
-import { DocumentMutationError, DocumentReplaceRefusedError } from '../../../../src/application/indexing/AsyncJobRunner.js';
+import {
+  DocumentMutationError,
+  DocumentReplaceRefusedError,
+  DocumentReplaceStateInconsistentError,
+} from '../../../../src/application/indexing/AsyncJobRunner.js';
 import { BatchEmbeddingProvider } from '../../../../src/infrastructure/embedding/BatchEmbeddingProvider.js';
 import { openDatabase, runMigrations } from '../../../../src/infrastructure/storage/migrate.js';
 import { chunkMarkdownDocument, chunkMarkdownDocumentWithGinza, fallbackParagraphSplit, toExtractionChunk } from '../../../../src/application/indexing/MarkdownChunker.js';
@@ -993,6 +997,11 @@ describe('document replace option (literature-hub #614)', () => {
         return reads === 1 ? [projection] : [{ ...projection, frequency: 2, contributionPresent: false }];
       },
     });
+    // The stored schema is consistent: it lists the document.
+    harness.indexingMemory.getSchemasByIds.mockResolvedValue([{
+      ...projection, aliases: [], factIds: [], sourceDocumentIds: ['doc-boundary'], version: 1,
+      createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
+    }]);
     const memoryDeleteDocument = vi.fn(async () => {
       harness.mutationTrace.push('delete');
       return {} as never;
@@ -1007,6 +1016,9 @@ describe('document replace option (literature-hub #614)', () => {
         sourceUrl: 'https://example.com/paper', language: 'en', replaceExisting: true,
       }).then(() => undefined, (caught: unknown) => caught);
       expect(error).toBeInstanceOf(DocumentMutationError);
+      expect(error).toBeInstanceOf(DocumentReplaceStateInconsistentError);
+      expect(error).toMatchObject({ replaceStateCode: 'DOCUMENT_REPLACE_STATE_INCONSISTENT', documentId: 'doc-boundary' });
+      expect(memoryDeleteDocument).toHaveBeenCalledOnce();
       expect(((error as Error).cause as Error).message)
         .toBe('replace in-batch schema state differs from the pre-delete prediction');
       expect(configured.canonicalUpsert).not.toHaveBeenCalled();

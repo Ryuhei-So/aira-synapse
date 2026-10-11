@@ -14,5 +14,10 @@
     "code": "DOCUMENT_REPLACE_UNSUPPORTED_LANE",
     "documentId": "doc_0123456789ab",
     "message": "document replace refused before mutation: the canonical lane with memory_delete_document is required"
+  },
+  "replaceStateInconsistentError": {
+    "code": "DOCUMENT_REPLACE_STATE_INCONSISTENT",
+    "documentId": "doc_0123456789ab",
+    "message": "document replace refused: stored schema state is inconsistent with the document; the existing version is kept"
   }
 }

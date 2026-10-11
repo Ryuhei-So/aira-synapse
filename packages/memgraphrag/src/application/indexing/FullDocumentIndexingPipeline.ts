@@ -6,6 +6,7 @@ import type Database from 'better-sqlite3';
 import {
   DocumentMutationError,
   DocumentReplaceRefusedError,
+  DocumentReplaceStateInconsistentError,
   type DocumentIndexingPipeline,
   type ProcessDocumentResult,
 } from './AsyncJobRunner.js';
@@ -35,7 +36,10 @@ import {
   type IIndexingMemory,
   type IVectorIndex,
 } from '../../domain/storage/index.js';
-import type { ISchemaCanonicalizationMemory } from '../../domain/storage/schemaCanonicalization.js';
+import type {
+  ISchemaCanonicalizationMemory,
+  SchemaCanonicalizationProjection,
+} from '../../domain/storage/schemaCanonicalization.js';
 import type { IDocumentReplaceMemory } from '../../domain/storage/documentReplace.js';
 import type { ActivateFactsRequest } from '../../domain/storage/indexingMemory.js';
 import type { Passage } from '../../domain/memory/passage.js';
@@ -44,7 +48,6 @@ import {
   type CanonicalSchemaPreparation,
   type PreparedSchemaView,
 } from './StageIICanonicalizer.js';
-import type { SchemaState } from '../../domain/memory/types.js';
 import type { SchemaHydrationWireParams } from '../../domain/storage/schemaCanonicalization.js';
 import type { Fact } from '../../domain/memory/fact.js';
 import type { ITermDictionary } from '../../domain/dictionary/termDictionary.js';
@@ -182,6 +185,53 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
     return { canonicalDelta, graphPlan, hydrationRequests };
   }
 
+  /**
+   * Observe, before the delete and without any mutation, every way the native
+   * delete rule (aira-graphdb `memory_delete_document`, `prune_schema_value`
+   * callers) can touch a schema this replace plans against:
+   *
+   * - the schema lists the document: the projection's `contributionPresent`;
+   * - the schema lists one of the document's facts: its `factIds` carry the
+   *   document's fact-id prefix (`fact:{documentId}:`, DocumentMemoryPlan),
+   *   read through the bounded full-schema read for the existing candidates.
+   *
+   * A schema that lists a fact of the document but not the document itself
+   * would be decremented by the delete while the projection says it is
+   * untouched.  That state is inconsistent and is refused here, before any
+   * mutation.  The third rule (the schemaId of any stored fact of the
+   * document) has no bounded read: facts cannot be listed by document.  It is
+   * caught in the batch by the prediction check instead.
+   */
+  private async assertReplaceStateObservable(
+    corpusId: string,
+    documentId: string,
+    preparation: CanonicalSchemaPreparation,
+    committed: ReadonlyMap<string, SchemaCanonicalizationProjection>,
+  ): Promise<void> {
+    const existing = preparation.schemaViews.filter((view) => !view.isNew);
+    if (existing.length === 0) return;
+    const stored = await this.options.indexingMemory.getSchemasByIds({
+      corpusId,
+      schemaIds: existing.map((view) => view.schemaId),
+    });
+    const byId = new Map(stored.map((schema) => [schema.schemaId, schema]));
+    const factPrefix = `fact:${documentId}:`.replace(/\s+/g, '_');
+    for (const view of existing) {
+      const schema = byId.get(view.schemaId);
+      if (!schema) {
+        throw new DocumentReplaceRefusedError(`schema ${view.schemaId} disappeared between reads`, 'state');
+      }
+      const listsDocument = schema.sourceDocumentIds.includes(documentId);
+      const listsDocumentFact = schema.factIds.some((factId) => factId.startsWith(factPrefix));
+      if (listsDocument !== committed.get(view.schemaId)?.contributionPresent) {
+        throw new DocumentReplaceRefusedError(`schema ${view.schemaId} projection disagrees with its stored sources`, 'state');
+      }
+      if (listsDocumentFact && !listsDocument) {
+        throw new DocumentReplaceRefusedError(`schema ${view.schemaId} lists a fact of the document but not the document`, 'state');
+      }
+    }
+  }
+
   public async processDocument(
     corpusId: string,
     document: IndexDocumentInput,
@@ -203,8 +253,9 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
         document.language ?? 'unknown', now, now, now,
       );
     };
-    // A replace writes the row only once the new source has chunks, so a
-    // replace that keeps the existing version leaves its row untouched.
+    // A replace writes the row only just before its mutation section, so a
+    // replace that keeps the existing version (no chunks, or refused) leaves
+    // its row untouched.
     if (!documentReplace) writeDocumentRow();
 
     // Stage I: Extract chunks, entities, schemas, facts
@@ -220,7 +271,6 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
       }
       return { processedDocumentId: document.documentId, addedNodes: 0, addedEdges: 0, conflicts: 0 };
     }
-    if (documentReplace) writeDocumentRow();
 
     // Stage II: Canonicalize schemas and merge into memory
     const stageII = new StageIICanonicalizer(corpusId, this.options.indexingMemory);
@@ -238,9 +288,9 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
     // the committed (pre-delete) state: a schema the delete only demotes
     // inside the batch is not newly stable and must not re-activate other
     // documents' inactive facts.
-    const committedSchemaStates = new Map<string, SchemaState>();
+    const committedProjections = new Map<string, SchemaCanonicalizationProjection>();
     const replaceActivationIds = (preparation: CanonicalSchemaPreparation): readonly string[] =>
-      preparation.newlyStableSchemaIds.filter((schemaId) => committedSchemaStates.get(schemaId) !== 'stable');
+      preparation.newlyStableSchemaIds.filter((schemaId) => committedProjections.get(schemaId)?.state !== 'stable');
     // A schema-bearing document always takes the canonical lane here:
     // requireReplaceSupport refused a replace without a canonical memory, so
     // a replace reaches the legacy lane only with zero schemas.
@@ -248,7 +298,7 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
       ? documentReplace
         ? await stageII.prepareCanonicalSchemas(candidateSchemas, document.documentId, undefined, {
           projectionView: (projection) => {
-            committedSchemaStates.set(projection.schemaId, projection.state);
+            committedProjections.set(projection.schemaId, projection);
             return predictPostDeleteProjection(projection);
           },
         })
@@ -257,6 +307,9 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
     const legacyPreparation = canonicalPreparation === undefined
       ? await stageII.prepareSchemas(candidateSchemas)
       : undefined;
+    if (documentReplace && canonicalPreparation) {
+      await this.assertReplaceStateObservable(corpusId, document.documentId, canonicalPreparation, committedProjections);
+    }
     let schemas = canonicalPreparation?.schemaViews ?? legacyPreparation!.finalSchemas;
     const newlyStableSchemaIds = canonicalPreparation
       ? documentReplace ? replaceActivationIds(canonicalPreparation) : canonicalPreparation.newlyStableSchemaIds
@@ -376,6 +429,8 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
       );
     }
 
+    if (documentReplace) writeDocumentRow();
+    let activationApplied = false;
     try {
       if (documentReplace) {
         // Replace (design #612 §5.2): delete inside the open batch, then
@@ -408,7 +463,10 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
           // state; never commit that.
           if (!sameIds(fresh.schemaViews.map(planningKey), canonicalPreparation.schemaViews.map(planningKey))
             || !sameIds(freshFacts.map(factPlanningKey), allFacts.map(factPlanningKey))) {
-            throw new Error('replace in-batch schema state differs from the pre-delete prediction');
+            throw new DocumentReplaceStateInconsistentError(
+              document.documentId,
+              'replace in-batch schema state differs from the pre-delete prediction',
+            );
           }
           const freshActivationIds = replaceActivationIds(fresh);
           const freshActivation = freshActivationIds.length > 0
@@ -436,12 +494,20 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
           delta = canonicalDelta;
           graphPlan = plan.graphPlan;
           hydrationRequests = plan.hydrationRequests;
+          // Activate before writing this document's facts: activation flips
+          // every inactive fact of a newly stable schema, and this
+          // document's facts must land with exactly the states conflict
+          // resolution decided (a fresh insert never re-activates them).
+          if (activation) {
+            await this.options.indexingMemory.activateFactsBySchemaIds(activation);
+            activationApplied = true;
+          }
         }
       }
       const upsertResult = canonicalDelta && canonicalMemory
         ? await canonicalMemory.upsertSchemaCanonicalizationDelta(canonicalDelta)
         : await this.options.indexingMemory.upsertDelta(legacyDelta!);
-      if (activation) {
+      if (activation && !activationApplied) {
         await this.options.indexingMemory.activateFactsBySchemaIds(activation);
       }
 
@@ -488,6 +554,8 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
         memoryDeltaMutationCount: upsertResult?.mutationCount ?? 1,
       };
     } catch (error) {
+      // Already a DocumentMutationError carrying its replace-state code.
+      if (error instanceof DocumentReplaceStateInconsistentError) throw error;
       throw new DocumentMutationError(error);
     }
   }

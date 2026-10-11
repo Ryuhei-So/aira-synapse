@@ -16,6 +16,13 @@ interface GraphDbOwnerJobErrorContract {
    * (literature-hub #614).  Distinct from both other codes.
    */
   readonly replaceRefusedError: ContractError & { readonly documentId: string };
+  /**
+   * A replace whose stored schema state is inconsistent with the document
+   * (literature-hub #614).  Refused before the delete when observable;
+   * otherwise detected in the batch, which is then discarded.  Never
+   * resolved automatically: the work is parked for a human.
+   */
+  readonly replaceStateInconsistentError: ContractError & { readonly documentId: string };
 }
 
 function requireError(value: unknown, name: string, documentScoped: boolean): ContractError {
@@ -53,9 +60,22 @@ export function parseJobErrorContract(rawText: string): GraphDbOwnerJobErrorCont
   if (ownerError.code === documentError.code) {
     throw new Error('owner and document job-error codes must be distinct');
   }
+  const replaceStateInconsistentError = requireError(
+    candidate.replaceStateInconsistentError,
+    'replaceStateInconsistentError',
+    true,
+  );
   if (replaceRefusedError.code === ownerError.code
     || replaceRefusedError.code === documentError.code) {
     throw new Error('replace-refused job-error code must be distinct');
+  }
+  if (new Set([
+    ownerError.code,
+    documentError.code,
+    replaceRefusedError.code,
+    replaceStateInconsistentError.code,
+  ]).size !== 4) {
+    throw new Error('replace-state-inconsistent job-error code must be distinct');
   }
   return Object.freeze({
     contract: 'graphdb-owner-job-errors',
@@ -63,6 +83,7 @@ export function parseJobErrorContract(rawText: string): GraphDbOwnerJobErrorCont
     ownerError,
     documentError: documentError as ContractError & { readonly documentId: string },
     replaceRefusedError: replaceRefusedError as ContractError & { readonly documentId: string },
+    replaceStateInconsistentError: replaceStateInconsistentError as ContractError & { readonly documentId: string },
   });
 }
 

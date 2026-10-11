@@ -14,6 +14,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   AsyncJobRunner,
+  DocumentMutationError,
   DocumentReplaceRefusedError,
 } from '../../../src/application/indexing/AsyncJobRunner.js';
 import { buildCanonicalizationMemoryDelta } from '../../../src/application/indexing/DocumentMemoryPlan.js';
@@ -99,7 +100,7 @@ function fakeLlm(): ILLMProvider & { readonly calls: string[] } {
       calls.push(prompt);
       if (prompt.startsWith('You are a knowledge graph conflict resolver')) {
         return {
-          text: JSON.stringify({ decision: 'keep_both', confidence: 0.9, rationale: 'fake', keep_fact_indices: [0] }),
+          text: JSON.stringify({ decision: resolverDecision, confidence: 0.9, rationale: 'fake' }),
           model: 'fake',
           usage: { inputTokens: 1, outputTokens: 1 },
         };
@@ -157,8 +158,12 @@ interface Harness {
   close(): Promise<void>;
 }
 
+/** What the fake conflict resolver decides; reset after every test. */
+let resolverDecision: 'keep_both' | 'keep_existing' = 'keep_both';
+
 const dirs: string[] = [];
 afterEach(() => {
+  resolverDecision = 'keep_both';
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
@@ -361,10 +366,13 @@ describe.sequential('aira-graphdb canonical-lane document replace (literature-hu
       expect(result).toMatchObject({ status: 'completed', errors: [] });
       const trace = methods(harness.traffic);
       expect(trace.filter((m) => m === 'memory_delete_document')).toHaveLength(1);
-      // One projection read before the delete, one inside the batch after it.
-      expect(trace.filter((m) => m === 'memory_get_schemas_by_ids')).toHaveLength(2);
+      // Before the delete: the projection read and the bounded full-schema
+      // read of the existing candidates (state check).  After it, inside
+      // the batch: the projection re-read.
+      expect(trace.filter((m) => m === 'memory_get_schemas_by_ids')).toHaveLength(3);
       const deleteAt = trace.indexOf('memory_delete_document');
       expect(trace.lastIndexOf('memory_get_schemas_by_ids')).toBeGreaterThan(deleteAt);
+      expect(trace.slice(0, deleteAt).filter((m) => m === 'memory_get_schemas_by_ids')).toHaveLength(2);
       expect(trace.slice(0, deleteAt).filter((m) => MUTATIONS.has(m))).toEqual([]);
       // Only extraction reached the LLM: W's old facts were excluded from
       // conflict detection, so "alcohol causes cirrhosis" did not conflict
@@ -695,6 +703,113 @@ describe.sequential('aira-graphdb canonical-lane document replace (literature-hu
     expect(after.generation).toBe(before.generation + 1);
     expect(schema(after, SHARED)).toMatchObject({ frequency: 3, state: 'stable', sourceDocumentIds: [W] });
     expect(factsOf(after, W)).toEqual([expect.objectContaining({ state: 'active' })]);
+  }, TEST_TIMEOUT);
+
+  it.each([
+    ['keep_existing', 'inactive'],
+    ['keep_both', 'active'],
+  ] as const)('a conflict decision (%s) survives an abstract → full-text replace exactly as on a fresh insert', async (decision, expectedState) => {
+    // Reviewer probe B (PR #29 round 2, N1): the schema is pending before
+    // and stable after the re-plan, so it is newly stable.  Activation runs
+    // before this document's facts are written, so it cannot undo the
+    // conflict decision on them.
+    resolverDecision = decision;
+    const index = async (dbPath: string, documents: readonly IndexDocumentInput[]) => {
+      const harness = await openHarness(dbPath);
+      try {
+        for (const document of documents) {
+          expect(await harness.index([document])).toMatchObject({ status: 'completed', errors: [] });
+        }
+        return harness.llm.calls.filter((prompt) => prompt.startsWith('You are a knowledge graph conflict resolver'));
+      } finally {
+        await harness.close();
+      }
+    };
+    const full = ['w_full_shared', 'w_full_shared', 'w_full_shared'];
+
+    const freshPath = tempDbPath(`n1-fresh-${decision}`);
+    await index(freshPath, [doc('doc_v', ['v_gout', 'v_gout'])]);
+    expect(await index(freshPath, [doc(W, full)])).toHaveLength(1);
+    const fresh = await observe(freshPath);
+
+    const replacePath = tempDbPath(`n1-replace-${decision}`);
+    await index(replacePath, [doc('doc_v', ['v_gout', 'v_gout']), doc(W, ['w_abs_shared'])]);
+    expect(schema(await observe(replacePath), SHARED)).toMatchObject({ frequency: 1, state: 'pending' });
+    expect(await index(replacePath, [doc(W, full, { replaceExisting: true })])).toHaveLength(1);
+    const replaced = await observe(replacePath);
+
+    expect(schema(replaced, SHARED)).toMatchObject({ frequency: 3, state: 'stable', sourceDocumentIds: [W] });
+    expect(factsOf(replaced, W)).toEqual([expect.objectContaining({ state: expectedState })]);
+    expect(factsOf(fresh, W)).toEqual([expect.objectContaining({ state: expectedState })]);
+    expect(factsOf(replaced, 'doc_v')).toEqual([expect.objectContaining({ state: 'active' })]);
+  }, TEST_TIMEOUT);
+
+  /** Rewrite a stored schema through the legacy upsert (test-only corruption). */
+  async function corruptSchema(dbPath: string, schemaId: string, edit: (schema: Schema) => Schema): Promise<void> {
+    const adapters = await createStorageAdapters({ backend: 'aira-graphdb', airaGraphDb: { dbPath } });
+    const [stored] = await adapters.indexingMemory.getSchemasByIds({ corpusId: CORPUS, schemaIds: [schemaId] });
+    await adapters.batch!.begin();
+    await adapters.indexingMemory.upsertDelta({
+      corpusId: CORPUS, passages: [], facts: [], schemas: [edit(stored!)], exportedAt: new Date().toISOString(),
+    });
+    await adapters.batch!.commit();
+    await adapters.close();
+  }
+
+  it('refuses before the delete when a schema lists a fact of the document but not the document (probe C)', async () => {
+    const dbPath = tempDbPath('probe-c-pre');
+    await seed(dbPath);
+    await corruptSchema(dbPath, SHARED, (stored) => ({
+      ...stored, sourceDocumentIds: stored.sourceDocumentIds.filter((id) => id !== W),
+    }));
+    const before = await observe(dbPath);
+    expect(schema(before, SHARED)!.sourceDocumentIds).toEqual([X]);
+    const harness = await openHarness(dbPath);
+    try {
+      const result = await harness.index([doc(W, ['w_full_shared'], { replaceExisting: true })]);
+      expect(result).toEqual({
+        status: 'completed',
+        errors: [{
+          code: 'DOCUMENT_REPLACE_STATE_INCONSISTENT',
+          documentId: W,
+          message: expect.stringContaining('lists a fact of the document but not the document'),
+        }],
+      });
+      expect(methods(harness.traffic).filter((m) => MUTATIONS.has(m))).toEqual([]);
+      expect(harness.db.prepare('SELECT COUNT(*) AS n FROM documents').get()).toEqual({ n: 0 });
+    } finally {
+      await harness.close();
+    }
+    expect(await observe(dbPath)).toEqual(before);
+  }, TEST_TIMEOUT);
+
+  it('discards the batch when the inconsistency is only visible to the delete (a stored fact of the document)', async () => {
+    // The schema lists neither the document nor its fact, but the fact's
+    // schemaId still names it: no bounded read shows that before the delete,
+    // so the in-batch prediction check catches it.
+    const dbPath = tempDbPath('probe-c-batch');
+    await seed(dbPath);
+    await corruptSchema(dbPath, SHARED, (stored) => ({
+      ...stored,
+      sourceDocumentIds: stored.sourceDocumentIds.filter((id) => id !== W),
+      factIds: stored.factIds.filter((id) => !id.startsWith(`fact:${W}:`)),
+    }));
+    const before = await observe(dbPath);
+    const harness = await openHarness(dbPath);
+    const result = await harness.index([doc(W, ['w_full_shared'], { replaceExisting: true })]);
+    await harness.close();
+    expect(methods(harness.traffic)).toContain('memory_delete_document');
+    expect(result.status).toBe('failed');
+    expect((result.thrown as Error).name).toBe('DocumentReplaceStateInconsistentError');
+    expect(result.thrown).toBeInstanceOf(DocumentMutationError);
+    expect(result.errors).toEqual([{
+      code: 'DOCUMENT_REPLACE_STATE_INCONSISTENT',
+      documentId: W,
+      message: expect.stringContaining('differs from the pre-delete prediction'),
+    }]);
+    const recovered = await discardRecovery(dbPath);
+    expect(recovered.generation).toBe(before.generation);
+    expect(await observe(dbPath)).toEqual(before);
   }, TEST_TIMEOUT);
 
   it('a replace of a document that does not exist yet behaves like an insert', async () => {
