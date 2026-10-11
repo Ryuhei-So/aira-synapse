@@ -809,6 +809,49 @@ describe.sequential('aira-graphdb canonical-lane document replace (literature-hu
     await discardRecovery(dbPath);
   }, TEST_TIMEOUT);
 
+  it.each([
+    ['graph persistence', 'graph'],
+    ['vector persistence', 'vector'],
+  ])('leaves the sqlite documents row byte-identical when %s fails after the delete', async (_label, point) => {
+    const dbPath = tempDbPath(`sqlite-row-${point}`);
+    await seed(dbPath);
+    const harness = await openHarness(dbPath, (adapters) => (point === 'graph'
+      ? {
+        graphStore: new Proxy(adapters.graphStore, {
+          get(target, property) {
+            if (property === 'upsertEdges') return async () => { throw new Error('injected graph failure'); };
+            const value = Reflect.get(target, property, target);
+            return typeof value === 'function' ? value.bind(target) : value;
+          },
+        }),
+      }
+      : {
+        vectorIndex: new Proxy(adapters.vectorIndex, {
+          get(target, property) {
+            if (property === 'upsert') return async () => { throw new Error('injected vector failure'); };
+            const value = Reflect.get(target, property, target);
+            return typeof value === 'function' ? value.bind(target) : value;
+          },
+        }),
+      }));
+    // The row of the existing version, as an ordinary index wrote it.
+    harness.db.prepare(
+      `INSERT INTO documents (document_id, corpus_id, title, source_url, language, converted_at, created_at, updated_at)
+       VALUES (?, ?, 'old title', 'https://example.com/old', 'en', 't0', 't0', 't0')`,
+    ).run(W, CORPUS);
+    const readRow = () => JSON.stringify(harness.db.prepare('SELECT * FROM documents WHERE document_id = ?').get(W));
+    const before = readRow();
+    const result = await harness.index([doc(W, ['w_full_shared'], {
+      replaceExisting: true, title: 'new title', sourceUrl: 'https://example.com/new',
+    })]);
+    expect(result.status).toBe('failed');
+    expect((result.thrown as Error).name).toBe('DocumentMutationError');
+    expect(methods(harness.traffic)).toContain('memory_delete_document');
+    expect(readRow()).toBe(before);
+    await harness.close();
+    await discardRecovery(dbPath);
+  }, TEST_TIMEOUT);
+
   it('writes the sqlite documents row after a committed replace', async () => {
     const dbPath = tempDbPath('sqlite-row-ok');
     await seed(dbPath);

@@ -464,17 +464,19 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
       if (activation && !activationApplied) {
         await this.options.indexingMemory.activateFactsBySchemaIds(activation);
       }
-      // A replace writes its sqlite documents row only after the native
-      // upsert succeeded, inside the mutation section: a replace abandoned
-      // after the delete keeps the old row with the old native version, and
-      // a failure writing the row abandons the batch too.
-      if (documentReplace) writeDocumentRow();
 
       const tMemSave = Date.now();
       // Stage IV persistence is write-only; graph derivation and embeddings
       // were completed before the mutation boundary above.
       await persistGraphProjection(this.options.graphStore, graphPlan, hydrationRequests);
       await persistVectorRecords(this.options.vectorIndex, vectorRecords);
+      // A replace writes its sqlite documents row after every native write
+      // of the mutation section, so a replace abandoned after the delete
+      // keeps the old row next to the old native version, and a failure
+      // writing the row abandons the batch too.  Stage V below is sqlite
+      // only (disabled on aira-graphdb) and needs the row for its foreign
+      // keys.
+      if (documentReplace) writeDocumentRow();
 
       // Stage V: Lexicon construction (dictionary + thesaurus from extracted facts)
       if (this.options.enableDictionaryIndexing !== false && this.options.dictionary) {
