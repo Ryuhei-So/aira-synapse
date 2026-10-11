@@ -25,6 +25,7 @@ import { StageIICanonicalizer } from '../../../src/application/indexing/StageIIC
 import type { IndexDocumentInput } from '../../../src/application/indexing/StageIExtractor.js';
 import { JOB_ERROR_CONTRACT } from '../../../src/application/indexing/jobErrorContract.js';
 import { computeCanonicalKey, type Schema } from '../../../src/domain/memory/schema.js';
+import type { Fact } from '../../../src/domain/memory/fact.js';
 import type { ILLMProvider } from '../../../src/domain/provider/llmProvider.js';
 import type { IIndexingMemory, ISchemaCanonicalizationMemory } from '../../../src/domain/storage/index.js';
 import type { IDocumentReplaceMemory } from '../../../src/domain/storage/documentReplace.js';
@@ -63,6 +64,8 @@ const RELATIONS: Readonly<Record<string, Relation>> = {
   w_full_shared: { head: 'Alcohol', headType: 'Habit', relation: 'CAUSES', tail: 'Cirrhosis', tailType: 'disease' },
   w_full_old_alias: { head: 'Wine', headType: 'HABIT', relation: 'Causes', tail: 'Gout', tailType: 'Disease' },
   w_full_only: { head: 'Ibuprofen', headType: 'Drug', relation: 'treats', tail: 'Fever', tailType: 'Symptom' },
+  // An active fact of another schema that conflicts with "Alcohol causes …".
+  v_gout: { head: 'Alcohol', headType: 'Habit', relation: 'causes', tail: 'Gout', tailType: 'Symptom' },
   // A document that does not exist before its replace.
   z_new: { head: 'Exercise', headType: 'Habit', relation: 'prevents', tail: 'Obesity', tailType: 'Disease' },
 };
@@ -94,6 +97,13 @@ function fakeLlm(): ILLMProvider & { readonly calls: string[] } {
     calls,
     generate: vi.fn(async ({ prompt }: { prompt: string }) => {
       calls.push(prompt);
+      if (prompt.startsWith('You are a knowledge graph conflict resolver')) {
+        return {
+          text: JSON.stringify({ decision: 'keep_both', confidence: 0.9, rationale: 'fake', keep_fact_indices: [0] }),
+          model: 'fake',
+          usage: { inputTokens: 1, outputTokens: 1 },
+        };
+      }
       const keys = [...prompt.matchAll(/relkey_([a-z_]+)/g)].map((match) => match[1]!);
       const relations = keys.map((key) => {
         const relation = RELATIONS[key];
@@ -250,8 +260,8 @@ interface Observed {
   readonly generation: number;
   readonly memory: {
     readonly passages: { passageId: string; text: string; metadata: { documentId: string } }[];
-    readonly facts: { factId: string; schemaId: string; sourceDocumentIds: string[] }[];
-    readonly schemas: { schemaId: string; sourceDocumentIds: string[]; frequency: number; aliases: { label: string }[] }[];
+    readonly facts: { factId: string; schemaId: string; sourceDocumentIds: string[]; state: string }[];
+    readonly schemas: { schemaId: string; sourceDocumentIds: string[]; frequency: number; state: string; aliases: { label: string }[] }[];
   };
   readonly nodes: { nodeId: string; layer: string; ref: Record<string, unknown> }[];
   readonly edges: { edgeId: string; sourceNodeId: string; targetNodeId: string; relation: string }[];
@@ -555,7 +565,7 @@ describe.sequential('aira-graphdb canonical-lane document replace (literature-hu
   it.each([
     ['the indexing memory has no canonical lane', 'legacy'],
     ['the backend has no memory_delete_document', 'no-delete'],
-  ])('refuses a replace when %s before any RPC, LLM call or write', async (_label, variant) => {
+  ])('refuses a replace when %s: no native mutation, no extraction, no documents row; the job row records the code', async (_label, variant) => {
     const dbPath = tempDbPath(`refuse-${variant}`);
     const before = await seed(dbPath);
     const harness = await openHarness(dbPath, (adapters) => {
@@ -577,15 +587,114 @@ describe.sequential('aira-graphdb canonical-lane document replace (literature-hu
         .then(() => undefined, (error: unknown) => error);
       expect(refused).toBeInstanceOf(DocumentReplaceRefusedError);
       expect((refused as DocumentReplaceRefusedError).code).toBe('DOCUMENT_REPLACE_UNSUPPORTED_LANE');
-      expect((refused as Error).message).toContain(JOB_ERROR_CONTRACT.replaceRefusedError.message);
-      // Not one RPC (read or mutation), no extraction, no sqlite row.
+      // The pipeline itself: no native RPC (read or mutation), no
+      // extraction, no sqlite documents row.
       expect(harness.traffic.length).toBe(startupTraffic);
+      expect(harness.llm.calls).toEqual([]);
+      expect(harness.db.prepare('SELECT COUNT(*) AS n FROM documents').get()).toEqual({ n: 0 });
+
+      // The same document through a job: the runner records the refusal on
+      // the job row, and the batch it opened is committed with no mutation,
+      // so the generation is unchanged.  Its only RPCs are the checkpoint
+      // read and the empty begin/commit pair.
+      const jobStart = harness.traffic.length;
+      const result = await harness.index([doc(W, ['w_full_shared'], { replaceExisting: true })]);
+      expect(result).toEqual({
+        status: 'completed',
+        errors: [{
+          code: 'DOCUMENT_REPLACE_UNSUPPORTED_LANE',
+          documentId: W,
+          message: expect.stringContaining(JOB_ERROR_CONTRACT.replaceRefusedError.message),
+        }],
+      });
+      expect(methods(harness.traffic.slice(jobStart)))
+        .toEqual(['memory_load_checkpoint', 'batch_begin', 'batch_commit']);
       expect(harness.llm.calls).toEqual([]);
       expect(harness.db.prepare('SELECT COUNT(*) AS n FROM documents').get()).toEqual({ n: 0 });
     } finally {
       await harness.close();
     }
     expect(await observe(dbPath)).toEqual(before);
+  }, TEST_TIMEOUT);
+
+  it('a replace that only demotes a schema inside the batch does not activate other documents\' inactive facts', async () => {
+    // Reviewer probe (PR #29 round 1, H1): W and X share a stable schema at
+    // its threshold (frequency 2) and X's fact is inactive.  The delete
+    // demotes the schema to pending inside the batch; the re-plan promotes
+    // it again.  That is not "newly stable" against the committed state.
+    const run = async (replaceExisting: boolean) => {
+      const dbPath = tempDbPath(`h1-${replaceExisting}`);
+      await seed(dbPath);
+      const seeded = await observe(dbPath);
+      const xFact = factsOf(seeded, X)[0]!;
+      expect(schema(seeded, SHARED)).toMatchObject({ frequency: 2, state: 'stable' });
+      // Make X's fact an inactive conflict loser.
+      const flip = await createStorageAdapters({ backend: 'aira-graphdb', airaGraphDb: { dbPath } });
+      await flip.batch!.begin();
+      await flip.indexingMemory.upsertDelta({
+        corpusId: CORPUS, passages: [], schemas: [],
+        facts: [{ ...(xFact as unknown as Fact), state: 'inactive' }],
+        exportedAt: new Date().toISOString(),
+      });
+      await flip.batch!.commit();
+      await flip.close();
+      const frequencies: number[] = [];
+      for (let round = 0; round < 3; round += 1) {
+        const harness = await openHarness(dbPath);
+        try {
+          expect(await harness.index([doc(W, ['w_abs_shared', 'w_abs_shared'], { replaceExisting })]))
+            .toMatchObject({ status: 'completed', errors: [] });
+          expect(methods(harness.traffic)).not.toContain('memory_activate_facts_by_schema_ids');
+        } finally {
+          await harness.close();
+        }
+        const state = await observe(dbPath);
+        frequencies.push(schema(state, SHARED)!.frequency);
+        expect(state.memory.facts.find((f) => f.factId === xFact.factId)).toMatchObject({ state: 'inactive' });
+        expect(schema(state, SHARED)).toMatchObject({ state: 'stable' });
+      }
+      return frequencies;
+    };
+    expect(await run(false)).toEqual([2, 2, 2]);
+    // Known drift (aira-graphdb #58, design #612 §5.1): the canonical upsert
+    // adds this document's occurrence count (2) while the delete subtracts 1.
+    expect(await run(true)).toEqual([3, 4, 5]);
+  }, TEST_TIMEOUT);
+
+  it('plans an abstract → full-text replace against the post-delete state, so promoted facts are conflict-checked', async () => {
+    // Reviewer finding H2: the abstract contributed once (pending); the full
+    // text contributes three times.  Before the delete the stored projection
+    // says "already contributed" (frequency stays 1, facts inactive); after
+    // it the schema is 0 + 3 = stable and the facts commit active.  The
+    // prediction makes conflict detection see them as active.
+    const dbPath = tempDbPath('h2');
+    const seedHarness = await openHarness(dbPath);
+    try {
+      expect(await seedHarness.index([doc('doc_v', ['v_gout', 'v_gout'])])).toMatchObject({ status: 'completed', errors: [] });
+      expect(await seedHarness.index([doc(W, ['w_abs_shared'])])).toMatchObject({ status: 'completed', errors: [] });
+    } finally {
+      await seedHarness.close();
+    }
+    const before = await observe(dbPath);
+    expect(schema(before, SHARED)).toMatchObject({ frequency: 1, state: 'pending' });
+    expect(factsOf(before, 'doc_v')).toEqual([expect.objectContaining({ state: 'active' })]);
+
+    const harness = await openHarness(dbPath);
+    try {
+      expect(await harness.index([
+        doc(W, ['w_full_shared', 'w_full_shared', 'w_full_shared'], { replaceExisting: true }),
+      ])).toMatchObject({ status: 'completed', errors: [] });
+      const resolverPrompts = harness.llm.calls.filter((prompt) => prompt.startsWith('You are a knowledge graph conflict resolver'));
+      expect(resolverPrompts).toHaveLength(1);
+      expect(resolverPrompts[0]).toContain('(Alcohol, causes, Cirrhosis)');
+      expect(resolverPrompts[0]).toContain('(Alcohol, causes, Gout)');
+    } finally {
+      await harness.close();
+    }
+    const after = await observe(dbPath);
+    expect(after.generation).toBe(before.generation + 1);
+    expect(schema(after, SHARED)).toMatchObject({ frequency: 3, state: 'stable', sourceDocumentIds: [W] });
+    expect(factsOf(after, W)).toEqual([expect.objectContaining({ state: 'active' })]);
   }, TEST_TIMEOUT);
 
   it('a replace of a document that does not exist yet behaves like an insert', async () => {

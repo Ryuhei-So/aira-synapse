@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FullDocumentIndexingPipeline } from '../../../../src/application/indexing/FullDocumentIndexingPipeline.js';
+import { predictPostDeleteProjection } from '../../../../src/application/indexing/StageIICanonicalizer.js';
 import { DocumentMutationError, DocumentReplaceRefusedError } from '../../../../src/application/indexing/AsyncJobRunner.js';
 import { BatchEmbeddingProvider } from '../../../../src/infrastructure/embedding/BatchEmbeddingProvider.js';
 import { openDatabase, runMigrations } from '../../../../src/infrastructure/storage/migrate.js';
@@ -974,6 +975,61 @@ describe('document replace option (literature-hub #614)', () => {
     }
   });
 
+  it('fails the batch when the in-batch projection disagrees with the pre-delete prediction', async () => {
+    const harness = mutationBoundaryHarness(provider(extractionResponse()));
+    const key = computeCanonicalKey('person', 'authors', 'paper');
+    const projection = {
+      schemaId: `schema:${key}`, corpusId: 'c1', headType: 'person', relation: 'authors',
+      tailType: 'paper', canonicalKey: key, frequency: 2, state: 'stable' as const,
+      stabilizationThreshold: 2, firstSourceDocumentId: 'doc-boundary', contributionPresent: true,
+      mergeToken: 'a'.repeat(64),
+    };
+    let reads = 0;
+    const configured = configureCanonicalBoundary(harness, {
+      // Before the delete: W contributed (predicted 2 - 1 = 1, pending).
+      // In the batch: the native reports a state the rule cannot produce.
+      readProjection: () => {
+        reads += 1;
+        return reads === 1 ? [projection] : [{ ...projection, frequency: 2, contributionPresent: false }];
+      },
+    });
+    const memoryDeleteDocument = vi.fn(async () => {
+      harness.mutationTrace.push('delete');
+      return {} as never;
+    });
+    const pipeline = new FullDocumentIndexingPipeline({
+      ...harness.pipelineOptions,
+      documentReplace: { memoryDeleteDocument },
+    });
+    try {
+      const error = await pipeline.processDocument('c1', {
+        documentId: 'doc-boundary', markdown: 'Alice authors Paper A.', title: 'Paper',
+        sourceUrl: 'https://example.com/paper', language: 'en', replaceExisting: true,
+      }).then(() => undefined, (caught: unknown) => caught);
+      expect(error).toBeInstanceOf(DocumentMutationError);
+      expect(((error as Error).cause as Error).message)
+        .toBe('replace in-batch schema state differs from the pre-delete prediction');
+      expect(configured.canonicalUpsert).not.toHaveBeenCalled();
+    } finally {
+      harness.db.close();
+    }
+  });
+
+  it('predicts the native delete rule exactly', () => {
+    const base = {
+      schemaId: 's', corpusId: 'c1', headType: 'h', relation: 'r', tailType: 't', canonicalKey: 'h::r::t',
+      frequency: 2, state: 'stable' as const, stabilizationThreshold: 2,
+      firstSourceDocumentId: 'w', contributionPresent: true, mergeToken: 'x',
+    };
+    expect(predictPostDeleteProjection(base)).toMatchObject({ frequency: 1, state: 'pending', contributionPresent: false });
+    expect(predictPostDeleteProjection({ ...base, frequency: 0, state: 'pending' })).toMatchObject({ frequency: 0, state: 'pending' });
+    expect(predictPostDeleteProjection({ ...base, frequency: 5 })).toMatchObject({ frequency: 4, state: 'stable' });
+    // The native recomputes state from the stored threshold, demoting too.
+    expect(predictPostDeleteProjection({ ...base, frequency: 3, stabilizationThreshold: 3 })).toMatchObject({ frequency: 2, state: 'pending' });
+    const untouched = { ...base, contributionPresent: false };
+    expect(predictPostDeleteProjection(untouched)).toBe(untouched);
+  });
+
   it('raises DocumentMutationError for any failure after the delete', async () => {
     const { harness, configured, run } = replaceHarness();
     configured!.canonicalUpsert.mockRejectedValueOnce(new Error('native write failed'));
@@ -1010,6 +1066,7 @@ describe('document replace option (literature-hub #614)', () => {
       expect(error).not.toBeInstanceOf(DocumentReplaceRefusedError);
       expect((error as Error).message).toMatch(/no indexable chunks/);
       expect(memoryDeleteDocument).not.toHaveBeenCalled();
+      expect(harness.db.prepare('SELECT COUNT(*) AS n FROM documents').get()).toEqual({ n: 0 });
     } finally {
       harness.db.close();
     }

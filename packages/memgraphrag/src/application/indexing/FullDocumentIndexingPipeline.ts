@@ -39,7 +39,12 @@ import type { ISchemaCanonicalizationMemory } from '../../domain/storage/schemaC
 import type { IDocumentReplaceMemory } from '../../domain/storage/documentReplace.js';
 import type { ActivateFactsRequest } from '../../domain/storage/indexingMemory.js';
 import type { Passage } from '../../domain/memory/passage.js';
-import type { CanonicalSchemaPreparation } from './StageIICanonicalizer.js';
+import {
+  predictPostDeleteProjection,
+  type CanonicalSchemaPreparation,
+  type PreparedSchemaView,
+} from './StageIICanonicalizer.js';
+import type { SchemaState } from '../../domain/memory/types.js';
 import type { SchemaHydrationWireParams } from '../../domain/storage/schemaCanonicalization.js';
 import type { Fact } from '../../domain/memory/fact.js';
 import type { ITermDictionary } from '../../domain/dictionary/termDictionary.js';
@@ -85,6 +90,14 @@ interface CanonicalLanePlan {
   readonly hydrationRequests: readonly SchemaHydrationWireParams[];
 }
 
+function planningKey(view: PreparedSchemaView): string {
+  return JSON.stringify([view.schemaId, view.frequency, view.state, view.contributionPresent, view.isNew]);
+}
+
+function factPlanningKey(fact: Fact): string {
+  return JSON.stringify([fact.factId, fact.state]);
+}
+
 function sameIds(left: readonly string[], right: readonly string[]): boolean {
   return left.length === right.length && left.every((id, index) => id === right[index]);
 }
@@ -105,7 +118,9 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
    * Replace is supported on the canonical lane only (design #612 §5.2): a
    * legacy-lane schema write after the delete would restore the deleted
    * document from full schemas read before it.  Decided from configuration
-   * alone, so the refusal precedes extraction and every write.
+   * alone, so the refusal precedes extraction, every native RPC and the
+   * sqlite documents row.  The job runner still records the refusal on the
+   * job row and commits its batch, which has no mutation from this document.
    */
   private requireReplaceSupport(): IDocumentReplaceMemory {
     if (!isSchemaCanonicalizationMemory(this.options.indexingMemory)) {
@@ -176,16 +191,21 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
       : undefined;
     const now = new Date().toISOString();
 
-    // Insert document metadata
-    this.options.db.prepare(
-      `INSERT OR REPLACE INTO documents (
-        document_id, corpus_id, title, source_url, doi, source_db, source_type, language, converted_at, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
-      document.documentId, corpusId, document.title, document.sourceUrl,
-      document.doi ?? null, document.sourceDb ?? null, document.sourceType ?? null,
-      document.language ?? 'unknown', now, now, now,
-    );
+    const writeDocumentRow = (): void => {
+      // Insert document metadata
+      this.options.db.prepare(
+        `INSERT OR REPLACE INTO documents (
+          document_id, corpus_id, title, source_url, doi, source_db, source_type, language, converted_at, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        document.documentId, corpusId, document.title, document.sourceUrl,
+        document.doi ?? null, document.sourceDb ?? null, document.sourceType ?? null,
+        document.language ?? 'unknown', now, now, now,
+      );
+    };
+    // A replace writes the row only once the new source has chunks, so a
+    // replace that keeps the existing version leaves its row untouched.
+    if (!documentReplace) writeDocumentRow();
 
     // Stage I: Extract chunks, entities, schemas, facts
     const tStart = Date.now();
@@ -200,6 +220,7 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
       }
       return { processedDocumentId: document.documentId, addedNodes: 0, addedEdges: 0, conflicts: 0 };
     }
+    if (documentReplace) writeDocumentRow();
 
     // Stage II: Canonicalize schemas and merge into memory
     const stageII = new StageIICanonicalizer(corpusId, this.options.indexingMemory);
@@ -211,21 +232,35 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
       && isSchemaCanonicalizationMemory(this.options.indexingMemory)
       ? this.options.indexingMemory
       : undefined;
+    // Replace planning (design #612 §5.2): before the delete, plan against
+    // the post-delete state the native will produce, so fact states and
+    // conflict detection match what commits.  Activation is decided against
+    // the committed (pre-delete) state: a schema the delete only demotes
+    // inside the batch is not newly stable and must not re-activate other
+    // documents' inactive facts.
+    const committedSchemaStates = new Map<string, SchemaState>();
+    const replaceActivationIds = (preparation: CanonicalSchemaPreparation): readonly string[] =>
+      preparation.newlyStableSchemaIds.filter((schemaId) => committedSchemaStates.get(schemaId) !== 'stable');
+    // A schema-bearing document always takes the canonical lane here:
+    // requireReplaceSupport refused a replace without a canonical memory, so
+    // a replace reaches the legacy lane only with zero schemas.
     const canonicalPreparation = canonicalMemory
-      ? await stageII.prepareCanonicalSchemas(candidateSchemas, document.documentId)
+      ? documentReplace
+        ? await stageII.prepareCanonicalSchemas(candidateSchemas, document.documentId, undefined, {
+          projectionView: (projection) => {
+            committedSchemaStates.set(projection.schemaId, projection.state);
+            return predictPostDeleteProjection(projection);
+          },
+        })
+        : await stageII.prepareCanonicalSchemas(candidateSchemas, document.documentId)
       : undefined;
     const legacyPreparation = canonicalPreparation === undefined
       ? await stageII.prepareSchemas(candidateSchemas)
       : undefined;
-    if (documentReplace && legacyPreparation && legacyPreparation.finalSchemas.length > 0) {
-      // Unreachable while requireReplaceSupport holds (a canonical memory
-      // sends every schema-bearing document to the canonical lane); kept so
-      // a legacy schema write can never follow a replace delete.
-      throw new DocumentReplaceRefusedError('document would write schemas on the legacy lane');
-    }
     let schemas = canonicalPreparation?.schemaViews ?? legacyPreparation!.finalSchemas;
-    const newlyStableSchemaIds = canonicalPreparation?.newlyStableSchemaIds
-      ?? legacyPreparation?.newlyStableSchemaIds
+    const newlyStableSchemaIds = canonicalPreparation
+      ? documentReplace ? replaceActivationIds(canonicalPreparation) : canonicalPreparation.newlyStableSchemaIds
+      : legacyPreparation?.newlyStableSchemaIds
       ?? [];
 
     // Schema candidates retain occurrence pressure, while repeated fact
@@ -248,7 +283,11 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
         : [];
       // A replace deletes the facts sourced only from this document before
       // its new facts are written; they must not conflict with their own
-      // successors.
+      // successors.  Known limitation: the window is the native's first
+      // INDEXING_MEMORY_CONTRACT.maxActiveFacts (100) active facts in
+      // snapshot order and memory_get_active_facts takes exactly
+      // {corpusId, limit}, so the filtered facts are not replaced by others.
+      // Excluding them in the read needs a native parameter.
       const activeFacts = documentReplace
         ? loadedActiveFacts.filter((fact) => !(fact.sourceDocumentIds.length > 0
           && fact.sourceDocumentIds.every((id) => id === document.documentId)))
@@ -361,22 +400,19 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
           ).map((fact) => (inactivatedFactIds.has(fact.factId)
             ? { ...fact, state: 'inactive' as const }
             : fact));
-          // Identity is fixed before the delete: schema ids come from the
-          // extracted candidates, fact ids from the document, candidate and
-          // schema identity, passage ids from the chunks.  The delete changes
-          // only support, frequency, state and merge tokens.  These checks
-          // are planning-invariant guards, not data-dependent outcomes.
-          if (!sameIds(
-            fresh.schemaViews.map((view) => view.schemaId),
-            canonicalPreparation.schemaViews.map((view) => view.schemaId),
-          ) || !sameIds(
-            freshFacts.map((fact) => fact.factId),
-            allFacts.map((fact) => fact.factId),
-          )) {
-            throw new Error('replace re-plan changed the document identity set');
+          // The pre-delete plan used the predicted post-delete projection, so
+          // the in-batch read must agree on every planning field: identity is
+          // fixed by the extracted candidates and the document, and the
+          // prediction is the native's own schema rule.  Disagreement means
+          // the facts were planned (and conflict-checked) against the wrong
+          // state; never commit that.
+          if (!sameIds(fresh.schemaViews.map(planningKey), canonicalPreparation.schemaViews.map(planningKey))
+            || !sameIds(freshFacts.map(factPlanningKey), allFacts.map(factPlanningKey))) {
+            throw new Error('replace in-batch schema state differs from the pre-delete prediction');
           }
-          const freshActivation = fresh.newlyStableSchemaIds.length > 0
-            ? { corpusId, schemaIds: fresh.newlyStableSchemaIds, updatedAt: now }
+          const freshActivationIds = replaceActivationIds(fresh);
+          const freshActivation = freshActivationIds.length > 0
+            ? { corpusId, schemaIds: freshActivationIds, updatedAt: now }
             : undefined;
           const plan = this.planCanonicalLane(
             corpusId,

@@ -36,7 +36,8 @@ export class DocumentMutationError extends Error {
 }
 
 /**
- * A replace request refused before any write (literature-hub #614): the
+ * A replace request refused before extraction, any native RPC and the sqlite
+ * documents row (literature-hub #614): the
  * document would need the legacy lane, or the backend has no per-document
  * replace delete.  Recorded with the contract's non-chargeable
  * `replaceRefusedError` code, never as a document processing failure.
@@ -165,7 +166,7 @@ export class AsyncJobRunner {
             throw error;
           }
           if (error instanceof DocumentReplaceRefusedError) {
-            // Refused before any write: no data, no attempt to charge.
+            // Refused before any document write: not a document failure.
             documentErrors.push({
               code: JOB_ERROR_CONTRACT.replaceRefusedError.code,
               message: error.message,
