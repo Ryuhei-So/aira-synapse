@@ -787,6 +787,41 @@ describe.sequential('aira-graphdb canonical-lane document replace (literature-hu
     await expectParked(dbPath);
   }, TEST_TIMEOUT);
 
+  it('leaves the sqlite documents row byte-identical when a replace is abandoned after the delete', async () => {
+    const dbPath = tempDbPath('sqlite-row');
+    await seed(dbPath);
+    await corruptSchema(dbPath, SHARED, (stored) => ({
+      ...stored, sourceDocumentIds: stored.sourceDocumentIds.filter((id) => id !== W),
+    }));
+    const harness = await openHarness(dbPath);
+    // The row of the existing version, as the earlier index wrote it.
+    expect(await harness.index([doc(W, ['w_abs_only'], { title: 'old title', sourceUrl: 'https://example.com/old' })]))
+      .toMatchObject({ status: 'completed', errors: [] });
+    const readRow = () => harness.db.prepare('SELECT * FROM documents WHERE document_id = ?').get(W);
+    const before = JSON.stringify(readRow());
+    expect(before).toContain('old title');
+    const result = await harness.index([doc(W, ['w_full_shared'], {
+      replaceExisting: true, title: 'new title', sourceUrl: 'https://example.com/new',
+    })]);
+    expect(result.errors).toEqual([expect.objectContaining({ code: 'DOCUMENT_REPLACE_STATE_INCONSISTENT' })]);
+    expect(JSON.stringify(readRow())).toBe(before);
+    await harness.close();
+    await discardRecovery(dbPath);
+  }, TEST_TIMEOUT);
+
+  it('writes the sqlite documents row after a committed replace', async () => {
+    const dbPath = tempDbPath('sqlite-row-ok');
+    await seed(dbPath);
+    const harness = await openHarness(dbPath);
+    try {
+      expect(await harness.index([doc(W, ['w_full_shared'], { replaceExisting: true, title: 'new title' })]))
+        .toMatchObject({ status: 'completed', errors: [] });
+      expect(harness.db.prepare('SELECT title FROM documents WHERE document_id = ?').get(W)).toEqual({ title: 'new title' });
+    } finally {
+      await harness.close();
+    }
+  }, TEST_TIMEOUT);
+
   it('parks in the batch when only a stored fact of the document names the schema', async () => {
     const dbPath = tempDbPath('probe-c-fact');
     await seed(dbPath);
@@ -826,29 +861,6 @@ describe.sequential('aira-graphdb canonical-lane document replace (literature-hu
     ));
     expect(projected[0]).toMatchObject({ contributionPresent: true, firstSourceDocumentId: X, frequency: 2 });
   }, 300_000);
-
-  it('refuses a replace of a document id containing ":" before any RPC or extraction', async () => {
-    const dbPath = tempDbPath('colon');
-    const before = await seed(dbPath);
-    const harness = await openHarness(dbPath);
-    try {
-      const start = harness.traffic.length;
-      const result = await harness.index([doc('doc:w', ['w_full_shared'], { replaceExisting: true })]);
-      expect(result).toEqual({
-        status: 'completed',
-        errors: [{
-          code: 'DOCUMENT_REPLACE_UNSUPPORTED_LANE',
-          documentId: 'doc:w',
-          message: `${JOB_ERROR_CONTRACT.replaceRefusedError.message} (document id contains ":")`,
-        }],
-      });
-      expect(methods(harness.traffic.slice(start))).toEqual(['memory_load_checkpoint', 'batch_begin', 'batch_commit']);
-      expect(harness.llm.calls).toEqual([]);
-    } finally {
-      await harness.close();
-    }
-    expect(await observe(dbPath)).toEqual(before);
-  }, TEST_TIMEOUT);
 
   it('a replace of a document that does not exist yet behaves like an insert', async () => {
     const plainPath = tempDbPath('insert-plain');

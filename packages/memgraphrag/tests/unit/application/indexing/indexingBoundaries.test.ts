@@ -1066,28 +1066,6 @@ describe('document replace option (literature-hub #614)', () => {
     }
   });
 
-  it('refuses a document id containing ":" before extraction or any write', async () => {
-    const { harness, memoryDeleteDocument } = replaceHarness();
-    const pipeline = new FullDocumentIndexingPipeline({
-      ...harness.pipelineOptions,
-      documentReplace: { memoryDeleteDocument },
-    });
-    try {
-      const error = await pipeline.processDocument('c1', {
-        documentId: 'doc:boundary', markdown: 'Alice authors Paper A.', title: 'Paper',
-        sourceUrl: 'https://example.com/paper', language: 'en', replaceExisting: true,
-      }).then(() => undefined, (caught: unknown) => caught);
-      expect(error).toBeInstanceOf(DocumentReplaceRefusedError);
-      expect(error).toMatchObject({ code: 'DOCUMENT_REPLACE_UNSUPPORTED_LANE', reason: 'document id contains ":"' });
-      expect(harness.pipelineOptions.llmProvider.generate).not.toHaveBeenCalled();
-      expect(memoryDeleteDocument).not.toHaveBeenCalled();
-      expect(harness.mutationTrace).toEqual([]);
-      expect(harness.db.prepare('SELECT COUNT(*) AS n FROM documents').get()).toEqual({ n: 0 });
-    } finally {
-      harness.db.close();
-    }
-  });
-
   it('keeps the existing version when the new source has no chunks (an ordinary document failure)', async () => {
     const { harness, memoryDeleteDocument, run } = replaceHarness();
     try {

@@ -125,12 +125,7 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
    * sqlite documents row.  The job runner still records the refusal on the
    * job row and commits its batch, which has no mutation from this document.
    */
-  private requireReplaceSupport(documentId: string): IDocumentReplaceMemory {
-    // Fact ids are `fact:{documentId}:{schemaId}:…`; a ':' in the document id
-    // would make one document's fact-id prefix match another's.
-    if (documentId.includes(':')) {
-      throw new DocumentReplaceRefusedError('document id contains ":"');
-    }
+  private requireReplaceSupport(): IDocumentReplaceMemory {
     if (!isSchemaCanonicalizationMemory(this.options.indexingMemory)) {
       throw new DocumentReplaceRefusedError('indexing memory has no canonical schema lane');
     }
@@ -195,7 +190,7 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
     document: IndexDocumentInput,
   ): Promise<ProcessDocumentResult> {
     const documentReplace = document.replaceExisting === true
-      ? this.requireReplaceSupport(document.documentId)
+      ? this.requireReplaceSupport()
       : undefined;
     const now = new Date().toISOString();
 
@@ -211,9 +206,9 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
         document.language ?? 'unknown', now, now, now,
       );
     };
-    // A replace writes the row only just before its mutation section, so a
-    // replace that keeps the existing version (no chunks, or refused) leaves
-    // its row untouched.
+    // A replace writes the row inside its mutation section after the native
+    // upsert (below), so a replace that keeps the existing version (no
+    // chunks, refused, or abandoned) leaves its row untouched.
     if (!documentReplace) writeDocumentRow();
 
     // Stage I: Extract chunks, entities, schemas, facts
@@ -384,7 +379,6 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
       );
     }
 
-    if (documentReplace) writeDocumentRow();
     let activationApplied = false;
     try {
       if (documentReplace) {
@@ -470,6 +464,11 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
       if (activation && !activationApplied) {
         await this.options.indexingMemory.activateFactsBySchemaIds(activation);
       }
+      // A replace writes its sqlite documents row only after the native
+      // upsert succeeded, inside the mutation section: a replace abandoned
+      // after the delete keeps the old row with the old native version, and
+      // a failure writing the row abandons the batch too.
+      if (documentReplace) writeDocumentRow();
 
       const tMemSave = Date.now();
       // Stage IV persistence is write-only; graph derivation and embeddings

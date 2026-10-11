@@ -38,8 +38,7 @@ export class DocumentMutationError extends Error {
 /**
  * A replace request refused before extraction, any native RPC and the sqlite
  * documents row (literature-hub #614): the document would need the legacy
- * lane, the backend has no per-document replace delete, or its id cannot
- * form an unambiguous fact-id prefix.  Recorded with the contract's
+ * lane, or the backend has no per-document replace delete.  Recorded with the contract's
  * non-chargeable `replaceRefusedError` code, never as a document processing
  * failure.
  */

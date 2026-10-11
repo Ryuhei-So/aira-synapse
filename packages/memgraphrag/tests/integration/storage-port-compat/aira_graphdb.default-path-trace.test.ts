@@ -108,7 +108,7 @@ async function traceReindex(extra: Record<string, unknown>): Promise<readonly st
 }
 
 describe.sequential('upsert-only indexing path is unchanged without the replace option (literature-hub #614)', () => {
-  it('issues the same RPCs, byte for byte, with the option absent or false', async () => {
+  it('issues the same RPC method sequence and request sizes with the option absent or false', async () => {
     const absent = await traceReindex({});
     const disabled = await traceReindex({ replaceExisting: false });
     expect(disabled).toEqual(absent);
