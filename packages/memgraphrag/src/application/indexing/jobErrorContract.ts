@@ -11,6 +11,18 @@ interface GraphDbOwnerJobErrorContract {
   readonly version: 1;
   readonly ownerError: ContractError;
   readonly documentError: ContractError & { readonly documentId: string };
+  /**
+   * A non-chargeable refusal of a replace request, decided before any write
+   * (literature-hub #614).  Distinct from both other codes.
+   */
+  readonly replaceRefusedError: ContractError & { readonly documentId: string };
+  /**
+   * A replace whose stored schema state is inconsistent with the document
+   * (literature-hub #614), detected in the batch after the delete: the batch
+   * is discarded on recovery and the existing version is retained.  Never
+   * resolved automatically: the work is parked for a human.
+   */
+  readonly replaceStateInconsistentError: ContractError & { readonly documentId: string };
 }
 
 function requireError(value: unknown, name: string, documentScoped: boolean): ContractError {
@@ -44,14 +56,34 @@ export function parseJobErrorContract(rawText: string): GraphDbOwnerJobErrorCont
   }
   const ownerError = requireError(candidate.ownerError, 'ownerError', false);
   const documentError = requireError(candidate.documentError, 'documentError', true);
+  const replaceRefusedError = requireError(candidate.replaceRefusedError, 'replaceRefusedError', true);
   if (ownerError.code === documentError.code) {
     throw new Error('owner and document job-error codes must be distinct');
+  }
+  const replaceStateInconsistentError = requireError(
+    candidate.replaceStateInconsistentError,
+    'replaceStateInconsistentError',
+    true,
+  );
+  if (replaceRefusedError.code === ownerError.code
+    || replaceRefusedError.code === documentError.code) {
+    throw new Error('replace-refused job-error code must be distinct');
+  }
+  if (new Set([
+    ownerError.code,
+    documentError.code,
+    replaceRefusedError.code,
+    replaceStateInconsistentError.code,
+  ]).size !== 4) {
+    throw new Error('replace-state-inconsistent job-error code must be distinct');
   }
   return Object.freeze({
     contract: 'graphdb-owner-job-errors',
     version: 1,
     ownerError,
     documentError: documentError as ContractError & { readonly documentId: string },
+    replaceRefusedError: replaceRefusedError as ContractError & { readonly documentId: string },
+    replaceStateInconsistentError: replaceStateInconsistentError as ContractError & { readonly documentId: string },
   });
 }
 

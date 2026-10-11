@@ -3,7 +3,12 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FullDocumentIndexingPipeline } from '../../../../src/application/indexing/FullDocumentIndexingPipeline.js';
-import { DocumentMutationError } from '../../../../src/application/indexing/AsyncJobRunner.js';
+import { predictPostDeleteProjection } from '../../../../src/application/indexing/StageIICanonicalizer.js';
+import {
+  DocumentMutationError,
+  DocumentReplaceRefusedError,
+  DocumentReplaceStateInconsistentError,
+} from '../../../../src/application/indexing/AsyncJobRunner.js';
 import { BatchEmbeddingProvider } from '../../../../src/infrastructure/embedding/BatchEmbeddingProvider.js';
 import { openDatabase, runMigrations } from '../../../../src/infrastructure/storage/migrate.js';
 import { chunkMarkdownDocument, chunkMarkdownDocumentWithGinza, fallbackParagraphSplit, toExtractionChunk } from '../../../../src/application/indexing/MarkdownChunker.js';
@@ -914,6 +919,177 @@ describe('indexing and provider behavioral boundaries', () => {
     } finally {
       vi.unstubAllGlobals();
       rmSync(outputDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('document replace option (literature-hub #614)', () => {
+  function replaceHarness(
+    llmText: string = extractionResponse(),
+    options: { readonly canonical?: boolean; readonly withDelete?: boolean } = {},
+  ) {
+    const harness = mutationBoundaryHarness(provider(llmText));
+    const configured = options.canonical === false ? undefined : configureCanonicalBoundary(harness);
+    harness.embeddingProvider.embed.mockImplementation(async ({ texts }: { readonly texts: readonly string[] }) => {
+      harness.mutationTrace.push('embed');
+      return { vectors: texts.map(() => [1]), model: 'test', cached: false };
+    });
+    const memoryDeleteDocument = vi.fn(async (request: { corpusId: string; documentId: string; updatedAt: string }) => {
+      harness.mutationTrace.push('delete');
+      return {
+        corpusId: request.corpusId, documentId: request.documentId, noop: true,
+        removedPassages: 0, removedFacts: 0, prunedSharedFacts: 0, prunedSchemas: 0,
+        schemaFrequencyAdjusted: 0, removedPassageNodes: 0, removedFactNodes: 0,
+        removedEntityNodes: 0, removedOtherNodes: 0, prunedSharedNodes: 0,
+        prunedOntologyNodes: 0, removedOntologyNodes: 0, removedEdges: 0,
+        removedVectors: 0, rekeyedVectors: 0, removedLexicalPassages: 0,
+      };
+    });
+    const pipeline = new FullDocumentIndexingPipeline({
+      ...harness.pipelineOptions,
+      ...(options.withDelete === false ? {} : { documentReplace: { memoryDeleteDocument } }),
+    });
+    const run = (markdown = 'Alice authors Paper A.') => pipeline.processDocument('c1', {
+      documentId: 'doc-boundary', markdown, title: 'Paper',
+      sourceUrl: 'https://example.com/paper', language: 'en', replaceExisting: true,
+    });
+    return { harness, configured, memoryDeleteDocument, run };
+  }
+
+  it('deletes after all provider work, then re-reads the projection and rebuilds the intents in the batch', async () => {
+    const { harness, configured, memoryDeleteDocument, run } = replaceHarness();
+    try {
+      await expect(run()).resolves.toMatchObject({ processedDocumentId: 'doc-boundary' });
+      expect(memoryDeleteDocument).toHaveBeenCalledOnce();
+      expect(memoryDeleteDocument.mock.calls[0]![0]).toEqual({
+        corpusId: 'c1', documentId: 'doc-boundary', updatedAt: expect.any(String),
+      });
+      const trace = harness.mutationTrace;
+      expect(trace.indexOf('embed')).toBeLessThan(trace.indexOf('delete'));
+      expect(trace.filter((entry) => entry === 'embed')).toHaveLength(1);
+      expect(trace.filter((entry) => entry.startsWith('projection:'))).toHaveLength(2);
+      expect(trace.lastIndexOf('projection:1')).toBeGreaterThan(trace.indexOf('delete'));
+      expect(trace.lastIndexOf('memory_preflight')).toBeGreaterThan(trace.indexOf('delete'));
+      expect(trace.indexOf('canonical_memory')).toBeGreaterThan(trace.lastIndexOf('projection:1'));
+      // The submitted delta is the in-batch re-plan, not the pre-delete one.
+      expect(configured!.canonicalUpsert.mock.calls[0]![0])
+        .toBe(configured!.preflightMemory.mock.calls[1]![0]);
+    } finally {
+      harness.db.close();
+    }
+  });
+
+  it('fails the batch when the in-batch projection disagrees with the pre-delete prediction', async () => {
+    const harness = mutationBoundaryHarness(provider(extractionResponse()));
+    const key = computeCanonicalKey('person', 'authors', 'paper');
+    const projection = {
+      schemaId: `schema:${key}`, corpusId: 'c1', headType: 'person', relation: 'authors',
+      tailType: 'paper', canonicalKey: key, frequency: 2, state: 'stable' as const,
+      stabilizationThreshold: 2, firstSourceDocumentId: 'doc-boundary', contributionPresent: true,
+      mergeToken: 'a'.repeat(64),
+    };
+    let reads = 0;
+    const configured = configureCanonicalBoundary(harness, {
+      // Before the delete: W contributed (predicted 2 - 1 = 1, pending).
+      // In the batch: the native reports a state the rule cannot produce.
+      readProjection: () => {
+        reads += 1;
+        return reads === 1 ? [projection] : [{ ...projection, frequency: 2, contributionPresent: false }];
+      },
+    });
+    const memoryDeleteDocument = vi.fn(async () => {
+      harness.mutationTrace.push('delete');
+      return {} as never;
+    });
+    const pipeline = new FullDocumentIndexingPipeline({
+      ...harness.pipelineOptions,
+      documentReplace: { memoryDeleteDocument },
+    });
+    try {
+      const error = await pipeline.processDocument('c1', {
+        documentId: 'doc-boundary', markdown: 'Alice authors Paper A.', title: 'Paper',
+        sourceUrl: 'https://example.com/paper', language: 'en', replaceExisting: true,
+      }).then(() => undefined, (caught: unknown) => caught);
+      expect(error).toBeInstanceOf(DocumentMutationError);
+      expect(error).toBeInstanceOf(DocumentReplaceStateInconsistentError);
+      expect(error).toMatchObject({ replaceStateCode: 'DOCUMENT_REPLACE_STATE_INCONSISTENT', documentId: 'doc-boundary' });
+      expect(memoryDeleteDocument).toHaveBeenCalledOnce();
+      // Replace mode never reads full schemas (their factIds are unbounded).
+      expect(harness.indexingMemory.getSchemasByIds).not.toHaveBeenCalled();
+      expect(((error as Error).cause as Error).message)
+        .toBe('replace in-batch schema state differs from the pre-delete prediction');
+      expect(configured.canonicalUpsert).not.toHaveBeenCalled();
+    } finally {
+      harness.db.close();
+    }
+  });
+
+  it('predicts the native delete rule exactly', () => {
+    const base = {
+      schemaId: 's', corpusId: 'c1', headType: 'h', relation: 'r', tailType: 't', canonicalKey: 'h::r::t',
+      frequency: 2, state: 'stable' as const, stabilizationThreshold: 2,
+      firstSourceDocumentId: 'w', contributionPresent: true, mergeToken: 'x',
+    };
+    expect(predictPostDeleteProjection(base)).toMatchObject({ frequency: 1, state: 'pending', contributionPresent: false });
+    expect(predictPostDeleteProjection({ ...base, frequency: 0, state: 'pending' })).toMatchObject({ frequency: 0, state: 'pending' });
+    expect(predictPostDeleteProjection({ ...base, frequency: 5 })).toMatchObject({ frequency: 4, state: 'stable' });
+    // The native recomputes state from the stored threshold, demoting too.
+    expect(predictPostDeleteProjection({ ...base, frequency: 3, stabilizationThreshold: 3 })).toMatchObject({ frequency: 2, state: 'pending' });
+    const untouched = { ...base, contributionPresent: false };
+    expect(predictPostDeleteProjection(untouched)).toBe(untouched);
+  });
+
+  it('raises DocumentMutationError for any failure after the delete', async () => {
+    const { harness, configured, run } = replaceHarness();
+    configured!.canonicalUpsert.mockRejectedValueOnce(new Error('native write failed'));
+    try {
+      await expect(run()).rejects.toBeInstanceOf(DocumentMutationError);
+      expect(harness.mutationTrace).toContain('delete');
+    } finally {
+      harness.db.close();
+    }
+  });
+
+  it.each([
+    ['a legacy-only indexing memory', { canonical: false }],
+    ['a backend without memory_delete_document', { withDelete: false }],
+  ])('refuses with %s before extraction or any write', async (_label, options) => {
+    const { harness, memoryDeleteDocument, run } = replaceHarness(extractionResponse(), options);
+    try {
+      await expect(run()).rejects.toBeInstanceOf(DocumentReplaceRefusedError);
+      expect(harness.pipelineOptions.llmProvider.generate).not.toHaveBeenCalled();
+      expect(memoryDeleteDocument).not.toHaveBeenCalled();
+      expect(harness.mutationTrace).toEqual([]);
+      expect(harness.db.prepare('SELECT COUNT(*) AS n FROM documents').get()).toEqual({ n: 0 });
+    } finally {
+      harness.db.close();
+    }
+  });
+
+  it('keeps the existing version when the new source has no chunks (an ordinary document failure)', async () => {
+    const { harness, memoryDeleteDocument, run } = replaceHarness();
+    try {
+      const error = await run('').then(() => undefined, (caught: unknown) => caught);
+      expect(error).toBeInstanceOf(Error);
+      expect(error).not.toBeInstanceOf(DocumentMutationError);
+      expect(error).not.toBeInstanceOf(DocumentReplaceRefusedError);
+      expect((error as Error).message).toMatch(/no indexable chunks/);
+      expect(memoryDeleteDocument).not.toHaveBeenCalled();
+      expect(harness.db.prepare('SELECT COUNT(*) AS n FROM documents').get()).toEqual({ n: 0 });
+    } finally {
+      harness.db.close();
+    }
+  });
+
+  it('replaces a schema-free document through the empty-schema delta after the delete', async () => {
+    const { harness, memoryDeleteDocument, run } = replaceHarness(JSON.stringify({ entities: [], relations: [] }));
+    try {
+      await expect(run()).resolves.toMatchObject({ processedDocumentId: 'doc-boundary' });
+      expect(memoryDeleteDocument).toHaveBeenCalledOnce();
+      expect(harness.mutationTrace.indexOf('delete')).toBeLessThan(harness.mutationTrace.indexOf('memory'));
+      expect(harness.indexingMemory.upsertDelta.mock.calls[0]![0]).toMatchObject({ schemas: [] });
+    } finally {
+      harness.db.close();
     }
   });
 });

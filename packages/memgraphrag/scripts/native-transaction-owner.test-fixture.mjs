@@ -8,6 +8,12 @@
  * CI launches the native binary directly, so this fixture supplies only that
  * missing owner transition without adding prepare authority to production
  * Synapse code.
+ *
+ * Like the Literature Hub owner (scripts/graphdb/owner.mjs), batch_begin is
+ * virtual until the first mutation: the native transaction opens just before
+ * the first request the native classifies as a mutation, and a batch_commit
+ * with no mutation is a no-op that leaves the generation unchanged
+ * (literature-hub #614: a job whose documents were all refused).
  */
 import { spawn } from 'node:child_process';
 
@@ -29,6 +35,11 @@ let active;
 const queued = [];
 let internalSequence = 0;
 let closing = false;
+/** Method name -> classification, from the native's protocol_info. */
+let methodPolicy;
+let policyRequested = false;
+let virtualBatchOpen = false;
+let nativeBatchOpen = false;
 
 function fail(message) {
   if (closing) return;
@@ -68,15 +79,29 @@ function sendClient(value) {
   process.stdout.write(encoded);
 }
 
+function nextInternalId() {
+  internalSequence += 1;
+  return Number.MAX_SAFE_INTEGER - (internalSequence * 2);
+}
+
 function runNext() {
-  if (active || queued.length === 0 || closing) return;
-  const request = queued.shift();
+  if (active || closing) return;
+  if (!methodPolicy) {
+    if (policyRequested || queued.length === 0) return;
+    policyRequested = true;
+    active = { kind: 'policy', nativeId: nextInternalId() };
+    writeNative({ id: active.nativeId, method: 'protocol_info', params: {} });
+    return;
+  }
+  if (queued.length === 0) return;
+  const request = queued[0];
   if (!request || typeof request !== 'object' || request.id === undefined
       || typeof request.method !== 'string') {
     fail('client sent an invalid RPC request');
     return;
   }
   if (request.method === 'batch_prepare_commit') {
+    queued.shift();
     sendClient({
       id: request.id,
       ok: false,
@@ -88,9 +113,33 @@ function runNext() {
     queueMicrotask(runNext);
     return;
   }
+  if (request.method === 'batch_begin' && !nativeBatchOpen) {
+    queued.shift();
+    if (virtualBatchOpen) {
+      sendClient({ id: request.id, ok: false, error: { code: 'GENERATION_DIRTY', message: 'batch already open' } });
+    } else {
+      virtualBatchOpen = true;
+      sendClient({ id: request.id, ok: true, result: null });
+    }
+    queueMicrotask(runNext);
+    return;
+  }
+  if (virtualBatchOpen && !nativeBatchOpen
+      && methodPolicy.get(request.method) === 'mutation') {
+    // Open the native transaction just before the first mutation.
+    active = { kind: 'begin', nativeId: nextInternalId() };
+    writeNative({ id: active.nativeId, method: 'batch_begin', params: {} });
+    return;
+  }
+  queued.shift();
   if (request.method === 'batch_commit') {
-    internalSequence += 1;
-    const nativeId = Number.MAX_SAFE_INTEGER - (internalSequence * 2);
+    if (virtualBatchOpen && !nativeBatchOpen) {
+      virtualBatchOpen = false;
+      sendClient({ id: request.id, ok: true, result: null });
+      queueMicrotask(runNext);
+      return;
+    }
+    const nativeId = nextInternalId();
     active = {
       kind: 'prepare',
       outerId: request.id,
@@ -104,6 +153,7 @@ function runNext() {
     });
     return;
   }
+  if (request.method === 'batch_begin') nativeBatchOpen = true;
   active = { kind: 'forward', outerId: request.id, nativeId: request.id };
   writeNative(request);
 }
@@ -115,6 +165,26 @@ function handleNativeResponse(response) {
   }
   if (!Number.isSafeInteger(response.id) || response.id !== active.nativeId) {
     fail('native response ID does not match the active request');
+    return;
+  }
+  if (active.kind === 'policy') {
+    if (!response.ok || !Array.isArray(response.result?.methods)) {
+      fail('native protocol_info did not return a method policy');
+      return;
+    }
+    methodPolicy = new Map(response.result.methods.map((method) => [method.name, method.classification]));
+    active = undefined;
+    runNext();
+    return;
+  }
+  if (active.kind === 'begin') {
+    if (!response.ok) {
+      fail('native batch_begin failed');
+      return;
+    }
+    nativeBatchOpen = true;
+    active = undefined;
+    runNext();
     return;
   }
   if (active.kind === 'forward') {
@@ -144,6 +214,10 @@ function handleNativeResponse(response) {
       params: { preparedCommitEvidence: response.result },
     });
     return;
+  }
+  if (response.ok) {
+    nativeBatchOpen = false;
+    virtualBatchOpen = false;
   }
   sendClient({ ...response, id: active.outerId });
   active = undefined;

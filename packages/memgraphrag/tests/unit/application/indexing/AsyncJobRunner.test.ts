@@ -6,6 +6,8 @@ import { createNotImplementedStub } from '../../../setup/testDoubles.js';
 import {
   AsyncJobRunner,
   DocumentMutationError,
+  DocumentReplaceRefusedError,
+  DocumentReplaceStateInconsistentError,
   type StorageWriteBatch,
 } from '../../../../src/application/indexing/AsyncJobRunner.js';
 import { DefaultIndexingService } from '../../../../src/application/indexing/IndexingService.js';
@@ -314,6 +316,73 @@ describe('TASK-MG-035: AsyncJobRunner and DefaultIndexingService', () => {
     expect(JSON.parse(row.errors_json)).toEqual([{
       code: JOB_ERROR_CONTRACT.ownerError.code,
       message: expect.stringContaining('document mutation failed after persistence began'),
+    }]);
+    expect(storageBatch.commit).not.toHaveBeenCalled();
+    expect(storageBatch.abandon).toHaveBeenCalledOnce();
+  });
+
+  it('records a replace refusal with the non-chargeable contract code and keeps the batch clean (#614)', async () => {
+    const twoDocuments: IndexDocumentsCommand = {
+      ...command(),
+      documents: [
+        { ...command().documents[0]!, replaceExisting: true },
+        { ...command().documents[0]!, documentId: 'doc-2', title: 'Doc 2' },
+      ],
+    };
+    const pipeline = {
+      processDocument: vi.fn().mockImplementation(async (_corpusId, document) => {
+        if (document.documentId === 'doc-1') {
+          throw new DocumentReplaceRefusedError('indexing memory has no canonical schema lane');
+        }
+        return { processedDocumentId: 'doc-2', addedNodes: 1, addedEdges: 1, conflicts: 0 };
+      }),
+    };
+    const storageBatch = {
+      begin: vi.fn<() => Promise<void>>().mockResolvedValue(),
+      commit: vi.fn<() => Promise<void>>().mockResolvedValue(),
+      abandon: vi.fn<() => Promise<void>>().mockResolvedValue(),
+    };
+    const runner = new AsyncJobRunner(db, memoryStore, pipeline, storageBatch);
+    runner.registerJob('job-1', twoDocuments);
+    await runner.enqueue('job-1');
+    await runner.execute('job-1');
+
+    const row = db.prepare(
+      'SELECT status, processed, errors_json FROM jobs WHERE job_id = ?',
+    ).get('job-1') as { status: string; processed: number; errors_json: string };
+    expect(row.status).toBe('completed');
+    expect(row.processed).toBe(1);
+    expect(JSON.parse(row.errors_json)).toEqual([{
+      code: 'DOCUMENT_REPLACE_UNSUPPORTED_LANE',
+      documentId: 'doc-1',
+      message: `${JOB_ERROR_CONTRACT.replaceRefusedError.message} (indexing memory has no canonical schema lane)`,
+    }]);
+    expect(JOB_ERROR_CONTRACT.replaceRefusedError.code).not.toBe(JOB_ERROR_CONTRACT.documentError.code);
+    expect(storageBatch.commit).toHaveBeenCalledOnce();
+    expect(storageBatch.abandon).not.toHaveBeenCalled();
+  });
+
+  it('records an in-batch replace-state inconsistency with its code and abandons the batch (#614)', async () => {
+    const pipeline = {
+      processDocument: vi.fn().mockRejectedValue(
+        new DocumentReplaceStateInconsistentError('doc-1', 'replace in-batch schema state differs from the pre-delete prediction'),
+      ),
+    };
+    const storageBatch = {
+      begin: vi.fn<() => Promise<void>>().mockResolvedValue(),
+      commit: vi.fn<() => Promise<void>>().mockResolvedValue(),
+      abandon: vi.fn<() => Promise<void>>().mockResolvedValue(),
+    };
+    const runner = new AsyncJobRunner(db, memoryStore, pipeline, storageBatch);
+    runner.registerJob('job-1', command());
+    await runner.enqueue('job-1');
+    await expect(runner.execute('job-1')).rejects.toBeInstanceOf(DocumentMutationError);
+    const row = db.prepare('SELECT status, errors_json FROM jobs WHERE job_id = ?').get('job-1') as { status: string; errors_json: string };
+    expect(row.status).toBe('failed');
+    expect(JSON.parse(row.errors_json)).toEqual([{
+      code: 'DOCUMENT_REPLACE_STATE_INCONSISTENT',
+      documentId: 'doc-1',
+      message: `${JOB_ERROR_CONTRACT.replaceStateInconsistentError.message} (replace in-batch schema state differs from the pre-delete prediction)`,
     }]);
     expect(storageBatch.commit).not.toHaveBeenCalled();
     expect(storageBatch.abandon).toHaveBeenCalledOnce();

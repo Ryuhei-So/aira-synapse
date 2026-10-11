@@ -35,6 +35,39 @@ export class DocumentMutationError extends Error {
   }
 }
 
+/**
+ * A replace request refused before extraction, any native RPC and the sqlite
+ * documents row (literature-hub #614): the document would need the legacy
+ * lane, or the backend has no per-document replace delete.  Recorded with the contract's
+ * non-chargeable `replaceRefusedError` code, never as a document processing
+ * failure.
+ */
+export class DocumentReplaceRefusedError extends Error {
+  public readonly code = JOB_ERROR_CONTRACT.replaceRefusedError.code;
+
+  public constructor(public readonly reason: string) {
+    super(`${JOB_ERROR_CONTRACT.replaceRefusedError.message} (${reason})`);
+    this.name = 'DocumentReplaceRefusedError';
+  }
+}
+
+/**
+ * The in-batch schema state of a replace differs from what was planned
+ * before the delete (literature-hub #614).  A DocumentMutationError: the
+ * batch is abandoned exactly like any other post-mutation failure.  The job
+ * error carries the replace-state code and the document id so the owner can
+ * park the work instead of treating it as an infrastructure failure.  The
+ * batch is discarded on recovery and the existing version is retained.
+ */
+export class DocumentReplaceStateInconsistentError extends DocumentMutationError {
+  public readonly replaceStateCode = JOB_ERROR_CONTRACT.replaceStateInconsistentError.code;
+
+  public constructor(public readonly documentId: string, detail: string) {
+    super(new Error(detail));
+    this.name = 'DocumentReplaceStateInconsistentError';
+  }
+}
+
 const BATCH_COMMIT_EVERY_DOCS = 15;
 
 export class AsyncJobRunner {
@@ -149,6 +182,16 @@ export class AsyncJobRunner {
             // owner/recovery authority may resolve it; never publish it here.
             throw error;
           }
+          if (error instanceof DocumentReplaceRefusedError) {
+            // Refused before any document write: not a document failure.
+            documentErrors.push({
+              code: error.code,
+              message: error.message,
+              documentId: document.documentId,
+            });
+            console.log(`  [${document.title}] REPLACE REFUSED (skipping): ${error.reason}`);
+            continue;
+          }
           // Isolate per-document failures: one malformed document must not
           // abort the whole job. Record and continue.
           const message = error instanceof Error
@@ -217,10 +260,17 @@ export class AsyncJobRunner {
       const message = failure instanceof Error
         ? `${failure.message}\n${(failure.stack ?? '').split('\n').slice(1, 6).join('\n')}`
         : String(failure);
-      const jobError: JobError = {
-        code: JOB_ERROR_CONTRACT.ownerError.code,
-        message,
-      };
+      // The batch was abandoned either way; only the classification differs.
+      const jobError: JobError = failure instanceof DocumentReplaceStateInconsistentError
+        ? {
+          code: failure.replaceStateCode,
+          message: `${JOB_ERROR_CONTRACT.replaceStateInconsistentError.message} (${(failure.cause as Error).message})`,
+          documentId: failure.documentId,
+        }
+        : {
+          code: JOB_ERROR_CONTRACT.ownerError.code,
+          message,
+        };
       this.db.prepare(
         `UPDATE jobs SET status = 'failed', errors_json = ?, updated_at = ? WHERE job_id = ?`,
       ).run(JSON.stringify([jobError]), new Date().toISOString(), jobId);

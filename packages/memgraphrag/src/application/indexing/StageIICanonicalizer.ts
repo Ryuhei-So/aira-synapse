@@ -265,6 +265,16 @@ export class StageIICanonicalizer {
     schemas: readonly Schema[],
     contributionDocumentId: string,
     threshold = 2,
+    options: {
+      /**
+       * Plan against a transformed view of each stored projection (literature-hub
+       * #614: the predicted post-delete state of a replace).  Identity fields
+       * must be unchanged.
+       */
+      readonly projectionView?: (
+        projection: SchemaCanonicalizationProjection,
+      ) => SchemaCanonicalizationProjection;
+    } = {},
   ): Promise<CanonicalSchemaPreparation> {
     const memory = requireCanonicalMemory(this.indexingMemory);
     const groups = groupCandidateSchemas(schemas);
@@ -292,7 +302,9 @@ export class StageIICanonicalizer {
         projection: capability.projection,
         contributionDocumentId,
       });
-      projections.push(...batchProjections);
+      projections.push(...(options.projectionView
+        ? batchProjections.map(options.projectionView)
+        : batchProjections));
     }
     const bySchemaId = new Map(projections.map((projection) => [projection.schemaId, projection]));
     const schemaViews: PreparedSchemaView[] = [];
@@ -384,6 +396,27 @@ export class StageIICanonicalizer {
 
     return { schemaViews, mergeIntents, newlyStableSchemaIds };
   }
+}
+
+/**
+ * The native `memory_delete_document` schema rule (aira-graphdb 88db5e0,
+ * `prune_schema_value`) applied to a pre-delete projection: a schema that
+ * lists the document loses it, `frequency` is decremented once (floor 0) and
+ * `state` becomes `stable` iff `frequency >= stabilizationThreshold`.  Any
+ * other schema is unchanged.  Used to plan a replace (fact states, conflict
+ * detection) before the delete; the in-batch read must agree exactly.
+ */
+export function predictPostDeleteProjection(
+  projection: SchemaCanonicalizationProjection,
+): SchemaCanonicalizationProjection {
+  if (!projection.contributionPresent) return projection;
+  const frequency = Math.max(projection.frequency - 1, 0);
+  return {
+    ...projection,
+    frequency,
+    state: frequency >= projection.stabilizationThreshold ? 'stable' : 'pending',
+    contributionPresent: false,
+  };
 }
 
 export function mergeSchemas(snapshot: MemorySnapshot, schemas: readonly Schema[]): MemorySnapshot {

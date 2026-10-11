@@ -50,3 +50,9 @@ export {
   type SchemasByIdsRequest,
   type SectionCountsRequest,
 } from './memoryReader.js';
+export {
+  MEMORY_DELETE_DOCUMENT_COUNT_KEYS,
+  type IDocumentReplaceMemory,
+  type MemoryDeleteDocumentRequest,
+  type MemoryDeleteDocumentResult,
+} from './documentReplace.js';
