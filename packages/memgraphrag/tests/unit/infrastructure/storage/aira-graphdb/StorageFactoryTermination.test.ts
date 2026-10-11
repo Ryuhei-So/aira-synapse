@@ -60,6 +60,9 @@ vi.mock('../../../../../src/infrastructure/storage/aira-graphdb/AiraGraphDbAdapt
   AiraGraphDbMemoryStore: class {},
   AiraGraphDbGraphProjection: class {},
   AiraGraphDbLexicalRetriever: class {},
+  AiraGraphDbDocumentReplaceMemory: class {
+    public constructor(public readonly client: unknown) {}
+  },
 }));
 
 import {
@@ -133,6 +136,14 @@ describe.sequential('Aira GraphDB storage factory termination propagation', () =
     await expect(close).resolves.toBeUndefined();
     await expect(receipt).resolves.toEqual({ kind: 'graceful_reaped' });
     expect(client.close).toHaveBeenCalledTimes(2);
+  });
+
+  it('wires documentReplace only when the native advertised memory_delete_document (#614)', async () => {
+    state.indexingCreate.mockResolvedValue({ indexing: true, supportsMemoryDeleteDocument: true });
+    const adapters = await createAiraGraphDbAdapters({ dbPath: '/private/graphdb.agdb' });
+    expect(Reflect.ownKeys(adapters)).toContain('documentReplace');
+    expect((adapters.documentReplace as unknown as { client: unknown }).client).toBe(state.clients[0]);
+    await adapters.close();
   });
 
   it('keeps begin and commit RPC behavior unchanged', async () => {

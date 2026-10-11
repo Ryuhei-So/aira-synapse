@@ -6,6 +6,7 @@
 import type { IGraphStore, IVectorIndex, IMemoryStore } from '../../../domain/storage/graphStore.js';
 import type { IIndexingMemory } from '../../../domain/storage/indexingMemory.js';
 import type { IMemoryReader } from '../../../domain/storage/memoryReader.js';
+import type { IDocumentReplaceMemory } from '../../../domain/storage/documentReplace.js';
 import { CachedGraphProjection, DEFAULT_PROJECTION_COLD_BACKOFF } from '../cached/CachedGraphProjection.js';
 import type { StoreGenerationSource } from '../cached/projectionVersionGate.js';
 import type { IGraphProjection, ILexicalRetriever } from '../../../domain/retrieval/ppr.js';
@@ -26,6 +27,11 @@ export interface StorageAdapters {
   readonly graphProjection: IGraphProjection;
   readonly lexicalRetriever: ILexicalRetriever;
   readonly close: () => Promise<void>;
+  /**
+   * Per-document replace delete (literature-hub #614).  Present only when the
+   * backend implements it; a document replace is refused without it.
+   */
+  readonly documentReplace?: IDocumentReplaceMemory;
   /**
    * The store's committed generation, when the backend reports one; the
    * query path uses it to drop a cached ranking graph after re-indexing.
@@ -285,12 +291,13 @@ export async function createAiraGraphDbAdapters(
     AiraGraphDbMemoryStore,
     AiraGraphDbGraphProjection,
     AiraGraphDbLexicalRetriever,
+    AiraGraphDbDocumentReplaceMemory,
   } = await import('../aira-graphdb/AiraGraphDbAdapters.js');
 
   const client = new AiraGraphDbNativeClient(opts.dbPath, opts.onTraffic);
   const termination = readAiraGraphDbNativeTerminationReceipt(client);
   const close = client.close.bind(client);
-  let indexingMemory: IIndexingMemory;
+  let indexingMemory: Awaited<ReturnType<typeof AiraGraphDbIndexingMemory.create>>;
   let memoryReader: IMemoryReader;
   let projectionRead: Awaited<ReturnType<typeof detectProjectionRead>>;
   try {
@@ -352,6 +359,9 @@ export async function createAiraGraphDbAdapters(
     lexicalRetriever,
     close,
     readGeneration: () => readAiraGraphDbGeneration(client),
+    ...(indexingMemory.supportsMemoryDeleteDocument
+      ? { documentReplace: new AiraGraphDbDocumentReplaceMemory(client) }
+      : {}),
   };
   AIRA_GRAPHDB_ADAPTER_TERMINATIONS.set(adapters, termination);
   return adapters;

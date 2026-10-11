@@ -467,19 +467,52 @@ export async function buildVectorRecordsFromInputs(
       throw new Error('embedding provider returned inconsistent vector dimensions');
     }
   }
-  const records = items.map((item, index) => ({
+  return assembleVectorRecords(items, embeddings.vectors);
+}
+
+function assembleVectorRecords(
+  items: readonly VectorEmbeddingInput[],
+  vectors: readonly (readonly number[])[],
+): readonly VectorRecord<Readonly<Record<string, unknown>>>[] {
+  return items.map((item, index) => ({
     id: item.id,
     corpusId: item.corpusId,
     namespace: namespaceForNode(item.layer),
-    values: embeddings.vectors[index]!,
+    values: vectors[index]!,
     metadata: {
       nodeId: item.id,
       documentId: item.documentId,
       layer: item.layer,
     },
   }));
+}
 
-  return records;
+/**
+ * Re-bind already computed embeddings to a re-planned input list without a
+ * provider call (literature-hub #614 replace).  Embeddings depend only on the
+ * label; a replace re-plan changes metadata such as an ontology vector's
+ * `documentId`, never a node id or label.  Every input must therefore match a
+ * previously embedded `(id, layer, label)`; anything else is a planning
+ * invariant violation.
+ */
+export function rebindVectorRecords(
+  previous: readonly VectorRecord<Readonly<Record<string, unknown>>>[],
+  previousInputs: readonly VectorEmbeddingInput[],
+  items: readonly VectorEmbeddingInput[],
+): readonly VectorRecord<Readonly<Record<string, unknown>>>[] {
+  if (previous.length !== previousInputs.length) {
+    throw new Error('embedded vector records do not match their inputs');
+  }
+  const key = (item: VectorEmbeddingInput): string => `${item.id}\u0000${item.layer}\u0000${item.label}`;
+  const byKey = new Map<string, readonly number[]>();
+  previousInputs.forEach((item, index) => byKey.set(key(item), previous[index]!.values));
+  return assembleVectorRecords(items, items.map((item) => {
+    const values = byKey.get(key(item));
+    if (!values) {
+      throw new Error('replace re-plan produced a vector input without a prepared embedding');
+    }
+    return values;
+  }));
 }
 
 export async function persistVectorRecords(

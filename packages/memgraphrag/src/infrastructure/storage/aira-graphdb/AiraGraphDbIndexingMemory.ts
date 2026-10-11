@@ -37,6 +37,8 @@ import type {
 interface IndexingMemoryCapabilities {
   readonly maxDeltaItemsPerSection: number;
   readonly schemaCanonicalization: SchemaCanonicalizationCapability;
+  /** True iff the native advertises the #614 per-document replace delete. */
+  readonly memoryDeleteDocument: boolean;
 }
 
 type JsonObject = Record<string, unknown>;
@@ -57,6 +59,11 @@ const REQUIRED_METHODS = new Map([
   ['memory_upsert', { classification: 'mutation', wal: true }],
   ['upsert_nodes', { classification: 'mutation', wal: true }],
 ] as const);
+/**
+ * Optional methods: absent on older natives, but when advertised they must
+ * carry exactly this policy (literature-hub #614).
+ */
+const MEMORY_DELETE_DOCUMENT_METHOD = 'memory_delete_document';
 
 function isObject(value: unknown): value is JsonObject {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -116,9 +123,15 @@ function validateProtocolInfo(value: unknown): IndexingMemoryCapabilities {
       throw new Error(`aira-graphdb method contract mismatch for ${name}`);
     }
   }
+  const deleteDocument = methods.get(MEMORY_DELETE_DOCUMENT_METHOD);
+  if (deleteDocument
+    && (deleteDocument.classification !== 'mutation' || deleteDocument.wal !== true)) {
+    throw new Error(`aira-graphdb method contract mismatch for ${MEMORY_DELETE_DOCUMENT_METHOD}`);
+  }
   return {
     maxDeltaItemsPerSection: indexing.maxDeltaItemsPerSection as number,
     schemaCanonicalization,
+    memoryDeleteDocument: deleteDocument !== undefined,
   };
 }
 
@@ -130,6 +143,11 @@ export class AiraGraphDbIndexingMemory implements IIndexingMemory, ISchemaCanoni
 
   public get schemaCanonicalizationCapability(): SchemaCanonicalizationCapability | undefined {
     return this.capabilities.schemaCanonicalization;
+  }
+
+  /** Whether the native advertised `memory_delete_document` at startup. */
+  public get supportsMemoryDeleteDocument(): boolean {
+    return this.capabilities.memoryDeleteDocument;
   }
 
   private requireSchemaCanonicalizationCapability(): SchemaCanonicalizationCapability {

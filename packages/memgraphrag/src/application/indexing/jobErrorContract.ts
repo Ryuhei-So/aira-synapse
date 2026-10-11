@@ -11,6 +11,11 @@ interface GraphDbOwnerJobErrorContract {
   readonly version: 1;
   readonly ownerError: ContractError;
   readonly documentError: ContractError & { readonly documentId: string };
+  /**
+   * A non-chargeable refusal of a replace request, decided before any write
+   * (literature-hub #614).  Distinct from both other codes.
+   */
+  readonly replaceRefusedError: ContractError & { readonly documentId: string };
 }
 
 function requireError(value: unknown, name: string, documentScoped: boolean): ContractError {
@@ -44,14 +49,20 @@ export function parseJobErrorContract(rawText: string): GraphDbOwnerJobErrorCont
   }
   const ownerError = requireError(candidate.ownerError, 'ownerError', false);
   const documentError = requireError(candidate.documentError, 'documentError', true);
+  const replaceRefusedError = requireError(candidate.replaceRefusedError, 'replaceRefusedError', true);
   if (ownerError.code === documentError.code) {
     throw new Error('owner and document job-error codes must be distinct');
+  }
+  if (replaceRefusedError.code === ownerError.code
+    || replaceRefusedError.code === documentError.code) {
+    throw new Error('replace-refused job-error code must be distinct');
   }
   return Object.freeze({
     contract: 'graphdb-owner-job-errors',
     version: 1,
     ownerError,
     documentError: documentError as ContractError & { readonly documentId: string },
+    replaceRefusedError: replaceRefusedError as ContractError & { readonly documentId: string },
   });
 }
 

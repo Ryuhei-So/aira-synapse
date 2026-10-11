@@ -14,6 +14,7 @@ describe('graphdb owner job-error package contract', () => {
       JOB_ERROR_CONTRACT.documentError.code,
     );
     expect(JOB_ERROR_CONTRACT.documentError.documentId.length).toBeGreaterThan(0);
+    expect(JOB_ERROR_CONTRACT.replaceRefusedError.code).toBe('DOCUMENT_REPLACE_UNSUPPORTED_LANE');
   });
 
   it('fails closed on malformed or ambiguous contract boundaries', () => {
@@ -33,5 +34,14 @@ describe('graphdb owner job-error package contract', () => {
         code: JOB_ERROR_CONTRACT.documentError.code,
       },
     }))).toThrow(/must be distinct/);
+    const { replaceRefusedError: _omitted, ...withoutReplace } = JOB_ERROR_CONTRACT;
+    expect(() => parseJobErrorContract(JSON.stringify(withoutReplace)))
+      .toThrow(/invalid replaceRefusedError/);
+    for (const code of [JOB_ERROR_CONTRACT.ownerError.code, JOB_ERROR_CONTRACT.documentError.code]) {
+      expect(() => parseJobErrorContract(JSON.stringify({
+        ...JOB_ERROR_CONTRACT,
+        replaceRefusedError: { ...JOB_ERROR_CONTRACT.replaceRefusedError, code },
+      }))).toThrow(/replace-refused job-error code must be distinct/);
+    }
   });
 });

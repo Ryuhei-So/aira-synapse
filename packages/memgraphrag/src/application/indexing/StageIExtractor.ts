@@ -19,6 +19,12 @@ export interface IndexDocumentInput {
   readonly sourceDb?: string;
   readonly sourceType?: 'pdf' | 'html' | 'docx' | 'pptx' | 'md';
   readonly language?: LanguageCode;
+  /**
+   * Replace this document's existing graph content in the same batch
+   * (literature-hub #614).  Opt-in; absent or false keeps the upsert-only
+   * behaviour unchanged.  Supported on the canonical lane only.
+   */
+  readonly replaceExisting?: boolean;
 }
 
 export interface MarkdownQualityAssessment {

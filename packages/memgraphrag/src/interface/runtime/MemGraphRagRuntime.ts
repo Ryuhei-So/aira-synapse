@@ -362,6 +362,7 @@ class RuntimeImpl implements MemGraphRagRuntime {
     let graphProjection: IGraphProjection;
     let storageBatch: StorageAdapters['batch'];
     let readGeneration: StoreGenerationSource | undefined;
+    let documentReplace: StorageAdapters['documentReplace'];
 
     if (graphDbRuntime) {
       const storageAdapters: StorageAdapters = await createAiraGraphDbAdapters({
@@ -381,6 +382,7 @@ class RuntimeImpl implements MemGraphRagRuntime {
       graphProjection = storageAdapters.graphProjection;
       readGeneration = storageAdapters.readGeneration;
       storageBatch = storageAdapters.batch;
+      documentReplace = storageAdapters.documentReplace;
       this.storageClose = storageAdapters.close;
     } else {
       const sqliteGraphStore = new SQLiteGraphStore(this.db);
@@ -426,6 +428,7 @@ class RuntimeImpl implements MemGraphRagRuntime {
         llmProvider,
         embeddingProvider,
         nlpExtractor,
+        ...(documentReplace ? { documentReplace } : {}),
         ...(graphDbRuntime
           ? { enableDictionaryIndexing: false }
           : {

@@ -5,6 +5,7 @@
 import type Database from 'better-sqlite3';
 import {
   DocumentMutationError,
+  DocumentReplaceRefusedError,
   type DocumentIndexingPipeline,
   type ProcessDocumentResult,
 } from './AsyncJobRunner.js';
@@ -20,6 +21,8 @@ import {
   planCanonicalGraphProjection,
   planCanonicalGraphHydrationRequests,
   planGraphProjection,
+  rebindVectorRecords,
+  type GraphProjectionPlan,
 } from './StageIVGraphProjector.js';
 import { SymbolicCanonicalizer } from './SymbolicCanonicalizer.js';
 import { SymbolicConflictDetector } from './SymbolicConflictDetector.js';
@@ -33,6 +36,10 @@ import {
   type IVectorIndex,
 } from '../../domain/storage/index.js';
 import type { ISchemaCanonicalizationMemory } from '../../domain/storage/schemaCanonicalization.js';
+import type { IDocumentReplaceMemory } from '../../domain/storage/documentReplace.js';
+import type { ActivateFactsRequest } from '../../domain/storage/indexingMemory.js';
+import type { Passage } from '../../domain/memory/passage.js';
+import type { CanonicalSchemaPreparation } from './StageIICanonicalizer.js';
 import type { SchemaHydrationWireParams } from '../../domain/storage/schemaCanonicalization.js';
 import type { Fact } from '../../domain/memory/fact.js';
 import type { ITermDictionary } from '../../domain/dictionary/termDictionary.js';
@@ -64,6 +71,22 @@ export interface FullPipelineOptions {
   readonly dictionary?: ITermDictionary;
   /** Factory to create a corpus-scoped ITermDictionary. Used by Stage V to satisfy FK constraints. */
   readonly dictionaryFactory?: (corpusId: string) => ITermDictionary;
+  /**
+   * Per-document replace delete (literature-hub #614).  Only consulted for a
+   * document with `replaceExisting: true`; without it such a document is
+   * refused before any write.
+   */
+  readonly documentReplace?: IDocumentReplaceMemory;
+}
+
+interface CanonicalLanePlan {
+  readonly canonicalDelta: ReturnType<typeof buildCanonicalizationMemoryDelta>;
+  readonly graphPlan: GraphProjectionPlan;
+  readonly hydrationRequests: readonly SchemaHydrationWireParams[];
+}
+
+function sameIds(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((id, index) => id === right[index]);
 }
 
 export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
@@ -78,10 +101,79 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
     this.canonicalizer = new SymbolicCanonicalizer();
   }
 
+  /**
+   * Replace is supported on the canonical lane only (design #612 §5.2): a
+   * legacy-lane schema write after the delete would restore the deleted
+   * document from full schemas read before it.  Decided from configuration
+   * alone, so the refusal precedes extraction and every write.
+   */
+  private requireReplaceSupport(): IDocumentReplaceMemory {
+    if (!isSchemaCanonicalizationMemory(this.options.indexingMemory)) {
+      throw new DocumentReplaceRefusedError('indexing memory has no canonical schema lane');
+    }
+    if (!this.options.documentReplace) {
+      throw new DocumentReplaceRefusedError('backend has no memory_delete_document');
+    }
+    return this.options.documentReplace;
+  }
+
+  /**
+   * Deterministic canonical-lane planning and validation.  Shared by the
+   * pre-mutation plan and the in-batch replace re-plan so both run exactly
+   * the same checks in the same order.
+   */
+  private planCanonicalLane(
+    corpusId: string,
+    documentId: string,
+    canonicalMemory: ISchemaCanonicalizationMemory,
+    preparation: CanonicalSchemaPreparation,
+    facts: readonly Fact[],
+    passages: readonly Passage[],
+    activation: ActivateFactsRequest | undefined,
+    now: string,
+  ): CanonicalLanePlan {
+    const canonicalDelta = freezeTree(buildCanonicalizationMemoryDelta(
+      corpusId,
+      preparation.schemaViews,
+      preparation.mergeIntents,
+      facts,
+      passages,
+      now,
+    ));
+    // Complete deterministic validation, including the graph marker shape,
+    // before embedding or the first mutation.
+    canonicalMemory.preflightSchemaCanonicalizationDelta(canonicalDelta);
+    if (activation) {
+      this.options.indexingMemory.preflightMutation({
+        delta: { corpusId, passages: [], facts: [], schemas: [], exportedAt: now },
+        activation,
+      });
+    }
+    const graphPlan = planCanonicalGraphProjection(
+      facts,
+      preparation.schemaViews,
+      passages,
+      documentId,
+    );
+    assertSchemaHydrationGraphStore(this.options.graphStore);
+    const schemaCapability = canonicalMemory.schemaCanonicalizationCapability;
+    if (!schemaCapability) {
+      throw new Error('schema canonicalization capability is unavailable');
+    }
+    const hydrationRequests = planCanonicalGraphHydrationRequests(graphPlan, schemaCapability);
+    for (const request of hydrationRequests) {
+      this.options.graphStore.preflightSchemaHydration(request);
+    }
+    return { canonicalDelta, graphPlan, hydrationRequests };
+  }
+
   public async processDocument(
     corpusId: string,
     document: IndexDocumentInput,
   ): Promise<ProcessDocumentResult> {
+    const documentReplace = document.replaceExisting === true
+      ? this.requireReplaceSupport()
+      : undefined;
     const now = new Date().toISOString();
 
     // Insert document metadata
@@ -101,6 +193,11 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
     const tStageI = Date.now();
 
     if (records.length === 0) {
+      if (documentReplace) {
+        // Keep the existing version: a replace never commits a delete
+        // without new content.  An ordinary, chargeable document failure.
+        throw new Error('replace produced no indexable chunks; the existing version is kept');
+      }
       return { processedDocumentId: document.documentId, addedNodes: 0, addedEdges: 0, conflicts: 0 };
     }
 
@@ -120,14 +217,20 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
     const legacyPreparation = canonicalPreparation === undefined
       ? await stageII.prepareSchemas(candidateSchemas)
       : undefined;
-    const schemas = canonicalPreparation?.schemaViews ?? legacyPreparation!.finalSchemas;
+    if (documentReplace && legacyPreparation && legacyPreparation.finalSchemas.length > 0) {
+      // Unreachable while requireReplaceSupport holds (a canonical memory
+      // sends every schema-bearing document to the canonical lane); kept so
+      // a legacy schema write can never follow a replace delete.
+      throw new DocumentReplaceRefusedError('document would write schemas on the legacy lane');
+    }
+    let schemas = canonicalPreparation?.schemaViews ?? legacyPreparation!.finalSchemas;
     const newlyStableSchemaIds = canonicalPreparation?.newlyStableSchemaIds
       ?? legacyPreparation?.newlyStableSchemaIds
       ?? [];
 
     // Schema candidates retain occurrence pressure, while repeated fact
     // candidates fold to one identity with all supporting passage provenance.
-    const allFacts: Fact[] = [...buildDocumentFacts(
+    let allFacts: Fact[] = [...buildDocumentFacts(
       corpusId,
       document.documentId,
       records,
@@ -137,11 +240,19 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
 
     // Stage III: Conflict detection and resolution
     let conflictCount = 0;
+    let inactivatedFactIds: ReadonlySet<string> = new Set();
     if (this.options.enableConflictResolution !== false) {
       const passages = records.map((r) => r.sourcePassage);
-      const activeFacts = allFacts.some((fact) => fact.state === 'active')
+      const loadedActiveFacts = allFacts.some((fact) => fact.state === 'active')
         ? await this.options.indexingMemory.getActiveFacts({ corpusId, limit: 100 })
         : [];
+      // A replace deletes the facts sourced only from this document before
+      // its new facts are written; they must not conflict with their own
+      // successors.
+      const activeFacts = documentReplace
+        ? loadedActiveFacts.filter((fact) => !(fact.sourceDocumentIds.length > 0
+          && fact.sourceDocumentIds.every((id) => id === document.documentId)))
+        : loadedActiveFacts;
       const detector = new SymbolicConflictDetector({
         loadFacts: async (cid) => {
           if (cid !== corpusId) {
@@ -161,6 +272,7 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
         const inactivatedIds = new Set(
           resolutions.flatMap((r) => r.resolution.inactivatedFactIds),
         );
+        inactivatedFactIds = inactivatedIds;
         for (let i = 0; i < allFacts.length; i++) {
           if (inactivatedIds.has(allFacts[i]!.factId)) {
             allFacts[i] = { ...allFacts[i]!, state: 'inactive' };
@@ -174,50 +286,31 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
     }
 
     const passages = records.map((r) => r.sourcePassage);
-    const activation = newlyStableSchemaIds.length > 0
+    let activation = newlyStableSchemaIds.length > 0
       ? { corpusId, schemaIds: newlyStableSchemaIds, updatedAt: now }
       : undefined;
 
     let delta: ReturnType<typeof buildDocumentMemoryDelta> | ReturnType<typeof buildCanonicalizationMemoryDelta>;
     let canonicalDelta: ReturnType<typeof buildCanonicalizationMemoryDelta> | undefined;
     let legacyDelta: ReturnType<typeof buildDocumentMemoryDelta> | undefined;
-    let graphPlan;
+    let graphPlan: GraphProjectionPlan;
     let hydrationRequests: readonly SchemaHydrationWireParams[] | undefined;
     let vectorRecords;
     if (canonicalPreparation && canonicalMemory) {
-      canonicalDelta = freezeTree(buildCanonicalizationMemoryDelta(
+      const plan = this.planCanonicalLane(
         corpusId,
-        canonicalPreparation.schemaViews,
-        canonicalPreparation.mergeIntents,
-        allFacts,
-        passages,
-        now,
-      ));
-      delta = canonicalDelta;
-      // Complete deterministic validation, including the graph marker shape,
-      // before embedding or the first mutation.
-      canonicalMemory.preflightSchemaCanonicalizationDelta(canonicalDelta);
-      if (activation) {
-        this.options.indexingMemory.preflightMutation({
-          delta: { corpusId, passages: [], facts: [], schemas: [], exportedAt: now },
-          activation,
-        });
-      }
-      graphPlan = planCanonicalGraphProjection(
-        allFacts,
-        canonicalPreparation.schemaViews,
-        passages,
         document.documentId,
+        canonicalMemory,
+        canonicalPreparation,
+        allFacts,
+        passages,
+        activation,
+        now,
       );
-      assertSchemaHydrationGraphStore(this.options.graphStore);
-      const schemaCapability = canonicalMemory.schemaCanonicalizationCapability;
-      if (!schemaCapability) {
-        throw new Error('schema canonicalization capability is unavailable');
-      }
-      hydrationRequests = planCanonicalGraphHydrationRequests(graphPlan, schemaCapability);
-      for (const request of hydrationRequests) {
-        this.options.graphStore.preflightSchemaHydration(request);
-      }
+      canonicalDelta = plan.canonicalDelta;
+      delta = canonicalDelta;
+      graphPlan = plan.graphPlan;
+      hydrationRequests = plan.hydrationRequests;
       vectorRecords = await buildVectorRecordsFromInputs(
         this.options.embeddingProvider,
         graphPlan.vectorInputs ?? [],
@@ -245,6 +338,70 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
     }
 
     try {
+      if (documentReplace) {
+        // Replace (design #612 §5.2): delete inside the open batch, then
+        // re-read the schema projections, which now show the post-delete
+        // state, and rebuild the merge intents from that read through the
+        // same preparation code.  Any failure from here on is a
+        // DocumentMutationError, so the batch never commits the delete
+        // without its upsert.
+        await documentReplace.memoryDeleteDocument({
+          corpusId,
+          documentId: document.documentId,
+          updatedAt: now,
+        });
+        if (canonicalPreparation && canonicalMemory) {
+          const fresh = await stageII.prepareCanonicalSchemas(candidateSchemas, document.documentId);
+          const freshFacts = buildDocumentFacts(
+            corpusId,
+            document.documentId,
+            records,
+            fresh.schemaViews,
+            now,
+          ).map((fact) => (inactivatedFactIds.has(fact.factId)
+            ? { ...fact, state: 'inactive' as const }
+            : fact));
+          // Identity is fixed before the delete: schema ids come from the
+          // extracted candidates, fact ids from the document, candidate and
+          // schema identity, passage ids from the chunks.  The delete changes
+          // only support, frequency, state and merge tokens.  These checks
+          // are planning-invariant guards, not data-dependent outcomes.
+          if (!sameIds(
+            fresh.schemaViews.map((view) => view.schemaId),
+            canonicalPreparation.schemaViews.map((view) => view.schemaId),
+          ) || !sameIds(
+            freshFacts.map((fact) => fact.factId),
+            allFacts.map((fact) => fact.factId),
+          )) {
+            throw new Error('replace re-plan changed the document identity set');
+          }
+          const freshActivation = fresh.newlyStableSchemaIds.length > 0
+            ? { corpusId, schemaIds: fresh.newlyStableSchemaIds, updatedAt: now }
+            : undefined;
+          const plan = this.planCanonicalLane(
+            corpusId,
+            document.documentId,
+            canonicalMemory,
+            fresh,
+            freshFacts,
+            passages,
+            freshActivation,
+            now,
+          );
+          vectorRecords = rebindVectorRecords(
+            vectorRecords,
+            graphPlan.vectorInputs ?? [],
+            plan.graphPlan.vectorInputs ?? [],
+          );
+          schemas = fresh.schemaViews;
+          allFacts = freshFacts;
+          activation = freshActivation;
+          canonicalDelta = plan.canonicalDelta;
+          delta = canonicalDelta;
+          graphPlan = plan.graphPlan;
+          hydrationRequests = plan.hydrationRequests;
+        }
+      }
       const upsertResult = canonicalDelta && canonicalMemory
         ? await canonicalMemory.upsertSchemaCanonicalizationDelta(canonicalDelta)
         : await this.options.indexingMemory.upsertDelta(legacyDelta!);

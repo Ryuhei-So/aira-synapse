@@ -35,6 +35,21 @@ export class DocumentMutationError extends Error {
   }
 }
 
+/**
+ * A replace request refused before any write (literature-hub #614): the
+ * document would need the legacy lane, or the backend has no per-document
+ * replace delete.  Recorded with the contract's non-chargeable
+ * `replaceRefusedError` code, never as a document processing failure.
+ */
+export class DocumentReplaceRefusedError extends Error {
+  public readonly code = JOB_ERROR_CONTRACT.replaceRefusedError.code;
+
+  public constructor(public readonly reason: string) {
+    super(`${JOB_ERROR_CONTRACT.replaceRefusedError.message} (${reason})`);
+    this.name = 'DocumentReplaceRefusedError';
+  }
+}
+
 const BATCH_COMMIT_EVERY_DOCS = 15;
 
 export class AsyncJobRunner {
@@ -148,6 +163,16 @@ export class AsyncJobRunner {
             // A mutation may already be present in the backend WAL. Only the
             // owner/recovery authority may resolve it; never publish it here.
             throw error;
+          }
+          if (error instanceof DocumentReplaceRefusedError) {
+            // Refused before any write: no data, no attempt to charge.
+            documentErrors.push({
+              code: JOB_ERROR_CONTRACT.replaceRefusedError.code,
+              message: error.message,
+              documentId: document.documentId,
+            });
+            console.log(`  [${document.title}] REPLACE REFUSED (skipping): ${error.reason}`);
+            continue;
           }
           // Isolate per-document failures: one malformed document must not
           // abort the whole job. Record and continue.

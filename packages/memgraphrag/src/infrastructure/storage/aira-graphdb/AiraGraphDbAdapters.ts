@@ -15,6 +15,13 @@ import type {
 import type { MemorySnapshot } from '../../../domain/memory/globalMemory.js';
 import type { IGraphStore } from '../../../domain/storage/graphStore.js';
 import type { SchemaHydrationWireParams } from '../../../domain/storage/schemaCanonicalization.js';
+import {
+  MEMORY_DELETE_DOCUMENT_COUNT_KEYS,
+  type IDocumentReplaceMemory,
+  type MemoryDeleteDocumentRequest,
+  type MemoryDeleteDocumentResult,
+} from '../../../domain/storage/documentReplace.js';
+import { INDEXING_MEMORY_CONTRACT } from '../../../domain/storage/indexingMemory.js';
 import { validateGraphUpsertWireParams } from '../schemaCanonicalizationContract.js';
 import {
   AIRA_GRAPHDB_MAX_REQUEST_BYTES,
@@ -186,6 +193,82 @@ export class AiraGraphDbMemoryStore implements IMemoryStore {
 
   public async validateIntegrity(corpusId: string): Promise<readonly string[]> {
     return this.client.request('memory_validate_integrity', { corpusId });
+  }
+}
+
+const MEMORY_DELETE_DOCUMENT_LIMITS = {
+  maxRequestBytes: INDEXING_MEMORY_CONTRACT.maxRequestBytes,
+  maxResponseBytes: INDEXING_MEMORY_CONTRACT.maxResponseBytes,
+} as const;
+
+function requireBoundedString(value: unknown, name: string, maxBytes: number): string {
+  if (typeof value !== 'string' || value.length === 0
+    || Buffer.byteLength(value, 'utf8') > maxBytes) {
+    throw new Error(`memory_delete_document ${name} is invalid`);
+  }
+  return value;
+}
+
+/**
+ * Validate the native's flat count result exactly: the declared key set, the
+ * request's identity echoed back, non-negative safe-integer counts, and
+ * `noop` iff every count is zero.  Anything else fails closed.
+ */
+export function validateMemoryDeleteDocumentResult(
+  value: unknown,
+  request: MemoryDeleteDocumentRequest,
+): MemoryDeleteDocumentResult {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error('memory_delete_document result must be an object');
+  }
+  const candidate = value as Record<string, unknown>;
+  const expectedKeys = ['corpusId', 'documentId', 'noop', ...MEMORY_DELETE_DOCUMENT_COUNT_KEYS];
+  const keys = Object.keys(candidate);
+  if (keys.length !== expectedKeys.length || expectedKeys.some((key) => !Object.hasOwn(candidate, key))) {
+    throw new Error('memory_delete_document result has an unexpected shape');
+  }
+  if (candidate.corpusId !== request.corpusId || candidate.documentId !== request.documentId) {
+    throw new Error('memory_delete_document result identifies a different document');
+  }
+  if (typeof candidate.noop !== 'boolean') {
+    throw new Error('memory_delete_document noop must be a boolean');
+  }
+  let total = 0;
+  for (const key of MEMORY_DELETE_DOCUMENT_COUNT_KEYS) {
+    const count = candidate[key];
+    if (!Number.isSafeInteger(count) || (count as number) < 0) {
+      throw new Error(`memory_delete_document ${key} must be a non-negative integer`);
+    }
+    total += count as number;
+  }
+  if (candidate.noop !== (total === 0)) {
+    throw new Error('memory_delete_document noop disagrees with its counts');
+  }
+  return Object.freeze({ ...candidate }) as unknown as MemoryDeleteDocumentResult;
+}
+
+/**
+ * Per-document replace delete (literature-hub #614).  Constructed only when
+ * the native advertises `memory_delete_document` as a WAL mutation; it must
+ * be called inside the caller's open batch.
+ */
+export class AiraGraphDbDocumentReplaceMemory implements IDocumentReplaceMemory {
+  public constructor(private readonly client: AiraGraphDbRpcClient) {}
+
+  public async memoryDeleteDocument(
+    request: MemoryDeleteDocumentRequest,
+  ): Promise<MemoryDeleteDocumentResult> {
+    const params = {
+      corpusId: requireBoundedString(request.corpusId, 'corpusId', INDEXING_MEMORY_CONTRACT.maxCorpusIdBytes),
+      documentId: requireBoundedString(request.documentId, 'documentId', INDEXING_MEMORY_CONTRACT.maxDomainIdBytes),
+      updatedAt: requireBoundedString(request.updatedAt, 'updatedAt', INDEXING_MEMORY_CONTRACT.maxUpdatedAtBytes),
+    };
+    const response = await this.client.request<unknown>(
+      'memory_delete_document',
+      params,
+      MEMORY_DELETE_DOCUMENT_LIMITS,
+    );
+    return validateMemoryDeleteDocumentResult(response, params);
   }
 }
 
