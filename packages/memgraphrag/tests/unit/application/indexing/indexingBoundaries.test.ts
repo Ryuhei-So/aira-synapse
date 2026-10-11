@@ -997,11 +997,6 @@ describe('document replace option (literature-hub #614)', () => {
         return reads === 1 ? [projection] : [{ ...projection, frequency: 2, contributionPresent: false }];
       },
     });
-    // The stored schema is consistent: it lists the document.
-    harness.indexingMemory.getSchemasByIds.mockResolvedValue([{
-      ...projection, aliases: [], factIds: [], sourceDocumentIds: ['doc-boundary'], version: 1,
-      createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
-    }]);
     const memoryDeleteDocument = vi.fn(async () => {
       harness.mutationTrace.push('delete');
       return {} as never;
@@ -1019,6 +1014,8 @@ describe('document replace option (literature-hub #614)', () => {
       expect(error).toBeInstanceOf(DocumentReplaceStateInconsistentError);
       expect(error).toMatchObject({ replaceStateCode: 'DOCUMENT_REPLACE_STATE_INCONSISTENT', documentId: 'doc-boundary' });
       expect(memoryDeleteDocument).toHaveBeenCalledOnce();
+      // Replace mode never reads full schemas (their factIds are unbounded).
+      expect(harness.indexingMemory.getSchemasByIds).not.toHaveBeenCalled();
       expect(((error as Error).cause as Error).message)
         .toBe('replace in-batch schema state differs from the pre-delete prediction');
       expect(configured.canonicalUpsert).not.toHaveBeenCalled();
@@ -1060,6 +1057,28 @@ describe('document replace option (literature-hub #614)', () => {
     const { harness, memoryDeleteDocument, run } = replaceHarness(extractionResponse(), options);
     try {
       await expect(run()).rejects.toBeInstanceOf(DocumentReplaceRefusedError);
+      expect(harness.pipelineOptions.llmProvider.generate).not.toHaveBeenCalled();
+      expect(memoryDeleteDocument).not.toHaveBeenCalled();
+      expect(harness.mutationTrace).toEqual([]);
+      expect(harness.db.prepare('SELECT COUNT(*) AS n FROM documents').get()).toEqual({ n: 0 });
+    } finally {
+      harness.db.close();
+    }
+  });
+
+  it('refuses a document id containing ":" before extraction or any write', async () => {
+    const { harness, memoryDeleteDocument } = replaceHarness();
+    const pipeline = new FullDocumentIndexingPipeline({
+      ...harness.pipelineOptions,
+      documentReplace: { memoryDeleteDocument },
+    });
+    try {
+      const error = await pipeline.processDocument('c1', {
+        documentId: 'doc:boundary', markdown: 'Alice authors Paper A.', title: 'Paper',
+        sourceUrl: 'https://example.com/paper', language: 'en', replaceExisting: true,
+      }).then(() => undefined, (caught: unknown) => caught);
+      expect(error).toBeInstanceOf(DocumentReplaceRefusedError);
+      expect(error).toMatchObject({ code: 'DOCUMENT_REPLACE_UNSUPPORTED_LANE', reason: 'document id contains ":"' });
       expect(harness.pipelineOptions.llmProvider.generate).not.toHaveBeenCalled();
       expect(memoryDeleteDocument).not.toHaveBeenCalled();
       expect(harness.mutationTrace).toEqual([]);

@@ -366,13 +366,12 @@ describe.sequential('aira-graphdb canonical-lane document replace (literature-hu
       expect(result).toMatchObject({ status: 'completed', errors: [] });
       const trace = methods(harness.traffic);
       expect(trace.filter((m) => m === 'memory_delete_document')).toHaveLength(1);
-      // Before the delete: the projection read and the bounded full-schema
-      // read of the existing candidates (state check).  After it, inside
-      // the batch: the projection re-read.
-      expect(trace.filter((m) => m === 'memory_get_schemas_by_ids')).toHaveLength(3);
+      // One projection read before the delete, one inside the batch after
+      // it.  No full-schema read: its size scales with factIds.
+      expect(trace.filter((m) => m === 'memory_get_schemas_by_ids')).toHaveLength(2);
       const deleteAt = trace.indexOf('memory_delete_document');
       expect(trace.lastIndexOf('memory_get_schemas_by_ids')).toBeGreaterThan(deleteAt);
-      expect(trace.slice(0, deleteAt).filter((m) => m === 'memory_get_schemas_by_ids')).toHaveLength(2);
+      expect(trace.slice(0, deleteAt).filter((m) => m === 'memory_get_schemas_by_ids')).toHaveLength(1);
       expect(trace.slice(0, deleteAt).filter((m) => MUTATIONS.has(m))).toEqual([]);
       // Only extraction reached the LLM: W's old facts were excluded from
       // conflict detection, so "alcohol causes cirrhosis" did not conflict
@@ -756,44 +755,8 @@ describe.sequential('aira-graphdb canonical-lane document replace (literature-hu
     await adapters.close();
   }
 
-  it('refuses before the delete when a schema lists a fact of the document but not the document (probe C)', async () => {
-    const dbPath = tempDbPath('probe-c-pre');
-    await seed(dbPath);
-    await corruptSchema(dbPath, SHARED, (stored) => ({
-      ...stored, sourceDocumentIds: stored.sourceDocumentIds.filter((id) => id !== W),
-    }));
-    const before = await observe(dbPath);
-    expect(schema(before, SHARED)!.sourceDocumentIds).toEqual([X]);
-    const harness = await openHarness(dbPath);
-    try {
-      const result = await harness.index([doc(W, ['w_full_shared'], { replaceExisting: true })]);
-      expect(result).toEqual({
-        status: 'completed',
-        errors: [{
-          code: 'DOCUMENT_REPLACE_STATE_INCONSISTENT',
-          documentId: W,
-          message: expect.stringContaining('lists a fact of the document but not the document'),
-        }],
-      });
-      expect(methods(harness.traffic).filter((m) => MUTATIONS.has(m))).toEqual([]);
-      expect(harness.db.prepare('SELECT COUNT(*) AS n FROM documents').get()).toEqual({ n: 0 });
-    } finally {
-      await harness.close();
-    }
-    expect(await observe(dbPath)).toEqual(before);
-  }, TEST_TIMEOUT);
-
-  it('discards the batch when the inconsistency is only visible to the delete (a stored fact of the document)', async () => {
-    // The schema lists neither the document nor its fact, but the fact's
-    // schemaId still names it: no bounded read shows that before the delete,
-    // so the in-batch prediction check catches it.
-    const dbPath = tempDbPath('probe-c-batch');
-    await seed(dbPath);
-    await corruptSchema(dbPath, SHARED, (stored) => ({
-      ...stored,
-      sourceDocumentIds: stored.sourceDocumentIds.filter((id) => id !== W),
-      factIds: stored.factIds.filter((id) => !id.startsWith(`fact:${W}:`)),
-    }));
+  /** Replace W on a corrupted store; expect the in-batch park and an intact old version. */
+  async function expectParked(dbPath: string): Promise<void> {
     const before = await observe(dbPath);
     const harness = await openHarness(dbPath);
     const result = await harness.index([doc(W, ['w_full_shared'], { replaceExisting: true })]);
@@ -805,10 +768,85 @@ describe.sequential('aira-graphdb canonical-lane document replace (literature-hu
     expect(result.errors).toEqual([{
       code: 'DOCUMENT_REPLACE_STATE_INCONSISTENT',
       documentId: W,
-      message: expect.stringContaining('differs from the pre-delete prediction'),
+      message: `${JOB_ERROR_CONTRACT.replaceStateInconsistentError.message} (replace in-batch schema state differs from the pre-delete prediction)`,
     }]);
+    expect(JOB_ERROR_CONTRACT.replaceStateInconsistentError.message)
+      .toContain('the batch is discarded on recovery and the existing version is retained');
     const recovered = await discardRecovery(dbPath);
     expect(recovered.generation).toBe(before.generation);
+    expect(await observe(dbPath)).toEqual(before);
+  }
+
+  it('parks in the batch when a schema lists a fact of the document but not the document (probe C, sources only)', async () => {
+    const dbPath = tempDbPath('probe-c-sources');
+    await seed(dbPath);
+    await corruptSchema(dbPath, SHARED, (stored) => ({
+      ...stored, sourceDocumentIds: stored.sourceDocumentIds.filter((id) => id !== W),
+    }));
+    expect(schema(await observe(dbPath), SHARED)!.sourceDocumentIds).toEqual([X]);
+    await expectParked(dbPath);
+  }, TEST_TIMEOUT);
+
+  it('parks in the batch when only a stored fact of the document names the schema', async () => {
+    const dbPath = tempDbPath('probe-c-fact');
+    await seed(dbPath);
+    await corruptSchema(dbPath, SHARED, (stored) => ({
+      ...stored,
+      sourceDocumentIds: stored.sourceDocumentIds.filter((id) => id !== W),
+      factIds: stored.factIds.filter((id) => !id.startsWith(`fact:${W}:`)),
+    }));
+    await expectParked(dbPath);
+  }, TEST_TIMEOUT);
+
+  it('replaces W on a shared schema with ~10 MB of factIds without any read that scales with them (probe D)', async () => {
+    const dbPath = tempDbPath('probe-d');
+    await seed(dbPath);
+    // 100k fact ids of ~100 bytes: ~10 MB, above the 8 MiB indexing response cap.
+    const padding = Array.from({ length: 100_000 }, (_, index) =>
+      `fact:doc_bulk:${SHARED}:${String(index).padStart(8, '0')}:${'p'.repeat(40)}`);
+    expect(Buffer.byteLength(JSON.stringify(padding))).toBeGreaterThan(9_500_000);
+    await corruptSchema(dbPath, SHARED, (stored) => ({ ...stored, factIds: [...stored.factIds, ...padding] }));
+    // The full-schema read the replace no longer makes would fail on its cap.
+    const full = await createStorageAdapters({ backend: 'aira-graphdb', airaGraphDb: { dbPath } });
+    await expect(full.indexingMemory.getSchemasByIds({ corpusId: CORPUS, schemaIds: [SHARED] })).rejects.toThrow(/bounded indexing response exceeds its byte limit/);
+    await full.close().catch(() => undefined);
+    const harness = await openHarness(dbPath);
+    try {
+      const result = await harness.index([doc(W, ['w_full_shared', 'w_full_only'], { replaceExisting: true })]);
+      expect(result).toMatchObject({ status: 'completed', errors: [] });
+      const reads = harness.traffic.filter((event) => event.method === 'memory_get_schemas_by_ids');
+      expect(reads).toHaveLength(2);
+      for (const read of reads) expect(read.responseBytes).toBeLessThan(64 * 1024);
+    } finally {
+      await harness.close();
+    }
+    const projected = await withRaw(dbPath, (client) => client.request<{ frequency: number; contributionPresent: boolean; firstSourceDocumentId: string }[]>(
+      'memory_get_schemas_by_ids',
+      { corpusId: CORPUS, schemaIds: [SHARED], projection: 'canonicalization@1', contributionDocumentId: W },
+    ));
+    expect(projected[0]).toMatchObject({ contributionPresent: true, firstSourceDocumentId: X, frequency: 2 });
+  }, 300_000);
+
+  it('refuses a replace of a document id containing ":" before any RPC or extraction', async () => {
+    const dbPath = tempDbPath('colon');
+    const before = await seed(dbPath);
+    const harness = await openHarness(dbPath);
+    try {
+      const start = harness.traffic.length;
+      const result = await harness.index([doc('doc:w', ['w_full_shared'], { replaceExisting: true })]);
+      expect(result).toEqual({
+        status: 'completed',
+        errors: [{
+          code: 'DOCUMENT_REPLACE_UNSUPPORTED_LANE',
+          documentId: 'doc:w',
+          message: `${JOB_ERROR_CONTRACT.replaceRefusedError.message} (document id contains ":")`,
+        }],
+      });
+      expect(methods(harness.traffic.slice(start))).toEqual(['memory_load_checkpoint', 'batch_begin', 'batch_commit']);
+      expect(harness.llm.calls).toEqual([]);
+    } finally {
+      await harness.close();
+    }
     expect(await observe(dbPath)).toEqual(before);
   }, TEST_TIMEOUT);
 

@@ -388,21 +388,6 @@ describe('TASK-MG-035: AsyncJobRunner and DefaultIndexingService', () => {
     expect(storageBatch.abandon).toHaveBeenCalledOnce();
   });
 
-  it('records a pre-delete replace-state refusal with its code and keeps the batch clean (#614)', async () => {
-    const pipeline = {
-      processDocument: vi.fn().mockRejectedValue(new DocumentReplaceRefusedError('schema lists a fact of the document', 'state')),
-    };
-    const runner = new AsyncJobRunner(db, memoryStore, pipeline);
-    runner.registerJob('job-1', command());
-    await runner.enqueue('job-1');
-    await runner.execute('job-1');
-    const row = db.prepare('SELECT status, errors_json FROM jobs WHERE job_id = ?').get('job-1') as { status: string; errors_json: string };
-    expect(row.status).toBe('completed');
-    expect(JSON.parse(row.errors_json)).toEqual([expect.objectContaining({
-      code: 'DOCUMENT_REPLACE_STATE_INCONSISTENT', documentId: 'doc-1',
-    })]);
-  });
-
   it('records outer storage failures as failed structured job errors', async () => {
     const pipeline = { processDocument: vi.fn().mockResolvedValue({ processedDocumentId: 'doc-1', addedNodes: 1, addedEdges: 1, conflicts: 0 }) };
     const storageBatch = {

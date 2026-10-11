@@ -18,8 +18,8 @@ interface GraphDbOwnerJobErrorContract {
   readonly replaceRefusedError: ContractError & { readonly documentId: string };
   /**
    * A replace whose stored schema state is inconsistent with the document
-   * (literature-hub #614).  Refused before the delete when observable;
-   * otherwise detected in the batch, which is then discarded.  Never
+   * (literature-hub #614), detected in the batch after the delete: the batch
+   * is discarded on recovery and the existing version is retained.  Never
    * resolved automatically: the work is parked for a human.
    */
   readonly replaceStateInconsistentError: ContractError & { readonly documentId: string };

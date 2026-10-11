@@ -18,6 +18,6 @@
   "replaceStateInconsistentError": {
     "code": "DOCUMENT_REPLACE_STATE_INCONSISTENT",
     "documentId": "doc_0123456789ab",
-    "message": "document replace refused: stored schema state is inconsistent with the document; the existing version is kept"
+    "message": "document replace abandoned: stored schema state is inconsistent with the document; the batch is discarded on recovery and the existing version is retained"
   }
 }

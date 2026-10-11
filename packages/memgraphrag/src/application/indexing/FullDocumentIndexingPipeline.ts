@@ -125,7 +125,12 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
    * sqlite documents row.  The job runner still records the refusal on the
    * job row and commits its batch, which has no mutation from this document.
    */
-  private requireReplaceSupport(): IDocumentReplaceMemory {
+  private requireReplaceSupport(documentId: string): IDocumentReplaceMemory {
+    // Fact ids are `fact:{documentId}:{schemaId}:…`; a ':' in the document id
+    // would make one document's fact-id prefix match another's.
+    if (documentId.includes(':')) {
+      throw new DocumentReplaceRefusedError('document id contains ":"');
+    }
     if (!isSchemaCanonicalizationMemory(this.options.indexingMemory)) {
       throw new DocumentReplaceRefusedError('indexing memory has no canonical schema lane');
     }
@@ -185,59 +190,12 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
     return { canonicalDelta, graphPlan, hydrationRequests };
   }
 
-  /**
-   * Observe, before the delete and without any mutation, every way the native
-   * delete rule (aira-graphdb `memory_delete_document`, `prune_schema_value`
-   * callers) can touch a schema this replace plans against:
-   *
-   * - the schema lists the document: the projection's `contributionPresent`;
-   * - the schema lists one of the document's facts: its `factIds` carry the
-   *   document's fact-id prefix (`fact:{documentId}:`, DocumentMemoryPlan),
-   *   read through the bounded full-schema read for the existing candidates.
-   *
-   * A schema that lists a fact of the document but not the document itself
-   * would be decremented by the delete while the projection says it is
-   * untouched.  That state is inconsistent and is refused here, before any
-   * mutation.  The third rule (the schemaId of any stored fact of the
-   * document) has no bounded read: facts cannot be listed by document.  It is
-   * caught in the batch by the prediction check instead.
-   */
-  private async assertReplaceStateObservable(
-    corpusId: string,
-    documentId: string,
-    preparation: CanonicalSchemaPreparation,
-    committed: ReadonlyMap<string, SchemaCanonicalizationProjection>,
-  ): Promise<void> {
-    const existing = preparation.schemaViews.filter((view) => !view.isNew);
-    if (existing.length === 0) return;
-    const stored = await this.options.indexingMemory.getSchemasByIds({
-      corpusId,
-      schemaIds: existing.map((view) => view.schemaId),
-    });
-    const byId = new Map(stored.map((schema) => [schema.schemaId, schema]));
-    const factPrefix = `fact:${documentId}:`.replace(/\s+/g, '_');
-    for (const view of existing) {
-      const schema = byId.get(view.schemaId);
-      if (!schema) {
-        throw new DocumentReplaceRefusedError(`schema ${view.schemaId} disappeared between reads`, 'state');
-      }
-      const listsDocument = schema.sourceDocumentIds.includes(documentId);
-      const listsDocumentFact = schema.factIds.some((factId) => factId.startsWith(factPrefix));
-      if (listsDocument !== committed.get(view.schemaId)?.contributionPresent) {
-        throw new DocumentReplaceRefusedError(`schema ${view.schemaId} projection disagrees with its stored sources`, 'state');
-      }
-      if (listsDocumentFact && !listsDocument) {
-        throw new DocumentReplaceRefusedError(`schema ${view.schemaId} lists a fact of the document but not the document`, 'state');
-      }
-    }
-  }
-
   public async processDocument(
     corpusId: string,
     document: IndexDocumentInput,
   ): Promise<ProcessDocumentResult> {
     const documentReplace = document.replaceExisting === true
-      ? this.requireReplaceSupport()
+      ? this.requireReplaceSupport(document.documentId)
       : undefined;
     const now = new Date().toISOString();
 
@@ -307,9 +265,6 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
     const legacyPreparation = canonicalPreparation === undefined
       ? await stageII.prepareSchemas(candidateSchemas)
       : undefined;
-    if (documentReplace && canonicalPreparation) {
-      await this.assertReplaceStateObservable(corpusId, document.documentId, canonicalPreparation, committedProjections);
-    }
     let schemas = canonicalPreparation?.schemaViews ?? legacyPreparation!.finalSchemas;
     const newlyStableSchemaIds = canonicalPreparation
       ? documentReplace ? replaceActivationIds(canonicalPreparation) : canonicalPreparation.newlyStableSchemaIds
@@ -458,9 +413,14 @@ export class FullDocumentIndexingPipeline implements DocumentIndexingPipeline {
           // The pre-delete plan used the predicted post-delete projection, so
           // the in-batch read must agree on every planning field: identity is
           // fixed by the extracted candidates and the document, and the
-          // prediction is the native's own schema rule.  Disagreement means
-          // the facts were planned (and conflict-checked) against the wrong
-          // state; never commit that.
+          // prediction is the native's own schema rule for a schema that
+          // lists the document.  The projection cannot show the native's
+          // other two rules (a schema listing one of the document's facts, or
+          // named by one of its stored facts, without listing the document);
+          // those legacy-era shapes surface here.  Disagreement means the
+          // facts were planned (and conflict-checked) against the wrong
+          // state: never commit that; park it.  No replace read scales with a
+          // schema's factIds.
           if (!sameIds(fresh.schemaViews.map(planningKey), canonicalPreparation.schemaViews.map(planningKey))
             || !sameIds(freshFacts.map(factPlanningKey), allFacts.map(factPlanningKey))) {
             throw new DocumentReplaceStateInconsistentError(
